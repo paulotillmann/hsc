@@ -22,3 +22,13 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Environment variables (sensitive - never commit)
+.env
+.env.local
+.env.*.local
+
+# Excluded PDFs and output dirs
+INFORMES2026-pag.pdf
+output/
+public/informes/INFORME_*.pdf
