@@ -2,10 +2,12 @@ import React, { useState, useEffect } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { FileText, Receipt, Settings, LogOut, Sun, Moon, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import { usePermissions } from '../hooks/usePermissions';
 
 const Sidebar: React.FC = () => {
   const navigate = useNavigate();
   const { signOut, profile } = useAuth();
+  const { can } = usePermissions();
   const [isDark, setIsDark] = useState(false);
   const [isCollapsed, setIsCollapsed] = useState(false);
 
@@ -35,13 +37,22 @@ const Sidebar: React.FC = () => {
     setIsCollapsed(!isCollapsed);
   };
 
+  const navLinkClass = (isActive: boolean) =>
+    `flex items-center rounded-md text-sm transition-all duration-200 ${
+      isCollapsed ? 'justify-center p-3' : 'justify-start gap-3 px-3 py-2'
+    } ${
+      isActive
+        ? 'bg-primary text-primary-foreground shadow-sm hover:shadow-md hover:shadow-primary/20 font-medium'
+        : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+    }`;
+
   return (
     <aside 
       className={`border-r bg-card flex flex-col transition-all duration-300 ease-in-out h-screen sticky top-0 relative ${
         isCollapsed ? 'w-20' : 'w-64'
       }`}
     >
-      {/* Botão flutuante de colapso, na intersecção da linha do header com a borda direita */}
+      {/* Botão flutuante de colapso */}
       <button 
         onClick={toggleMenu}
         title={isCollapsed ? 'Expandir Menu' : 'Reduzir Menu'}
@@ -52,7 +63,6 @@ const Sidebar: React.FC = () => {
 
       <div className="h-[88px] flex items-center justify-center p-4 border-b border-border">
         {isCollapsed ? (
-          /* Resolvendo a imagem quebrada usando a logo normal com crop CSS para mostrar só o coração */
           <img 
             src={isDark ? "/LOGO_HSC_WHITE.png" : "/LOGO_HSC_PRIMARY.png"} 
             alt="Logo HSC Mini" 
@@ -68,54 +78,36 @@ const Sidebar: React.FC = () => {
       </div>
 
       <nav className="flex-1 p-3 flex flex-col gap-2 overflow-x-hidden pt-8">
-        <NavLink 
-          to="/informes"
-          title="Informes de Rendimento"
-          className={({ isActive }) => 
-            `flex items-center rounded-md text-sm transition-all duration-200 ${
-              isCollapsed ? 'justify-center p-3' : 'justify-start gap-3 px-3 py-2'
-            } ${
-              isActive 
-                ? 'bg-primary text-primary-foreground shadow-sm hover:shadow-md hover:shadow-primary/20 font-medium' 
-                : 'text-muted-foreground hover:bg-muted hover:text-foreground'
-            }`
-          }
-        >
-          <FileText className="h-5 w-5 flex-shrink-0" />
-          {!isCollapsed && <span className="truncate">Informes de Rendimento</span>}
-        </NavLink>
+        {/* Informes — visível apenas para who has can_informes */}
+        {can('can_informes') && (
+          <NavLink 
+            to="/informes"
+            title="Informes de Rendimento"
+            className={({ isActive }) => navLinkClass(isActive)}
+          >
+            <FileText className="h-5 w-5 flex-shrink-0" />
+            {!isCollapsed && <span className="truncate">Informes de Rendimento</span>}
+          </NavLink>
+        )}
 
-        <NavLink 
-          to="/holerites"
-          title="Holerites"
-          className={({ isActive }) => 
-            `flex items-center rounded-md text-sm transition-all duration-200 ${
-              isCollapsed ? 'justify-center p-3' : 'justify-start gap-3 px-3 py-2'
-            } ${
-              isActive 
-                ? 'bg-primary text-primary-foreground shadow-sm hover:shadow-md hover:shadow-primary/20 font-medium' 
-                : 'text-muted-foreground hover:bg-muted hover:text-foreground'
-            }`
-          }
-        >
-          <Receipt className="h-5 w-5 flex-shrink-0" />
-          {!isCollapsed && <span className="truncate">Holerites</span>}
-        </NavLink>
+        {/* Holerites — visível apenas para who has can_holerites */}
+        {can('can_holerites') && (
+          <NavLink 
+            to="/holerites"
+            title="Holerites"
+            className={({ isActive }) => navLinkClass(isActive)}
+          >
+            <Receipt className="h-5 w-5 flex-shrink-0" />
+            {!isCollapsed && <span className="truncate">Holerites</span>}
+          </NavLink>
+        )}
         
-        {/* Configurações — somente para admins */}
-        {profile?.role === 'admin' && (
+        {/* Configurações — visível apenas para who has can_config */}
+        {can('can_config') && (
           <NavLink 
             to="/configuracoes"
             title="Configurações"
-            className={({ isActive }) => 
-              `flex items-center rounded-md text-sm transition-all duration-200 ${
-                isCollapsed ? 'justify-center p-3' : 'justify-start gap-3 px-3 py-2'
-              } ${
-                isActive 
-                  ? 'bg-primary text-primary-foreground shadow-sm hover:shadow-md hover:shadow-primary/20 font-medium' 
-                  : 'text-muted-foreground hover:bg-muted hover:text-foreground'
-              }`
-            }
+            className={({ isActive }) => navLinkClass(isActive)}
           >
             <Settings className="h-5 w-5 flex-shrink-0" />
             {!isCollapsed && <span className="truncate">Configurações</span>}

@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../contexts/AuthContext';
+import { usePermissions } from '../hooks/usePermissions';
 import {
   fetchHolerites,
   uploadHoleritePDF,
@@ -33,7 +34,8 @@ function formatCurrency(value: number | null): string {
 // ─────────────────────────────────────────────────────────────
 
 const Holerites: React.FC = () => {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
+  const { can } = usePermissions();
 
   // ── Dados ──
   const [data, setData] = useState<HoleriteRecord[]>([]);
@@ -67,14 +69,16 @@ const Holerites: React.FC = () => {
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      const records = await fetchHolerites(filterMesAno);
+      // Se o perfil não pode ver todos, filtra pelo próprio CPF
+      const cpfFilter = !can('can_view_all') && profile?.cpf ? profile.cpf : undefined;
+      const records = await fetchHolerites(filterMesAno, cpfFilter);
       setData(records);
     } catch (err) {
       console.error('Erro ao carregar holerites:', err);
     } finally {
       setLoading(false);
     }
-  }, [filterMesAno]);
+  }, [filterMesAno, can, profile?.cpf]);
 
   useEffect(() => { loadData(); }, [loadData]);
 
@@ -214,13 +218,15 @@ const Holerites: React.FC = () => {
             </button>
           )}
 
-          <button
-            onClick={() => { setUploadProgress(null); setIsImportModalOpen(true); }}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-md bg-primary text-primary-foreground shadow transition-colors hover:opacity-90 font-medium text-sm cursor-pointer"
-          >
-            <UploadCloud className="h-4 w-4" />
-            Importar Holerite PDF
-          </button>
+          {can('can_upload') && (
+            <button
+              onClick={() => { setUploadProgress(null); setIsImportModalOpen(true); }}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-md bg-primary text-primary-foreground shadow transition-colors hover:opacity-90 font-medium text-sm cursor-pointer"
+            >
+              <UploadCloud className="h-4 w-4" />
+              Importar Holerite PDF
+            </button>
+          )}
         </div>
       </div>
 
@@ -323,32 +329,34 @@ const Holerites: React.FC = () => {
                       >
                         <FileText className="h-4 w-4" />Abrir
                       </a>
-                      <button
-                        disabled={!colab.email || sendingEmailId === colab.id}
-                        title={!colab.email ? 'Colaborador sem e-mail vinculado' : 'Enviar por e-mail'}
-                        onClick={async () => {
-                          if (!colab.email) return;
-                          setSendingEmailId(colab.id);
-                          const result = await sendDocumentEmail({
-                            to: colab.email,
-                            nomeColaborador: colab.nome_completo,
-                            tipoDocumento: 'holerite',
-                            periodoReferencia: colab.mes_ano,
-                            cpf: colab.cpf,
-                            pdfUrl: colab.pdf_url,
-                          });
-                          setSendingEmailId(null);
-                          if (result.success) {
-                            setEmailToast({ type: 'success', message: `E-mail enviado para ${colab.email}` });
-                          } else {
-                            setEmailToast({ type: 'error', message: result.error || 'Erro ao enviar e-mail' });
-                          }
-                          setTimeout(() => setEmailToast(null), 4000);
-                        }}
-                        className="inline-flex items-center gap-2 px-3 py-1.5 rounded-md border text-muted-foreground hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200 dark:hover:bg-blue-500/10 dark:hover:text-blue-500 transition-colors text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed"
-                      >
-                        {sendingEmailId === colab.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mail className="h-4 w-4" />}
-                      </button>
+                      {can('can_send_email') && (
+                        <button
+                          disabled={!colab.email || sendingEmailId === colab.id}
+                          title={!colab.email ? 'Colaborador sem e-mail vinculado' : 'Enviar por e-mail'}
+                          onClick={async () => {
+                            if (!colab.email) return;
+                            setSendingEmailId(colab.id);
+                            const result = await sendDocumentEmail({
+                              to: colab.email,
+                              nomeColaborador: colab.nome_completo,
+                              tipoDocumento: 'holerite',
+                              periodoReferencia: colab.mes_ano,
+                              cpf: colab.cpf,
+                              pdfUrl: colab.pdf_url,
+                            });
+                            setSendingEmailId(null);
+                            if (result.success) {
+                              setEmailToast({ type: 'success', message: `E-mail enviado para ${colab.email}` });
+                            } else {
+                              setEmailToast({ type: 'error', message: result.error || 'Erro ao enviar e-mail' });
+                            }
+                            setTimeout(() => setEmailToast(null), 4000);
+                          }}
+                          className="inline-flex items-center gap-2 px-3 py-1.5 rounded-md border text-muted-foreground hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200 dark:hover:bg-blue-500/10 dark:hover:text-blue-500 transition-colors text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed"
+                        >
+                          {sendingEmailId === colab.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mail className="h-4 w-4" />}
+                        </button>
+                      )}
                       <button
                         onClick={() => { setIdsToDelete([colab.id]); setIsDeleteModalOpen(true); }}
                         className="inline-flex items-center gap-2 px-3 py-1.5 rounded-md border text-muted-foreground hover:bg-red-50 hover:text-red-600 hover:border-red-200 dark:hover:bg-red-500/10 dark:hover:text-red-500 transition-colors text-sm font-medium"

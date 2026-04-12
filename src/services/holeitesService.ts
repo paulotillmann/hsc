@@ -107,7 +107,7 @@ async function getPageText(page: any): Promise<string> {
 // FETCH — lista de holerites do banco
 // ─────────────────────────────────────────────────────────────
 
-export async function fetchHolerites(mesAno?: string): Promise<HoleriteRecord[]> {
+export async function fetchHolerites(mesAno?: string, cpfFilter?: string): Promise<HoleriteRecord[]> {
   let query = supabase
     .from('holerites')
     .select('*')
@@ -115,6 +115,11 @@ export async function fetchHolerites(mesAno?: string): Promise<HoleriteRecord[]>
 
   if (mesAno) {
     query = query.eq('mes_ano', mesAno);
+  }
+
+  // Se cpfFilter for fornecido, restringe aos registros do próprio colaborador
+  if (cpfFilter) {
+    query = query.eq('cpf', cpfFilter);
   }
 
   const { data, error } = await query;

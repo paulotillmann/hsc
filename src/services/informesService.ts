@@ -68,7 +68,7 @@ async function getPageText(page: any): Promise<string> {
 // FETCH — lista de informes do banco
 // ─────────────────────────────────────────────────────────────
 
-export async function fetchInformes(anoReferencia?: number): Promise<InformeRecord[]> {
+export async function fetchInformes(anoReferencia?: number, cpfFilter?: string): Promise<InformeRecord[]> {
   let query = supabase
     .from('informes')
     .select('*')
@@ -76,6 +76,11 @@ export async function fetchInformes(anoReferencia?: number): Promise<InformeReco
 
   if (anoReferencia) {
     query = query.eq('ano_referencia', anoReferencia);
+  }
+
+  // Se cpfFilter for fornecido, restringe aos registros do próprio colaborador
+  if (cpfFilter) {
+    query = query.eq('cpf', cpfFilter);
   }
 
   const { data, error } = await query;

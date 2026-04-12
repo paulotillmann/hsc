@@ -2,6 +2,7 @@ import React, { useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
 import PrivateRoute from './components/PrivateRoute';
+import PermissionGuard from './components/PermissionGuard';
 import Login from './pages/Login';
 import Informes from './pages/Informes';
 import Perfil from './pages/Perfil';
@@ -28,9 +29,21 @@ const App: React.FC = () => {
           {/* Rotas protegidas — exigem sessão ativa */}
           <Route element={<PrivateRoute />}>
             <Route element={<Layout />}>
-              <Route path="/informes" element={<Informes />} />
-              <Route path="/holerites" element={<Holerites />} />
-              <Route path="/configuracoes" element={<Configuracoes />} />
+              <Route path="/informes" element={
+                <PermissionGuard permission="can_informes">
+                  <Informes />
+                </PermissionGuard>
+              } />
+              <Route path="/holerites" element={
+                <PermissionGuard permission="can_holerites">
+                  <Holerites />
+                </PermissionGuard>
+              } />
+              <Route path="/configuracoes" element={
+                <PermissionGuard permission="can_config">
+                  <Configuracoes />
+                </PermissionGuard>
+              } />
               <Route path="/perfil" element={<Perfil />} />
             </Route>
           </Route>

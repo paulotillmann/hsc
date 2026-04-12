@@ -2,6 +2,7 @@ import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { Search, ExternalLink, FileText, Trash2, UploadCloud, X, CheckCircle2, AlertCircle, ChevronLeft, ChevronRight, ArrowUpDown, ArrowUp, ArrowDown, Calendar, Mail, Loader2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../contexts/AuthContext';
+import { usePermissions } from '../hooks/usePermissions';
 import {
   fetchInformes,
   uploadInformePDF,
@@ -22,7 +23,8 @@ const YEAR_OPTIONS = Array.from({ length: 6 }, (_, i) => CURRENT_YEAR - i);
 // ─────────────────────────────────────────────────────────────
 
 const Informes: React.FC = () => {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
+  const { can } = usePermissions();
 
   // ── Dados ──
   const [data, setData] = useState<InformeRecord[]>([]);
@@ -57,14 +59,16 @@ const Informes: React.FC = () => {
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      const records = await fetchInformes(filterAno);
+      // Se o perfil não pode ver todos, filtra pelo próprio CPF
+      const cpfFilter = !can('can_view_all') && profile?.cpf ? profile.cpf : undefined;
+      const records = await fetchInformes(filterAno, cpfFilter);
       setData(records);
     } catch (err) {
       console.error('Erro ao carregar informes:', err);
     } finally {
       setLoading(false);
     }
-  }, [filterAno]);
+  }, [filterAno, can, profile?.cpf]);
 
   useEffect(() => {
     loadData();
@@ -209,13 +213,15 @@ const Informes: React.FC = () => {
             </button>
           )}
 
-          <button
-            onClick={() => { setUploadProgress(null); setIsImportModalOpen(true); }}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-md bg-primary text-primary-foreground shadow transition-colors hover:opacity-90 font-medium text-sm cursor-pointer"
-          >
-            <UploadCloud className="h-4 w-4" />
-            Importar arquivo Informe PDF
-          </button>
+          {can('can_upload') && (
+            <button
+              onClick={() => { setUploadProgress(null); setIsImportModalOpen(true); }}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-md bg-primary text-primary-foreground shadow transition-colors hover:opacity-90 font-medium text-sm cursor-pointer"
+            >
+              <UploadCloud className="h-4 w-4" />
+              Importar arquivo Informe PDF
+            </button>
+          )}
         </div>
       </div>
 
@@ -312,32 +318,34 @@ const Informes: React.FC = () => {
                       >
                         <FileText className="h-4 w-4" />Abrir
                       </a>
-                      <button
-                        disabled={!colab.email || sendingEmailId === colab.id}
-                        title={!colab.email ? 'Colaborador sem e-mail vinculado' : 'Enviar por e-mail'}
-                        onClick={async () => {
-                          if (!colab.email) return;
-                          setSendingEmailId(colab.id);
-                          const result = await sendDocumentEmail({
-                            to: colab.email,
-                            nomeColaborador: colab.nome_completo,
-                            tipoDocumento: 'informe',
-                            periodoReferencia: `Ano ${colab.ano_referencia}`,
-                            cpf: colab.cpf,
-                            pdfUrl: colab.pdf_url,
-                          });
-                          setSendingEmailId(null);
-                          if (result.success) {
-                            setEmailToast({ type: 'success', message: `E-mail enviado para ${colab.email}` });
-                          } else {
-                            setEmailToast({ type: 'error', message: result.error || 'Erro ao enviar e-mail' });
-                          }
-                          setTimeout(() => setEmailToast(null), 4000);
-                        }}
-                        className="inline-flex items-center gap-2 px-3 py-1.5 rounded-md border text-muted-foreground hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200 dark:hover:bg-blue-500/10 dark:hover:text-blue-500 transition-colors text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed"
-                      >
-                        {sendingEmailId === colab.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mail className="h-4 w-4" />}
-                      </button>
+                      {can('can_send_email') && (
+                        <button
+                          disabled={!colab.email || sendingEmailId === colab.id}
+                          title={!colab.email ? 'Colaborador sem e-mail vinculado' : 'Enviar por e-mail'}
+                          onClick={async () => {
+                            if (!colab.email) return;
+                            setSendingEmailId(colab.id);
+                            const result = await sendDocumentEmail({
+                              to: colab.email,
+                              nomeColaborador: colab.nome_completo,
+                              tipoDocumento: 'informe',
+                              periodoReferencia: `Ano ${colab.ano_referencia}`,
+                              cpf: colab.cpf,
+                              pdfUrl: colab.pdf_url,
+                            });
+                            setSendingEmailId(null);
+                            if (result.success) {
+                              setEmailToast({ type: 'success', message: `E-mail enviado para ${colab.email}` });
+                            } else {
+                              setEmailToast({ type: 'error', message: result.error || 'Erro ao enviar e-mail' });
+                            }
+                            setTimeout(() => setEmailToast(null), 4000);
+                          }}
+                          className="inline-flex items-center gap-2 px-3 py-1.5 rounded-md border text-muted-foreground hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200 dark:hover:bg-blue-500/10 dark:hover:text-blue-500 transition-colors text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed"
+                        >
+                          {sendingEmailId === colab.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mail className="h-4 w-4" />}
+                        </button>
+                      )}
                       <button
                         onClick={() => { setIdsToDelete([colab.id]); setIsDeleteModalOpen(true); }}
                         className="inline-flex items-center gap-2 px-3 py-1.5 rounded-md border text-muted-foreground hover:bg-red-50 hover:text-red-600 hover:border-red-200 dark:hover:bg-red-500/10 dark:hover:text-red-500 transition-colors text-sm font-medium"
