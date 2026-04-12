@@ -24,7 +24,7 @@ const YEAR_OPTIONS = Array.from({ length: 6 }, (_, i) => CURRENT_YEAR - i);
 
 const Informes: React.FC = () => {
   const { user, profile } = useAuth();
-  const { can } = usePermissions();
+  const { can, permissions } = usePermissions();
 
   // ── Dados ──
   const [data, setData] = useState<InformeRecord[]>([]);
@@ -60,7 +60,7 @@ const Informes: React.FC = () => {
     setLoading(true);
     try {
       // Se o perfil não pode ver todos, filtra pelo próprio CPF
-      const cpfFilter = !can('can_view_all') && profile?.cpf ? profile.cpf : undefined;
+      const cpfFilter = !permissions?.can_view_all && profile?.cpf ? profile.cpf : undefined;
       const records = await fetchInformes(filterAno, cpfFilter);
       setData(records);
     } catch (err) {
@@ -68,7 +68,8 @@ const Informes: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [filterAno, can, profile?.cpf]);
+  // permissions?.can_view_all é um booleano primitivo — referência estável
+  }, [filterAno, permissions?.can_view_all, profile?.cpf]);
 
   useEffect(() => {
     loadData();

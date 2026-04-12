@@ -35,7 +35,7 @@ function formatCurrency(value: number | null): string {
 
 const Holerites: React.FC = () => {
   const { user, profile } = useAuth();
-  const { can } = usePermissions();
+  const { can, permissions } = usePermissions();
 
   // ── Dados ──
   const [data, setData] = useState<HoleriteRecord[]>([]);
@@ -70,7 +70,7 @@ const Holerites: React.FC = () => {
     setLoading(true);
     try {
       // Se o perfil não pode ver todos, filtra pelo próprio CPF
-      const cpfFilter = !can('can_view_all') && profile?.cpf ? profile.cpf : undefined;
+      const cpfFilter = !permissions?.can_view_all && profile?.cpf ? profile.cpf : undefined;
       const records = await fetchHolerites(filterMesAno, cpfFilter);
       setData(records);
     } catch (err) {
@@ -78,7 +78,8 @@ const Holerites: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [filterMesAno, can, profile?.cpf]);
+  // permissions?.can_view_all é um booleano primitivo — referência estável
+  }, [filterMesAno, permissions?.can_view_all, profile?.cpf]);
 
   useEffect(() => { loadData(); }, [loadData]);
 
