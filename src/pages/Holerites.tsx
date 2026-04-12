@@ -12,6 +12,7 @@ import {
   uploadHoleritePDF,
   deleteHolerites,
   generateMesAnoOptions,
+  updateEmailEnviadoEm,
   HoleriteRecord,
   HoleriteUploadProgress,
 } from '../services/holeitesService';
@@ -124,7 +125,12 @@ const Holerites: React.FC = () => {
   };
 
   const handleSelectAll = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setSelectedIds(e.target.checked ? filteredData.map(c => c.id) : []);
+    const currentPageIds = paginatedData.map(c => c.id);
+    if (e.target.checked) {
+      setSelectedIds(prev => Array.from(new Set([...prev, ...currentPageIds])));
+    } else {
+      setSelectedIds(prev => prev.filter(id => !currentPageIds.includes(id)));
+    }
   };
 
   const handleSelectOne = (id: string) => {
@@ -257,7 +263,7 @@ const Holerites: React.FC = () => {
                   <input
                     type="checkbox"
                     onChange={handleSelectAll}
-                    checked={selectedIds.length === filteredData.length && filteredData.length > 0}
+                    checked={paginatedData.length > 0 && paginatedData.every(c => selectedIds.includes(c.id))}
                     className="w-4 h-4 rounded border-border accent-primary cursor-pointer"
                   />
                 </th>
@@ -276,6 +282,7 @@ const Holerites: React.FC = () => {
                 <th className="px-6 py-4 font-semibold w-40">CPF</th>
                 <th className="px-6 py-4 font-semibold w-28 text-center">Mês/Ano</th>
                 <th className="px-6 py-4 font-semibold w-36 text-right">Total Líquido</th>
+                <th className="px-6 py-4 font-semibold w-44">Último E-mail</th>
                 <th className="px-6 py-4 font-semibold w-40 text-right">Ação</th>
               </tr>
             </thead>
@@ -321,6 +328,16 @@ const Holerites: React.FC = () => {
                         {formatCurrency(colab.total_liquido)}
                       </span>
                     </td>
+                    <td className="px-6 py-4">
+                      {colab.email_enviado_em ? (
+                        <span className="inline-flex items-center gap-1.5 text-xs font-medium text-green-700 dark:text-green-400">
+                          <CheckCircle2 className="h-3.5 w-3.5 flex-shrink-0" />
+                          {new Date(colab.email_enviado_em).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                        </span>
+                      ) : (
+                        <span className="text-xs text-muted-foreground italic">Não enviado</span>
+                      )}
+                    </td>
                     <td className="px-6 py-4 text-right flex justify-end gap-2">
                       <a
                         href={colab.pdf_url}
@@ -348,6 +365,10 @@ const Holerites: React.FC = () => {
                             setSendingEmailId(null);
                             if (result.success) {
                               setEmailToast({ type: 'success', message: `E-mail enviado para ${colab.email}` });
+                              try {
+                                const sentAt = await updateEmailEnviadoEm(colab.id);
+                                setData(prev => prev.map(r => r.id === colab.id ? { ...r, email_enviado_em: sentAt } : r));
+                              } catch (_) { /* falha silenciosa — não bloqueia UX */ }
                             } else {
                               setEmailToast({ type: 'error', message: result.error || 'Erro ao enviar e-mail' });
                             }

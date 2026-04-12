@@ -67,11 +67,15 @@ export async function updateUserRole(
   userId: string,
   roleId: string
 ): Promise<{ success: boolean; error?: string }> {
-  const { error } = await supabase
+  // Apenas atualiza role_id — o trigger sync_profile_role() cuida de sincronizar
+  // o campo role (legado) automaticamente com base no slug do role selecionado.
+  const { data, error } = await supabase
     .from('profiles')
     .update({ role_id: roleId })
-    .eq('id', userId);
+    .eq('id', userId)
+    .select('id');
 
   if (error) return { success: false, error: error.message };
+  if (!data || data.length === 0) return { success: false, error: 'Sem permissão para atualizar este perfil.' };
   return { success: true };
 }

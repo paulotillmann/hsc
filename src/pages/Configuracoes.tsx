@@ -153,7 +153,7 @@ const RoleModal: React.FC<RoleModalProps> = ({ initial, isSystemRole, onSave, on
 
 // ── Main Page ─────────────────────────────────────────────────────────────
 const Configuracoes: React.FC = () => {
-  const { user, profile } = useAuth();
+  const { user, profile, isAdmin } = useAuth();
   const [activeTab, setActiveTab] = useState<Tab>('smtp');
   const [toast, setToast] = useState<Toast | null>(null);
 
@@ -511,7 +511,20 @@ const Configuracoes: React.FC = () => {
             </div>
           </div>
 
-          {usersLoading ? (
+          {/* ── Guard: apenas admin ── */}
+          {!isAdmin ? (
+            <div className="p-12 flex flex-col items-center gap-4 text-center">
+              <div className="h-16 w-16 rounded-full bg-muted flex items-center justify-center">
+                <Shield className="h-8 w-8 text-muted-foreground" />
+              </div>
+              <div>
+                <p className="font-semibold text-foreground">Acesso Restrito</p>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Apenas usuários com perfil <span className="font-mono font-semibold text-primary">admin</span> podem visualizar o gerenciamento de usuários.
+                </p>
+              </div>
+            </div>
+          ) : usersLoading ? (
             <div className="p-12 flex flex-col items-center gap-3 text-muted-foreground">
               <div className="h-8 w-8 rounded-full border-4 border-primary border-t-transparent animate-spin" />
               Carregando usuários...

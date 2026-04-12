@@ -24,6 +24,7 @@ interface AuthContextType {
   profile: Profile | null;
   permissions: Permissions | null;
   loading: boolean;
+  profileLoaded: boolean;
   signIn: (email: string, password: string) => Promise<{ error: string | null }>;
   signUp: (email: string, password: string, fullName: string, phone: string, avatarUrl?: string) => Promise<{ error: string | null }>;
   signOut: () => Promise<void>;
@@ -48,64 +49,73 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [profile, setProfile] = useState<Profile | null>(null);
   const [permissions, setPermissions] = useState<Permissions | null>(null);
   const [loading, setLoading] = useState(true);
+  const [profileLoaded, setProfileLoaded] = useState(false);
 
-  // Busca o profile com JOIN em roles para trazer as permissões
+  // ── Busca o profile com JOIN em roles ──────────────────────────────────────
   const fetchProfile = async (userId: string) => {
-    const { data, error } = await supabase
-      .from('profiles')
-      .select('*, roles(*)')
-      .eq('id', userId)
-      .single();
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*, roles(*)')
+        .eq('id', userId)
+        .single();
 
-    if (!error && data) {
-      setProfile(data as Profile);
-
-      // Extrair permissões do role vinculado
-      const role = data.roles as Role | null;
-      if (role) {
-        setPermissions({
-          can_informes: role.can_informes,
-          can_holerites: role.can_holerites,
-          can_config: role.can_config,
-          can_upload: role.can_upload,
-          can_send_email: role.can_send_email,
-          can_view_all: role.can_view_all,
-        });
-      } else {
-        // Fallback: se não tem role_id, checar campo role text
-        const isAdmin = data.role === 'admin';
-        setPermissions({
-          can_informes: true,
-          can_holerites: true,
-          can_config: isAdmin,
-          can_upload: isAdmin,
-          can_send_email: isAdmin,
-          can_view_all: isAdmin,
-        });
+      if (error) {
+        console.error('[AuthContext] Erro ao buscar perfil:', error.message);
+        setPermissions(DEFAULT_PERMISSIONS);
+        return;
       }
+
+      if (data) {
+        setProfile(data as Profile);
+
+        const role = data.roles as Role | null;
+        if (role) {
+          setPermissions({
+            can_informes: role.can_informes,
+            can_holerites: role.can_holerites,
+            can_config: role.can_config,
+            can_upload: role.can_upload,
+            can_send_email: role.can_send_email,
+            can_view_all: role.can_view_all,
+          });
+        } else {
+          // Fallback: campo role text ('admin' | 'colaborador')
+          const isAdmin = data.role === 'admin';
+          setPermissions({
+            can_informes: true,
+            can_holerites: true,
+            can_config: isAdmin,
+            can_upload: isAdmin,
+            can_send_email: isAdmin,
+            can_view_all: isAdmin,
+          });
+        }
+      }
+    } catch (err) {
+      console.error('[AuthContext] Exceção ao buscar perfil:', err);
+      setPermissions(DEFAULT_PERMISSIONS);
+    } finally {
+      setProfileLoaded(true);
     }
   };
 
+  // ── 1. Listener de auth — SÍNCRONO, sem await ──────────────────────────────
+  // NUNCA faça await de chamadas Supabase dentro do onAuthStateChange!
+  // Isso causa deadlock pois o Supabase aguarda o callback antes de resolver
+  // o signInWithPassword, mas o fetchProfile precisa da sessão já estabelecida.
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      if (session?.user) {
-        fetchProfile(session.user.id).catch(console.error);
-      }
-      setLoading(false);
-    });
-
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (_event, session) => {
         setSession(session);
         setUser(session?.user ?? null);
-        if (session?.user) {
-          fetchProfile(session.user.id).catch(console.error);
-        } else {
+
+        if (!session) {
           setProfile(null);
           setPermissions(null);
+          setProfileLoaded(false);
         }
+
         setLoading(false);
       }
     );
@@ -113,6 +123,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return () => subscription.unsubscribe();
   }, []);
 
+  // ── 2. Fetch do perfil em efeito separado — reage à mudança de user ────────
+  // Separado do onAuthStateChange para evitar deadlock
+  useEffect(() => {
+    if (user?.id) {
+      setProfileLoaded(false);
+      fetchProfile(user.id);
+    }
+  }, [user?.id]);
+
+  // ── Auth actions ────────────────────────────────────────────────────────────
   const signIn = async (email: string, password: string): Promise<{ error: string | null }> => {
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) {
@@ -127,17 +147,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return { error: null };
   };
 
-  const signUp = async (email: string, password: string, fullName: string, phone: string, avatarUrl?: string): Promise<{ error: string | null }> => {
+  const signUp = async (
+    email: string,
+    password: string,
+    fullName: string,
+    phone: string,
+    avatarUrl?: string
+  ): Promise<{ error: string | null }> => {
     const { error } = await supabase.auth.signUp({
       email,
       password,
       options: {
-        data: {
-          full_name: fullName,
-          telefone: phone,
-          avatar_url: avatarUrl,
-        }
-      }
+        data: { full_name: fullName, telefone: phone, avatar_url: avatarUrl },
+      },
     });
 
     if (error) {
@@ -154,10 +176,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     await supabase.auth.signOut();
     setProfile(null);
     setPermissions(null);
+    setProfileLoaded(false);
   };
 
   const refreshProfile = async () => {
     if (user?.id) {
+      setProfileLoaded(false);
       await fetchProfile(user.id);
     }
   };
@@ -166,7 +190,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   return (
     <AuthContext.Provider value={{
-      session, user, profile, permissions, loading,
+      session, user, profile, permissions, loading, profileLoaded,
       signIn, signUp, signOut, refreshProfile, isAdmin,
     }}>
       {children}

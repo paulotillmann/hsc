@@ -3,6 +3,7 @@
 
 import React from 'react';
 import { ShieldOff } from 'lucide-react';
+import { useAuth } from '../contexts/AuthContext';
 import { usePermissions } from '../hooks/usePermissions';
 import { PermissionKey } from '../types/permissions';
 
@@ -28,8 +29,22 @@ const AccessDenied: React.FC = () => (
   </div>
 );
 
+const ProfileLoading: React.FC = () => (
+  <div className="flex flex-1 flex-col items-center justify-center min-h-[60vh] gap-4">
+    <div className="h-8 w-8 rounded-full border-4 border-primary border-t-transparent animate-spin" />
+    <p className="text-sm text-muted-foreground font-medium">Carregando permissões...</p>
+  </div>
+);
+
 const PermissionGuard: React.FC<PermissionGuardProps> = ({ permission, children, fallback }) => {
+  const { profileLoaded } = useAuth();
   const { can } = usePermissions();
+
+  // Aguarda o perfil ser carregado antes de julgar permissões
+  // Evita exibir "Acesso Negado" durante a inicialização do auth
+  if (!profileLoaded) {
+    return <ProfileLoading />;
+  }
 
   if (!can(permission)) {
     return fallback ? <>{fallback}</> : <AccessDenied />;

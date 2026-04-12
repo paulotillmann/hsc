@@ -27,6 +27,20 @@ export interface HoleriteRecord {
   pdf_filename: string;
   uploaded_by: string | null;
   created_at: string;
+  email_enviado_em: string | null;
+}
+
+// ─────────────────────────────────────────────────────────────
+// UPDATE — registra data/hora do envio de e-mail
+// ─────────────────────────────────────────────────────────────
+export async function updateEmailEnviadoEm(id: string): Promise<string> {
+  const now = new Date().toISOString();
+  const { error } = await supabase
+    .from('holerites')
+    .update({ email_enviado_em: now })
+    .eq('id', id);
+  if (error) throw new Error(error.message);
+  return now;
 }
 
 export interface HoleriteUploadProgress {
