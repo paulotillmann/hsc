@@ -2,7 +2,7 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Save, Send, Eye, EyeOff, CheckCircle2, AlertCircle, Loader2,
-  Server, Mail, Shield, Users, Plus, Pencil, Trash2, X, Check,
+  Server, Mail, Shield, Users, Plus, Pencil, Trash2, X, Check, Layout,
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import {
@@ -13,9 +13,10 @@ import {
   fetchUsers, updateUserRole, UserProfile,
 } from '../services/rolesService';
 import { Role } from '../types/permissions';
+import ModulesManager from '../components/configuracoes/ModulesManager';
 
 // ── Tabs ─────────────────────────────────────────────────────────────────
-type Tab = 'smtp' | 'perfis' | 'usuarios';
+type Tab = 'smtp' | 'perfis' | 'usuarios' | 'modulos';
 
 // ── Permission flags label map ────────────────────────────────────────────
 const PERM_LABELS: { key: keyof Role; label: string; desc: string }[] = [
@@ -249,6 +250,7 @@ const Configuracoes: React.FC = () => {
   }, [showToast]);
 
   useEffect(() => { if (activeTab === 'usuarios') { loadRoles(); loadUsers(); } }, [activeTab, loadRoles, loadUsers]);
+  useEffect(() => { if (activeTab === 'modulos' && roles.length === 0) loadRoles(); }, [activeTab, loadRoles, roles.length]);
 
   const handleUserRoleChange = async (userId: string, roleId: string) => {
     setUpdatingUser(userId);
@@ -262,11 +264,12 @@ const Configuracoes: React.FC = () => {
   const tabs: { id: Tab; label: string; icon: React.ReactNode }[] = [
     { id: 'smtp',     label: 'Servidor SMTP', icon: <Server className="h-4 w-4" /> },
     { id: 'perfis',   label: 'Perfis',        icon: <Shield className="h-4 w-4" /> },
+    { id: 'modulos',  label: 'Módulos',       icon: <Layout className="h-4 w-4" /> },
     { id: 'usuarios', label: 'Usuários',      icon: <Users className="h-4 w-4" /> },
   ];
 
   return (
-    <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-6 max-w-4xl">
+    <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-6 relative">
       {/* Header */}
       <div>
         <h1 className="text-3xl font-bold tracking-tight text-foreground">Configurações</h1>
@@ -591,6 +594,11 @@ const Configuracoes: React.FC = () => {
             </div>
           )}
         </div>
+      )}
+
+      {/* ── TAB: MÓDULOS ── */}
+      {activeTab === 'modulos' && (
+        <ModulesManager roles={roles} showToast={showToast} />
       )}
 
       {/* ── Role Modal ── */}

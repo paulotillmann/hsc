@@ -1,29 +1,38 @@
 // src/hooks/usePermissions.ts
-// Hook centralizado para verificação de permissões do usuário logado
+// Hook centralizado para verificação de permissões e módulos do usuário logado
 
 import { useCallback } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { PermissionKey, Permissions } from '../types/permissions';
+import { PermissionKey, Permissions, Module } from '../types/permissions';
 
 interface UsePermissionsReturn {
+  // Permissões de ação (legado — colunas booleanas na tabela roles)
   permissions: Permissions | null;
   can: (permission: PermissionKey) => boolean;
   isAdmin: boolean;
+  // Sistema dinâmico de módulos
+  userModules: Module[];
+  /** Verifica se o usuário tem acesso a um módulo pelo slug.
+   * @example canAccess('informes') // true | false
+   */
+  canAccess: (slug: string) => boolean;
 }
 
 /**
- * Hook para verificar permissões do perfil logado.
- * A função `can` é memoizada para não causar re-renders desnecessários.
+ * Hook para verificar permissões de ação e acesso a módulos do perfil logado.
  *
- * @example
+ * @example — Permissão de ação (legado)
  * const { can } = usePermissions();
  * if (can('can_upload')) { ... }
+ *
+ * @example — Acesso a módulo (novo sistema dinâmico)
+ * const { canAccess } = usePermissions();
+ * if (canAccess('relatorios')) { ... }
  */
 export function usePermissions(): UsePermissionsReturn {
-  const { permissions, isAdmin } = useAuth();
+  const { permissions, isAdmin, userModules } = useAuth();
 
-  // useCallback garante referência estável — essencial para não quebrar
-  // dependências de useCallback/useEffect nos componentes consumidores.
+  // Verifica permissão de ação (colunas booleanas na tabela roles)
   const can = useCallback(
     (permission: PermissionKey): boolean => {
       if (!permissions) return false;
@@ -32,5 +41,13 @@ export function usePermissions(): UsePermissionsReturn {
     [permissions]
   );
 
-  return { permissions, can, isAdmin };
+  // Verifica acesso a módulo pelo slug (sistema dinâmico)
+  const canAccess = useCallback(
+    (slug: string): boolean => {
+      return userModules.some(m => m.slug === slug && m.is_active);
+    },
+    [userModules]
+  );
+
+  return { permissions, can, isAdmin, userModules, canAccess };
 }

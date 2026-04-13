@@ -2,12 +2,9 @@ import React, { useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
 import PrivateRoute from './components/PrivateRoute';
-import PermissionGuard from './components/PermissionGuard';
+import DynamicRoute from './components/DynamicRoute';
 import Login from './pages/Login';
-import Informes from './pages/Informes';
 import Perfil from './pages/Perfil';
-import Holerites from './pages/Holerites';
-import Configuracoes from './pages/Configuracoes';
 import Layout from './components/Layout';
 
 const App: React.FC = () => {
@@ -29,22 +26,12 @@ const App: React.FC = () => {
           {/* Rotas protegidas — exigem sessão ativa */}
           <Route element={<PrivateRoute />}>
             <Route element={<Layout />}>
-              <Route path="/informes" element={
-                <PermissionGuard permission="can_informes">
-                  <Informes />
-                </PermissionGuard>
-              } />
-              <Route path="/holerites" element={
-                <PermissionGuard permission="can_holerites">
-                  <Holerites />
-                </PermissionGuard>
-              } />
-              <Route path="/configuracoes" element={
-                <PermissionGuard permission="can_config">
-                  <Configuracoes />
-                </PermissionGuard>
-              } />
+              {/* Perfil: rota pública para qualquer usuário autenticado */}
               <Route path="/perfil" element={<Perfil />} />
+
+              {/* Rota dinâmica: resolve qualquer módulo cadastrado no banco */}
+              {/* A permissão e o componente são resolvidos em DynamicRoute */}
+              <Route path="/:moduleSlug" element={<DynamicRoute />} />
             </Route>
           </Route>
 

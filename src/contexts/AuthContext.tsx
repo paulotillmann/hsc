@@ -1,10 +1,10 @@
 // src/contexts/AuthContext.tsx
-// Contexto global de autenticação via Supabase Auth com suporte a RBAC
+// Contexto global de autenticação via Supabase Auth com suporte a RBAC dinâmico
 
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { Session, User } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
-import { Permissions, Role } from '../types/permissions';
+import { Permissions, Role, Module } from '../types/permissions';
 
 interface Profile {
   id: string;
@@ -23,6 +23,7 @@ interface AuthContextType {
   user: User | null;
   profile: Profile | null;
   permissions: Permissions | null;
+  userModules: Module[];
   loading: boolean;
   profileLoaded: boolean;
   signIn: (email: string, password: string) => Promise<{ error: string | null }>;
@@ -48,12 +49,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [permissions, setPermissions] = useState<Permissions | null>(null);
+  const [userModules, setUserModules] = useState<Module[]>([]);
   const [loading, setLoading] = useState(true);
   const [profileLoaded, setProfileLoaded] = useState(false);
 
-  // ── Busca o profile com JOIN em roles ──────────────────────────────────────
+  // ── Busca o profile com JOIN em roles + módulos do perfil ──────────────────
   const fetchProfile = async (userId: string) => {
     try {
+      // 1. Busca o perfil com o role vinculado
       const { data, error } = await supabase
         .from('profiles')
         .select('*, roles(*)')
@@ -63,6 +66,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (error) {
         console.error('[AuthContext] Erro ao buscar perfil:', error.message);
         setPermissions(DEFAULT_PERMISSIONS);
+        setUserModules([]);
         return;
       }
 
@@ -79,6 +83,28 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             can_send_email: role.can_send_email,
             can_view_all: role.can_view_all,
           });
+
+          // 2. Busca os módulos que este perfil tem acesso
+          if (data.role_id) {
+            const { data: rmpData, error: rmpError } = await supabase
+              .from('role_module_permissions')
+              .select('modules(*)')
+              .eq('role_id', data.role_id);
+
+            if (rmpError) {
+              console.error('[AuthContext] Erro ao buscar módulos:', rmpError.message);
+              setUserModules([]);
+            } else {
+              // Extrai os módulos, filtra apenas os ativos e ordena
+              const modules = (rmpData ?? [])
+                .map((row: any) => row.modules as Module)
+                .filter((m: Module) => m && m.is_active)
+                .sort((a: Module, b: Module) => a.sort_order - b.sort_order);
+              setUserModules(modules);
+            }
+          } else {
+            setUserModules([]);
+          }
         } else {
           // Fallback: campo role text ('admin' | 'colaborador')
           const isAdmin = data.role === 'admin';
@@ -90,11 +116,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             can_send_email: isAdmin,
             can_view_all: isAdmin,
           });
+          setUserModules([]);
         }
       }
     } catch (err) {
       console.error('[AuthContext] Exceção ao buscar perfil:', err);
       setPermissions(DEFAULT_PERMISSIONS);
+      setUserModules([]);
     } finally {
       setProfileLoaded(true);
     }
@@ -113,6 +141,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (!session) {
           setProfile(null);
           setPermissions(null);
+          setUserModules([]);
           setProfileLoaded(false);
         }
 
@@ -176,6 +205,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     await supabase.auth.signOut();
     setProfile(null);
     setPermissions(null);
+    setUserModules([]);
     setProfileLoaded(false);
   };
 
@@ -190,7 +220,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   return (
     <AuthContext.Provider value={{
-      session, user, profile, permissions, loading, profileLoaded,
+      session, user, profile, permissions, userModules, loading, profileLoaded,
       signIn, signUp, signOut, refreshProfile, isAdmin,
     }}>
       {children}

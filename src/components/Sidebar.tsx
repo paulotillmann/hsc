@@ -1,13 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
-import { FileText, Receipt, Settings, LogOut, Sun, Moon, ChevronLeft, ChevronRight } from 'lucide-react';
+import { LogOut, Sun, Moon, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { usePermissions } from '../hooks/usePermissions';
+import DynamicIcon from './DynamicIcon';
 
 const Sidebar: React.FC = () => {
   const navigate = useNavigate();
   const { signOut, profile } = useAuth();
-  const { can } = usePermissions();
+  const { userModules } = usePermissions();
   const [isDark, setIsDark] = useState(false);
   const [isCollapsed, setIsCollapsed] = useState(false);
 
@@ -77,42 +78,22 @@ const Sidebar: React.FC = () => {
         )}
       </div>
 
-      <nav className="flex-1 p-3 flex flex-col gap-2 overflow-x-hidden pt-8">
-        {/* Informes — visível apenas para who has can_informes */}
-        {can('can_informes') && (
-          <NavLink 
-            to="/informes"
-            title="Informes de Rendimento"
-            className={({ isActive }) => navLinkClass(isActive)}
-          >
-            <FileText className="h-5 w-5 flex-shrink-0" />
-            {!isCollapsed && <span className="truncate">Informes de Rendimento</span>}
-          </NavLink>
-        )}
-
-        {/* Holerites — visível apenas para who has can_holerites */}
-        {can('can_holerites') && (
-          <NavLink 
-            to="/holerites"
-            title="Holerites"
-            className={({ isActive }) => navLinkClass(isActive)}
-          >
-            <Receipt className="h-5 w-5 flex-shrink-0" />
-            {!isCollapsed && <span className="truncate">Holerites</span>}
-          </NavLink>
-        )}
-        
-        {/* Configurações — visível apenas para who has can_config */}
-        {can('can_config') && (
-          <NavLink 
-            to="/configuracoes"
-            title="Configurações"
-            className={({ isActive }) => navLinkClass(isActive)}
-          >
-            <Settings className="h-5 w-5 flex-shrink-0" />
-            {!isCollapsed && <span className="truncate">Configurações</span>}
-          </NavLink>
-        )}
+      {/* ── Menu dinâmico gerado pelos módulos do perfil ── */}
+      <nav className="flex-1 p-3 flex flex-col gap-2 overflow-x-hidden overflow-y-auto pt-8">
+        {userModules
+          .filter(m => m.slug !== 'configuracoes') // Configurações fica na área inferior
+          .map(module => (
+            <NavLink
+              key={module.slug}
+              to={`/${module.slug}`}
+              title={module.name}
+              className={({ isActive }) => navLinkClass(isActive)}
+            >
+              <DynamicIcon name={module.icon} className="h-5 w-5 flex-shrink-0" />
+              {!isCollapsed && <span className="truncate">{module.name}</span>}
+            </NavLink>
+          ))
+        }
       </nav>
 
       <div className="p-3 border-t border-border flex flex-col gap-2 overflow-x-hidden">
@@ -144,6 +125,18 @@ const Sidebar: React.FC = () => {
                 <p className="text-[10px] text-muted-foreground capitalize leading-tight mt-0.5">{profile.role}</p>
               </div>
             )}
+          </NavLink>
+        )}
+
+        {/* Configurações — apenas se o módulo estiver liberado para o perfil */}
+        {userModules.some(m => m.slug === 'configuracoes') && (
+          <NavLink
+            to="/configuracoes"
+            title="Configurações"
+            className={({ isActive }) => navLinkClass(isActive)}
+          >
+            <DynamicIcon name="Settings" className="h-5 w-5 flex-shrink-0" />
+            {!isCollapsed && <span className="truncate">Configurações</span>}
           </NavLink>
         )}
 
