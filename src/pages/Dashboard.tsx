@@ -13,8 +13,8 @@ const parseMesAno = (mesAno: string) => {
 };
 
 export default function Dashboard() {
-  const { profile } = useAuth();
-  const { can, profileLoaded } = usePermissions();
+  const { profile, profileLoaded } = useAuth();
+  const { can } = usePermissions();
   
   const [isLoading, setIsLoading] = useState(true);
   const [data, setData] = useState<DashboardData>({ holerites: [], informes: [] });
