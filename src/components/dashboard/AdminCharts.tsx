@@ -36,15 +36,20 @@ export const AdminCharts: React.FC<AdminChartsProps> = ({ data }) => {
   }, [data.holerites]);
 
   // 2. Status de E-mails
-  const emailData = useMemo(() => {
+  const { emailData, taxaEnvio } = useMemo(() => {
     let sent = 0;
     let pending = 0;
     data.holerites.forEach(h => h.email_enviado_em ? sent++ : pending++);
     data.informes.forEach(i => i.email_enviado_em ? sent++ : pending++);
-    return [
-      { name: 'Enviados', value: sent, color: '#10b981' }, // emerald-500
-      { name: 'Pendentes', value: pending, color: '#f43f5e' } // rose-500
-    ];
+    const total = sent + pending;
+    const taxaEnvio = total > 0 ? ((sent / total) * 100).toFixed(0) : '0';
+    return {
+      emailData: [
+        { name: 'Enviados', value: sent, color: '#3b82f6' }, // blue-500
+        { name: 'Pendentes', value: pending, color: '#f43f5e' } // rose-500
+      ],
+      taxaEnvio
+    };
   }, [data]);
 
   // 3. Volume de Importações por Mês (Baseado no created_at)
@@ -99,20 +104,41 @@ export const AdminCharts: React.FC<AdminChartsProps> = ({ data }) => {
       {/* Gráfico 2: E-mails */}
       <div className="bg-card p-6 rounded-xl border border-border flex flex-col shadow-sm">
         <h3 className="text-lg font-bold text-foreground mb-4">Eficiência de Comunicação</h3>
-        <div className="flex-1 min-h-[300px] flex items-center justify-center">
+        <div className="flex-1 min-h-[300px] flex items-center justify-center relative">
           {emailData[0].value === 0 && emailData[1].value === 0 ? (
             <p className="text-sm text-muted-foreground">Nenhum documento processado.</p>
           ) : (
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
+                <text 
+                  x="50%" 
+                  y="45%" 
+                  textAnchor="middle" 
+                  dominantBaseline="middle" 
+                  className="fill-foreground text-4xl font-bold font-sans"
+                >
+                  {`${taxaEnvio}%`}
+                </text>
+                <text 
+                  x="50%" 
+                  y="55%" 
+                  textAnchor="middle" 
+                  dominantBaseline="middle" 
+                  className="fill-muted-foreground text-xs font-medium"
+                >
+                  Entregues
+                </text>
+
                 <Pie
                   data={emailData}
                   cx="50%"
                   cy="50%"
-                  innerRadius={60}
+                  innerRadius={70}
                   outerRadius={100}
                   paddingAngle={5}
+                  cornerRadius={10}
                   dataKey="value"
+                  stroke="none"
                 >
                   {emailData.map((entry, index) => (
                     <Cell key={`cell-${index}`} fill={entry.color} />
@@ -121,7 +147,7 @@ export const AdminCharts: React.FC<AdminChartsProps> = ({ data }) => {
                 <Tooltip 
                   contentStyle={{ backgroundColor: 'hsl(var(--card))', borderColor: 'hsl(var(--border))', borderRadius: '8px' }}
                 />
-                <Legend verticalAlign="bottom" height={36} />
+                <Legend verticalAlign="bottom" height={36} iconType="circle" />
               </PieChart>
             </ResponsiveContainer>
           )}
