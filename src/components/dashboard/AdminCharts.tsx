@@ -164,7 +164,9 @@ export const AdminCharts: React.FC<AdminChartsProps> = ({ data }) => {
               <XAxis dataKey="name" stroke="#a1a1aa" fontSize={12} tickLine={false} axisLine={false} />
               <YAxis stroke="#a1a1aa" fontSize={12} tickLine={false} axisLine={false} />
               <Tooltip 
-                contentStyle={{ backgroundColor: 'hsl(var(--card))', borderColor: 'hsl(var(--border))', borderRadius: '8px' }}
+                cursor={{ fill: 'transparent' }}
+                contentStyle={{ backgroundColor: 'hsl(var(--card))', borderColor: 'hsl(var(--border))', borderRadius: '8px', color: 'hsl(var(--foreground))' }}
+                itemStyle={{ color: 'hsl(var(--foreground))' }}
               />
               <Legend wrapperStyle={{ paddingTop: '20px' }}/>
               <Bar dataKey="holerites" name="Holerites" fill="#3b82f6" radius={[4, 4, 0, 0]} />
