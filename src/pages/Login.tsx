@@ -36,7 +36,7 @@ const Login: React.FC = () => {
   // Redireciona se já estiver logado
   useEffect(() => {
     if (!loading && session) {
-      navigate('/informes', { replace: true });
+      navigate('/dashboard', { replace: true });
     }
   }, [session, loading, navigate]);
 
@@ -74,7 +74,7 @@ const Login: React.FC = () => {
     if (authError) {
       setError(authError);
     } else {
-      navigate('/informes', { replace: true });
+      navigate('/dashboard', { replace: true });
     }
   };
 

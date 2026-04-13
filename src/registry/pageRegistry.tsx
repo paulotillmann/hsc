@@ -11,6 +11,7 @@ import React, { lazy } from 'react';
 
 export const pageRegistry: Record<string, React.LazyExoticComponent<React.ComponentType<any>>> = {
   // Módulos de sistema
+  'dashboard':    lazy(() => import('../pages/Dashboard')),
   'informes':     lazy(() => import('../pages/Informes')),
   'holerites':    lazy(() => import('../pages/Holerites')),
   'configuracoes':lazy(() => import('../pages/Configuracoes')),
