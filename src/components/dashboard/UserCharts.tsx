@@ -72,9 +72,9 @@ export const UserCharts: React.FC<UserChartsProps> = ({ data, hideValues }) => {
                     <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
                   </linearGradient>
                 </defs>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
-                <XAxis dataKey="mes_ano" stroke="hsl(var(--muted-foreground))" fontSize={12} tickLine={false} axisLine={false} />
-                <YAxis tickFormatter={formatCurrency} stroke="hsl(var(--muted-foreground))" fontSize={12} tickLine={false} axisLine={false} width={80} />
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#52525b" opacity={0.4} />
+                <XAxis dataKey="mes_ano" stroke="#a1a1aa" fontSize={12} tickLine={false} axisLine={false} />
+                <YAxis tickFormatter={formatCurrency} stroke="#a1a1aa" fontSize={12} tickLine={false} axisLine={false} width={80} />
                 <Tooltip 
                   formatter={(value: number) => [formatCurrency(value), 'Valor Líquido']}
                   contentStyle={{ backgroundColor: 'hsl(var(--card))', borderColor: 'hsl(var(--border))', borderRadius: '8px' }}

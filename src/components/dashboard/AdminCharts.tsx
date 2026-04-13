@@ -82,9 +82,9 @@ export const AdminCharts: React.FC<AdminChartsProps> = ({ data }) => {
                   <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/>
                 </linearGradient>
               </defs>
-              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
-              <XAxis dataKey="mes_ano" stroke="hsl(var(--muted-foreground))" fontSize={12} tickLine={false} axisLine={false} />
-              <YAxis tickFormatter={formatCurrency} stroke="hsl(var(--muted-foreground))" fontSize={12} tickLine={false} axisLine={false} width={80} />
+              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#52525b" opacity={0.4} />
+              <XAxis dataKey="mes_ano" stroke="#a1a1aa" fontSize={12} tickLine={false} axisLine={false} />
+              <YAxis tickFormatter={formatCurrency} stroke="#a1a1aa" fontSize={12} tickLine={false} axisLine={false} width={80} />
               <Tooltip 
                 formatter={(value: number) => [formatCurrency(value), 'Total Líquido']}
                 contentStyle={{ backgroundColor: 'hsl(var(--card))', borderColor: 'hsl(var(--border))', color: 'hsl(var(--foreground))', borderRadius: '8px' }}
@@ -113,7 +113,6 @@ export const AdminCharts: React.FC<AdminChartsProps> = ({ data }) => {
                   outerRadius={100}
                   paddingAngle={5}
                   dataKey="value"
-                  label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
                 >
                   {emailData.map((entry, index) => (
                     <Cell key={`cell-${index}`} fill={entry.color} />
@@ -122,6 +121,7 @@ export const AdminCharts: React.FC<AdminChartsProps> = ({ data }) => {
                 <Tooltip 
                   contentStyle={{ backgroundColor: 'hsl(var(--card))', borderColor: 'hsl(var(--border))', borderRadius: '8px' }}
                 />
+                <Legend verticalAlign="bottom" height={36} />
               </PieChart>
             </ResponsiveContainer>
           )}
@@ -134,9 +134,9 @@ export const AdminCharts: React.FC<AdminChartsProps> = ({ data }) => {
         <div className="flex-1 min-h-[300px]">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={volumeData} margin={{ top: 20, right: 30, left: 0, bottom: 5 }}>
-              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
-              <XAxis dataKey="name" stroke="hsl(var(--muted-foreground))" fontSize={12} tickLine={false} axisLine={false} />
-              <YAxis stroke="hsl(var(--muted-foreground))" fontSize={12} tickLine={false} axisLine={false} />
+              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#52525b" opacity={0.4} />
+              <XAxis dataKey="name" stroke="#a1a1aa" fontSize={12} tickLine={false} axisLine={false} />
+              <YAxis stroke="#a1a1aa" fontSize={12} tickLine={false} axisLine={false} />
               <Tooltip 
                 contentStyle={{ backgroundColor: 'hsl(var(--card))', borderColor: 'hsl(var(--border))', borderRadius: '8px' }}
               />
