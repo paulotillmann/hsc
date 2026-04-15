@@ -416,6 +416,11 @@ export async function syncMissingEmailsFromN8n(
       currentEmail: emailEncontrado,
       results: [...results],
     });
+
+    // Pausa de 2 segundos entre cada requisição (exceto na última)
+    if (i < total - 1 && !abortSignal?.aborted) {
+      await new Promise(resolve => setTimeout(resolve, 2000));
+    }
   }
 
   const finalProgress: SyncEmailsProgress = {
