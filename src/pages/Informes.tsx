@@ -40,6 +40,7 @@ const Informes: React.FC = () => {
   // ── Filtro / Paginação / Ordenação ──
   const [filter, setFilter] = useState('');
   const [emailFilter, setEmailFilter] = useState<'todos' | 'com_email' | 'sem_email'>('todos');
+  const [sendStatusFilter, setSendStatusFilter] = useState<'todos' | 'enviado' | 'nao_enviado'>('todos');
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 12;
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc' | null>(null);
@@ -94,6 +95,9 @@ const Informes: React.FC = () => {
     if (emailFilter === 'com_email' && !c.email) return false;
     if (emailFilter === 'sem_email' && c.email) return false;
 
+    if (sendStatusFilter === 'enviado' && !c.email_enviado_em) return false;
+    if (sendStatusFilter === 'nao_enviado' && c.email_enviado_em) return false;
+
     return (
       c.nome_completo.toLowerCase().includes(rawFilter) ||
       (cleanSearchCpf && rawCpf.includes(cleanSearchCpf))
@@ -110,7 +114,7 @@ const Informes: React.FC = () => {
     });
   }
 
-  useEffect(() => { setCurrentPage(1); }, [filter, sortDirection, filterAno, emailFilter]);
+  useEffect(() => { setCurrentPage(1); }, [filter, sortDirection, filterAno, emailFilter, sendStatusFilter]);
 
   const totalPages   = Math.ceil(filteredData.length / itemsPerPage) || 1;
   const paginatedData = filteredData.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
@@ -335,25 +339,48 @@ const Informes: React.FC = () => {
               />
             </div>
             
-            <div className="flex bg-background border border-border rounded-md p-1 self-start sm:self-center">
-              <button 
-                onClick={() => setEmailFilter('todos')} 
-                className={`px-3 py-1 text-xs font-medium rounded-sm transition-colors ${emailFilter === 'todos' ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:bg-muted'}`}
-              >
-                Todos
-              </button>
-              <button 
-                onClick={() => setEmailFilter('com_email')} 
-                className={`px-3 py-1 text-xs font-medium rounded-sm transition-colors ${emailFilter === 'com_email' ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:bg-muted'}`}
-              >
-                Com E-mail
-              </button>
-              <button 
-                onClick={() => setEmailFilter('sem_email')} 
-                className={`px-3 py-1 text-xs font-medium rounded-sm transition-colors ${emailFilter === 'sem_email' ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:bg-muted'}`}
-              >
-                Sem E-mail
-              </button>
+            <div className="flex flex-wrap gap-2">
+              <div className="flex bg-background border border-border rounded-md p-1 self-start sm:self-center">
+                <button 
+                  onClick={() => setEmailFilter('todos')} 
+                  className={`px-3 py-1 text-xs font-medium rounded-sm transition-colors ${emailFilter === 'todos' ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:bg-muted'}`}
+                >
+                  Qualquer E-mail
+                </button>
+                <button 
+                  onClick={() => setEmailFilter('com_email')} 
+                  className={`px-3 py-1 text-xs font-medium rounded-sm transition-colors ${emailFilter === 'com_email' ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:bg-muted'}`}
+                >
+                  Com E-mail
+                </button>
+                <button 
+                  onClick={() => setEmailFilter('sem_email')} 
+                  className={`px-3 py-1 text-xs font-medium rounded-sm transition-colors ${emailFilter === 'sem_email' ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:bg-muted'}`}
+                >
+                  Sem E-mail
+                </button>
+              </div>
+              
+              <div className="flex bg-background border border-border rounded-md p-1 self-start sm:self-center">
+                <button 
+                  onClick={() => setSendStatusFilter('todos')} 
+                  className={`px-3 py-1 text-xs font-medium rounded-sm transition-colors ${sendStatusFilter === 'todos' ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:bg-muted'}`}
+                >
+                  Qualquer Envio
+                </button>
+                <button 
+                  onClick={() => setSendStatusFilter('enviado')} 
+                  className={`px-3 py-1 text-xs font-medium rounded-sm transition-colors ${sendStatusFilter === 'enviado' ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:bg-muted'}`}
+                >
+                  Já Enviado
+                </button>
+                <button 
+                  onClick={() => setSendStatusFilter('nao_enviado')} 
+                  className={`px-3 py-1 text-xs font-medium rounded-sm transition-colors ${sendStatusFilter === 'nao_enviado' ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:bg-muted'}`}
+                >
+                  Não Enviado
+                </button>
+              </div>
             </div>
           </div>
           <div className="text-xs font-medium text-muted-foreground">
