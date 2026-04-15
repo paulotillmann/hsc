@@ -42,6 +42,14 @@ export async function updateEmailEnviadoEm(id: string): Promise<string> {
   return now;
 }
 
+export async function updateInformeEmail(id: string, newEmail: string): Promise<void> {
+  const { error } = await supabase
+    .from('informes')
+    .update({ email: newEmail })
+    .eq('id', id);
+  if (error) throw new Error(error.message);
+}
+
 export interface UploadProgress {
   stage: 'reading' | 'extracting' | 'uploading' | 'saving' | 'done' | 'error' | 'interrupted';
   current: number;   // colaborador atual

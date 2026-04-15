@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
-import { Search, ExternalLink, FileText, Trash2, UploadCloud, X, CheckCircle2, AlertCircle, ChevronLeft, ChevronRight, ArrowUpDown, ArrowUp, ArrowDown, Calendar, Mail, Loader2 } from 'lucide-react';
+import { Search, ExternalLink, FileText, Trash2, UploadCloud, X, CheckCircle2, AlertCircle, ChevronLeft, ChevronRight, ArrowUpDown, ArrowUp, ArrowDown, Calendar, Mail, Loader2, Edit } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../contexts/AuthContext';
 import { usePermissions } from '../hooks/usePermissions';
@@ -8,6 +8,7 @@ import {
   uploadInformePDF,
   deleteInformes,
   updateEmailEnviadoEm,
+  updateInformeEmail,
   InformeRecord,
   UploadProgress,
 } from '../services/informesService';
@@ -33,6 +34,7 @@ const Informes: React.FC = () => {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [idsToDelete, setIdsToDelete] = useState<string[]>([]);
   const [sendingEmailId, setSendingEmailId] = useState<string | null>(null);
+  const [isSendingMassEmail, setIsSendingMassEmail] = useState(false);
   const [emailToast, setEmailToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
   // ── Filtro / Paginação / Ordenação ──
@@ -47,6 +49,10 @@ const Informes: React.FC = () => {
   // ── Modais ──
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [editingInforme, setEditingInforme] = useState<InformeRecord | null>(null);
+  const [editEmailValue, setEditEmailValue] = useState('');
+  const [isSavingEmail, setIsSavingEmail] = useState(false);
 
   // ── Upload ──
   const [importAno, setImportAno] = useState<number>(CURRENT_YEAR);
@@ -142,6 +148,72 @@ const Informes: React.FC = () => {
     }
   };
 
+  const handleSendMassEmail = async () => {
+    setIsSendingMassEmail(true);
+    let successCount = 0;
+    let errorCount = 0;
+
+    for (const id of selectedIds) {
+      const colab = data.find(c => c.id === id);
+      if (!colab || !colab.email) {
+        errorCount++;
+        continue;
+      }
+      
+      setSendingEmailId(colab.id);
+      
+      const result = await sendDocumentEmail({
+        to: colab.email,
+        nomeColaborador: colab.nome_completo,
+        tipoDocumento: 'informe',
+        periodoReferencia: `Ano ${colab.ano_referencia}`,
+        cpf: colab.cpf,
+        pdfUrl: colab.pdf_url,
+      });
+
+      if (result.success) {
+        successCount++;
+        try {
+          const sentAt = await updateEmailEnviadoEm(colab.id);
+          setData(prev => prev.map(r => r.id === colab.id ? { ...r, email_enviado_em: sentAt } : r));
+        } catch (_) { /* falha silenciosa ao atualizar data no banco */ }
+      } else {
+        errorCount++;
+      }
+    }
+
+    setSendingEmailId(null);
+    setIsSendingMassEmail(false);
+    
+    if (successCount > 0 && errorCount === 0) {
+      setEmailToast({ type: 'success', message: `${successCount} e-mails enviados com sucesso!` });
+    } else if (successCount > 0 && errorCount > 0) {
+      setEmailToast({ type: 'success', message: `${successCount} enviados, ${errorCount} falhas/sem e-mail.` });
+    } else {
+      setEmailToast({ type: 'error', message: `Nenhum e-mail pôde ser enviado (verifique os cadastros).` });
+    }
+    
+    setTimeout(() => setEmailToast(null), 5000);
+    // Opcional: limpar a seleção após o envio
+    setSelectedIds([]);
+  };
+
+  const handleSaveEmail = async () => {
+    if (!editingInforme) return;
+    setIsSavingEmail(true);
+    try {
+      await updateInformeEmail(editingInforme.id, editEmailValue);
+      setData(prev => prev.map(c => c.id === editingInforme.id ? { ...c, email: editEmailValue } : c));
+      setEmailToast({ type: 'success', message: 'E-mail atualizado com sucesso!' });
+      setIsEditModalOpen(false);
+    } catch (err: any) {
+      setEmailToast({ type: 'error', message: 'Erro ao atualizar e-mail: ' + err.message });
+    } finally {
+      setIsSavingEmail(false);
+    }
+    setTimeout(() => setEmailToast(null), 3000);
+  };
+
   // ─────────────────────────────────────────────────────────────
   // UPLOAD HANDLER
   // ─────────────────────────────────────────────────────────────
@@ -217,6 +289,17 @@ const Informes: React.FC = () => {
             >
               <Trash2 className="h-4 w-4" />
               Excluir ({selectedIds.length})
+            </button>
+          )}
+
+          {selectedIds.length > 0 && can('can_send_email') && (
+            <button
+              onClick={handleSendMassEmail}
+              disabled={isSendingMassEmail}
+              className="inline-flex items-center gap-2 px-4 py-2 border border-blue-200 bg-blue-50 text-blue-600 rounded-md shadow-sm transition-colors hover:bg-blue-100 font-medium text-sm dark:bg-blue-500/10 dark:border-blue-500/20 dark:hover:bg-blue-500/20 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isSendingMassEmail ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mail className="h-4 w-4" />}
+              Enviar E-mails ({selectedIds.length})
             </button>
           )}
 
@@ -369,6 +452,18 @@ const Informes: React.FC = () => {
                         </button>
                       )}
                       <button
+                        title="Editar"
+                        onClick={() => {
+                          setEditingInforme(colab);
+                          setEditEmailValue(colab.email || '');
+                          setIsEditModalOpen(true);
+                        }}
+                        className="inline-flex items-center gap-2 px-3 py-1.5 rounded-md border text-muted-foreground hover:bg-orange-50 hover:text-orange-600 hover:border-orange-200 dark:hover:bg-orange-500/10 dark:hover:text-orange-500 transition-colors text-sm font-medium"
+                      >
+                        <Edit className="h-4 w-4" />
+                      </button>
+                      <button
+                        title="Excluir"
                         onClick={() => { setIdsToDelete([colab.id]); setIsDeleteModalOpen(true); }}
                         className="inline-flex items-center gap-2 px-3 py-1.5 rounded-md border text-muted-foreground hover:bg-red-50 hover:text-red-600 hover:border-red-200 dark:hover:bg-red-500/10 dark:hover:text-red-500 transition-colors text-sm font-medium"
                       >
@@ -568,6 +663,67 @@ const Informes: React.FC = () => {
                 </button>
                 <button onClick={handleDeleteConfirm} className="px-4 py-2 bg-red-600 text-white rounded-md text-sm font-medium flex-1 hover:bg-red-700 cursor-pointer shadow">
                   Confirmar Exclusão
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ══════════════════════════════════════════════════════ */}
+      {/* MODAL — EDIÇÃO DE INFORME                              */}
+      {/* ══════════════════════════════════════════════════════ */}
+      <AnimatePresence>
+        {isEditModalOpen && editingInforme && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+            <motion.div initial={{ scale: 0.95 }} animate={{ scale: 1 }} exit={{ scale: 0.95 }} className="bg-card w-full max-w-md rounded-2xl border shadow-xl p-6 relative">
+              <button
+                onClick={() => setIsEditModalOpen(false)}
+                className="absolute right-4 top-4 text-muted-foreground hover:bg-muted p-1 rounded-full"
+              >
+                <X className="h-5 w-5" />
+              </button>
+              <h3 className="text-xl font-bold mb-4">Editar Informe</h3>
+              <div className="space-y-4">
+                <div>
+                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider block mb-1">Nome Completo</label>
+                  <input type="text" value={editingInforme.nome_completo} disabled className="w-full bg-muted/50 border border-border rounded-md px-3 py-2 text-sm text-foreground opacity-70 cursor-not-allowed" />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider block mb-1">CPF</label>
+                    <input type="text" value={editingInforme.cpf} disabled className="w-full bg-muted/50 border border-border rounded-md px-3 py-2 text-sm text-foreground opacity-70 cursor-not-allowed" />
+                  </div>
+                  <div>
+                    <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider block mb-1">Ano Referência</label>
+                    <input type="text" value={editingInforme.ano_referencia} disabled className="w-full bg-muted/50 border border-border rounded-md px-3 py-2 text-sm text-foreground opacity-70 cursor-not-allowed" />
+                  </div>
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider block mb-1">E-mail</label>
+                  <input 
+                    type="email" 
+                    value={editEmailValue}
+                    onChange={e => setEditEmailValue(e.target.value)}
+                    placeholder="E-mail do colaborador"
+                    className="w-full bg-background border border-border rounded-md px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary transition-all" 
+                  />
+                  <p className="text-[11px] text-muted-foreground mt-1">
+                    Insira um e-mail válido. Se deixado em branco, o e-mail não será enviado.
+                  </p>
+                </div>
+              </div>
+              <div className="flex gap-3 mt-6">
+                <button onClick={() => setIsEditModalOpen(false)} className="px-4 py-2 border rounded-md text-sm font-medium flex-1 hover:bg-muted cursor-pointer transition-colors">
+                  Cancelar
+                </button>
+                <button 
+                  onClick={handleSaveEmail} 
+                  disabled={isSavingEmail}
+                  className="px-4 py-2 bg-primary text-primary-foreground rounded-md text-sm font-medium flex-1 hover:opacity-90 cursor-pointer shadow transition-colors flex justify-center items-center gap-2 disabled:opacity-50"
+                >
+                  {isSavingEmail && <Loader2 className="h-4 w-4 animate-spin" />}
+                  Salvar
                 </button>
               </div>
             </motion.div>
