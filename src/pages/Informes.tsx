@@ -369,7 +369,7 @@ const Informes: React.FC = () => {
                 className="inline-flex items-center gap-2 px-4 py-2 rounded-md border border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 dark:bg-indigo-500/10 dark:border-indigo-500/20 dark:text-indigo-400 dark:hover:bg-indigo-500/20 shadow-sm transition-colors font-medium text-sm cursor-pointer"
               >
                 <Zap className="h-4 w-4" />
-                Buscar E-mails (API)
+                Atualizar E-mails
               </button>
               <button
                 onClick={() => { setUploadProgress(null); setIsImportModalOpen(true); }}
@@ -871,7 +871,7 @@ const Informes: React.FC = () => {
                   <div className="p-2 bg-white/15 rounded-lg">
                     <Zap className="h-5 w-5" />
                   </div>
-                  <h3 className="text-lg font-bold">Buscar E-mails via API</h3>
+                  <h3 className="text-lg font-bold">Atualizar E-mails</h3>
                 </div>
                 <p className="text-sm text-white/75 leading-relaxed">
                   Pesquisaremos o banco de dados da Santa Casa para cada colaborador sem e-mail cadastrado e atualizaremos automaticamente os registros encontrados.
