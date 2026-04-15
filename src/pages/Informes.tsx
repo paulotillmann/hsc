@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
-import { Search, ExternalLink, FileText, Trash2, UploadCloud, X, CheckCircle2, AlertCircle, ChevronLeft, ChevronRight, ArrowUpDown, ArrowUp, ArrowDown, Calendar, Mail, Loader2, Edit } from 'lucide-react';
+import { Search, ExternalLink, FileText, Trash2, UploadCloud, X, CheckCircle2, AlertCircle, ChevronLeft, ChevronRight, ArrowUpDown, ArrowUp, ArrowDown, Calendar, Mail, Loader2, Edit, RefreshCw, UserCheck, UserX, Zap } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../contexts/AuthContext';
 import { usePermissions } from '../hooks/usePermissions';
@@ -9,8 +9,10 @@ import {
   deleteInformes,
   updateEmailEnviadoEm,
   updateInformeEmail,
+  syncMissingEmailsFromN8n,
   InformeRecord,
   UploadProgress,
+  SyncEmailsProgress,
 } from '../services/informesService';
 import { sendDocumentEmail } from '../services/emailService';
 
@@ -55,6 +57,12 @@ const Informes: React.FC = () => {
   const [editingInforme, setEditingInforme] = useState<InformeRecord | null>(null);
   const [editEmailValue, setEditEmailValue] = useState('');
   const [isSavingEmail, setIsSavingEmail] = useState(false);
+
+  // ── Sync E-mails via N8N ──
+  const [isSyncModalOpen, setIsSyncModalOpen] = useState(false);
+  const [syncProgress, setSyncProgress] = useState<SyncEmailsProgress | null>(null);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const syncAbortRef = useRef<AbortController | null>(null);
 
   // ── Upload ──
   const [importAno, setImportAno] = useState<number>(CURRENT_YEAR);
@@ -207,6 +215,48 @@ const Informes: React.FC = () => {
     setSelectedIds([]);
   };
 
+  const handleSyncEmails = async () => {
+    setIsSyncing(true);
+    setSyncProgress(null);
+    const controller = new AbortController();
+    syncAbortRef.current = controller;
+
+    // Pega TODOS os registros do ano atual sem e-mail
+    const semEmail = data.filter(c => !c.email);
+
+    if (semEmail.length === 0) {
+      setSyncProgress({
+        stage: 'done',
+        current: 0,
+        total: 0,
+        percent: 100,
+        currentName: '',
+        currentEmail: null,
+        results: [],
+      });
+      setIsSyncing(false);
+      return;
+    }
+
+    const result = await syncMissingEmailsFromN8n(
+      semEmail,
+      setSyncProgress,
+      controller.signal
+    );
+
+    // Atualiza o state local com os e-mails encontrados
+    setData(prev => prev.map(r => {
+      const found = result.results.find(x => x.id === r.id);
+      if (found?.atualizado && found.emailEncontrado) {
+        return { ...r, email: found.emailEncontrado };
+      }
+      return r;
+    }));
+
+    setIsSyncing(false);
+    syncAbortRef.current = null;
+  };
+
   const handleSaveEmail = async () => {
     if (!editingInforme) return;
     setIsSavingEmail(true);
@@ -313,13 +363,22 @@ const Informes: React.FC = () => {
           )}
 
           {can('can_upload') && (
-            <button
-              onClick={() => { setUploadProgress(null); setIsImportModalOpen(true); }}
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-md bg-primary text-primary-foreground shadow transition-colors hover:opacity-90 font-medium text-sm cursor-pointer"
-            >
-              <UploadCloud className="h-4 w-4" />
-              Importar arquivo Informe PDF
-            </button>
+            <>
+              <button
+                onClick={() => { setSyncProgress(null); setIsSyncModalOpen(true); }}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-md border border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 dark:bg-indigo-500/10 dark:border-indigo-500/20 dark:text-indigo-400 dark:hover:bg-indigo-500/20 shadow-sm transition-colors font-medium text-sm cursor-pointer"
+              >
+                <Zap className="h-4 w-4" />
+                Buscar E-mails (API)
+              </button>
+              <button
+                onClick={() => { setUploadProgress(null); setIsImportModalOpen(true); }}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-md bg-primary text-primary-foreground shadow transition-colors hover:opacity-90 font-medium text-sm cursor-pointer"
+              >
+                <UploadCloud className="h-4 w-4" />
+                Importar arquivo Informe PDF
+              </button>
+            </>
           )}
         </div>
       </div>
@@ -786,7 +845,213 @@ const Informes: React.FC = () => {
         )}
       </AnimatePresence>
 
+
+      {/* ══════════════════════════════════════════════════════ */}
+      {/* MODAL — SINCRONIZAR E-MAILS VIA API (N8N)            */}
+      {/* ══════════════════════════════════════════════════════ */}
+      <AnimatePresence>
+        {isSyncModalOpen && (
+          <motion.div
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"
+          >
+            <motion.div
+              initial={{ scale: 0.95, y: 10 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.95, y: 10 }}
+              className="bg-card w-full max-w-xl rounded-2xl border shadow-2xl relative overflow-hidden"
+            >
+              {/* Header com gradiente */}
+              <div className="bg-gradient-to-r from-indigo-600 to-violet-600 px-6 pt-6 pb-5 text-white">
+                <button
+                  onClick={() => { if (!isSyncing) { setIsSyncModalOpen(false); setSyncProgress(null); } }}
+                  className="absolute right-4 top-4 text-white/70 hover:text-white hover:bg-white/10 p-1.5 rounded-full transition-colors"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+                <div className="flex items-center gap-3 mb-1">
+                  <div className="p-2 bg-white/15 rounded-lg">
+                    <Zap className="h-5 w-5" />
+                  </div>
+                  <h3 className="text-lg font-bold">Buscar E-mails via API</h3>
+                </div>
+                <p className="text-sm text-white/75 leading-relaxed">
+                  Pesquisaremos o banco de dados da Santa Casa para cada colaborador sem e-mail cadastrado e atualizaremos automaticamente os registros encontrados.
+                </p>
+              </div>
+
+              <div className="p-6">
+                {/* ESTADO INICIAL */}
+                {!syncProgress && !isSyncing && (
+                  <div className="space-y-4">
+                    <div className="bg-indigo-50 dark:bg-indigo-500/10 border border-indigo-200 dark:border-indigo-500/20 rounded-xl p-4">
+                      <div className="flex items-start gap-3">
+                        <div className="p-1.5 bg-indigo-100 dark:bg-indigo-500/20 rounded-lg mt-0.5 flex-shrink-0">
+                          <Mail className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
+                        </div>
+                        <div>
+                          <p className="text-sm font-semibold text-indigo-800 dark:text-indigo-300 mb-0.5">O que será feito:</p>
+                          <ul className="text-sm text-indigo-700 dark:text-indigo-400 space-y-1 list-disc list-inside">
+                            <li>Identifica todos os colaboradores do ano <strong>{filterAno}</strong> sem e-mail</li>
+                            <li>Consulta o banco da Santa Casa para cada CPF via API</li>
+                            <li>Atualiza automaticamente os e-mails encontrados</li>
+                          </ul>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground bg-muted/40 rounded-lg p-3">
+                      <UserX className="h-4 w-4 flex-shrink-0 text-amber-500" />
+                      <span>
+                        <strong className="text-foreground">{data.filter(c => !c.email).length}</strong> colaborador(es) sem e-mail no ano {filterAno}
+                      </span>
+                    </div>
+                    <div className="flex gap-3 pt-2">
+                      <button
+                        onClick={() => { setIsSyncModalOpen(false); setSyncProgress(null); }}
+                        className="px-4 py-2 border rounded-md text-sm font-medium flex-1 hover:bg-muted cursor-pointer transition-colors"
+                      >
+                        Cancelar
+                      </button>
+                      <button
+                        onClick={handleSyncEmails}
+                        disabled={data.filter(c => !c.email).length === 0}
+                        className="px-4 py-2 bg-gradient-to-r from-indigo-600 to-violet-600 text-white rounded-md text-sm font-bold flex-1 hover:opacity-90 cursor-pointer shadow transition-all flex justify-center items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
+                      >
+                        <Zap className="h-4 w-4" />
+                        Iniciar Busca
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* PROGRESSO */}
+                {syncProgress && syncProgress.stage === 'running' && (
+                  <div className="space-y-4">
+                    {/* Barra de progresso */}
+                    <div>
+                      <div className="flex justify-between text-xs font-medium text-muted-foreground mb-2">
+                        <span>Processando {syncProgress.current} de {syncProgress.total}</span>
+                        <span className="font-bold text-indigo-600 dark:text-indigo-400">{syncProgress.percent}%</span>
+                      </div>
+                      <div className="w-full h-2.5 bg-muted rounded-full overflow-hidden">
+                        <motion.div
+                          className="h-full bg-gradient-to-r from-indigo-500 to-violet-500 rounded-full"
+                          animate={{ width: `${syncProgress.percent}%` }}
+                          transition={{ duration: 0.4 }}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Colaborador atual */}
+                    <div className="bg-muted/40 rounded-lg p-3 flex items-center gap-3 min-h-[52px]">
+                      <Loader2 className="h-4 w-4 animate-spin text-indigo-500 flex-shrink-0" />
+                      <div className="min-w-0">
+                        <p className="text-xs text-muted-foreground font-medium">Processando agora</p>
+                        <p className="text-sm font-semibold text-foreground truncate">{syncProgress.currentName}</p>
+                        {syncProgress.currentEmail !== null && (
+                          <p className="text-xs text-green-600 dark:text-green-400 mt-0.5 truncate">
+                            ✓ {syncProgress.currentEmail}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Lista de resultados parciais */}
+                    {syncProgress.results.length > 0 && (
+                      <div className="border border-border rounded-lg overflow-hidden max-h-48 overflow-y-auto">
+                        {[...syncProgress.results].reverse().map((r) => (
+                          <div key={r.id} className="flex items-center gap-3 px-3 py-2 border-b border-border last:border-0 hover:bg-muted/30 transition-colors">
+                            {r.atualizado
+                              ? <UserCheck className="h-4 w-4 text-green-500 flex-shrink-0" />
+                              : <UserX className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                            }
+                            <div className="min-w-0 flex-1">
+                              <p className="text-xs font-medium text-foreground truncate">{r.nome_completo}</p>
+                              <p className={`text-xs truncate ${r.emailEncontrado ? 'text-green-600 dark:text-green-400' : 'text-muted-foreground italic'}`}>
+                                {r.emailEncontrado ?? 'Não encontrado'}
+                              </p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    <button
+                      onClick={() => syncAbortRef.current?.abort()}
+                      className="w-full px-4 py-2 border border-amber-400 bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:border-amber-500/20 dark:text-amber-400 rounded-md text-sm font-medium hover:bg-amber-100 transition-colors cursor-pointer"
+                    >
+                      Interromper Processo
+                    </button>
+                  </div>
+                )}
+
+                {/* CONCLUÍDO */}
+                {syncProgress && syncProgress.stage === 'done' && (
+                  <div className="space-y-4">
+                    {syncProgress.total === 0 ? (
+                      <div className="text-center py-6">
+                        <CheckCircle2 className="h-14 w-14 text-green-500 mx-auto mb-3" />
+                        <p className="text-lg font-bold text-foreground">Tudo certo!</p>
+                        <p className="text-sm text-muted-foreground mt-1">
+                          Todos os colaboradores já possuem e-mail cadastrado.
+                        </p>
+                      </div>
+                    ) : (
+                      <>
+                        {/* Resumo */}
+                        <div className="grid grid-cols-3 gap-3">
+                          <div className="bg-muted/40 rounded-xl p-3 text-center">
+                            <p className="text-2xl font-bold text-foreground">{syncProgress.total}</p>
+                            <p className="text-xs text-muted-foreground mt-0.5">Total</p>
+                          </div>
+                          <div className="bg-green-50 dark:bg-green-500/10 border border-green-200 dark:border-green-500/20 rounded-xl p-3 text-center">
+                            <p className="text-2xl font-bold text-green-600 dark:text-green-400">
+                              {syncProgress.results.filter(r => r.atualizado).length}
+                            </p>
+                            <p className="text-xs text-green-600 dark:text-green-400 mt-0.5">Atualizados</p>
+                          </div>
+                          <div className="bg-muted/40 rounded-xl p-3 text-center">
+                            <p className="text-2xl font-bold text-muted-foreground">
+                              {syncProgress.results.filter(r => !r.atualizado).length}
+                            </p>
+                            <p className="text-xs text-muted-foreground mt-0.5">Não encontrado</p>
+                          </div>
+                        </div>
+
+                        {/* Lista final */}
+                        <div className="border border-border rounded-lg overflow-hidden max-h-52 overflow-y-auto">
+                          {syncProgress.results.map((r) => (
+                            <div key={r.id} className="flex items-center gap-3 px-3 py-2 border-b border-border last:border-0 hover:bg-muted/30 transition-colors">
+                              {r.atualizado
+                                ? <UserCheck className="h-4 w-4 text-green-500 flex-shrink-0" />
+                                : <UserX className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                              }
+                              <div className="min-w-0 flex-1">
+                                <p className="text-xs font-medium text-foreground truncate">{r.nome_completo}</p>
+                                <p className={`text-xs truncate ${r.emailEncontrado ? 'text-green-600 dark:text-green-400' : 'text-muted-foreground italic'}`}>
+                                  {r.emailEncontrado ?? 'Não encontrado na API'}
+                                </p>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </>
+                    )}
+
+                    <button
+                      onClick={() => { setIsSyncModalOpen(false); setSyncProgress(null); }}
+                      className="w-full px-4 py-2 bg-gradient-to-r from-indigo-600 to-violet-600 text-white rounded-md text-sm font-bold hover:opacity-90 cursor-pointer shadow transition-all"
+                    >
+                      Fechar
+                    </button>
+                  </div>
+                )}
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* ── TOAST DE E-MAIL ── */}
+
       <AnimatePresence>
         {emailToast && (
           <motion.div

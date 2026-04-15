@@ -318,6 +318,121 @@ export async function uploadInformePDF(
 
 
 // ─────────────────────────────────────────────────────────────
+// N8N — busca e-mail do colaborador pelo CPF via webhook
+// ─────────────────────────────────────────────────────────────
+
+const N8N_WEBHOOK_URL = 'https://n8n.technocode.site/webhook/colab';
+
+export interface N8nEmailResult {
+  id: string;
+  nome_completo: string;
+  cpf: string;
+  emailEncontrado: string | null;
+  atualizado: boolean;
+}
+
+export interface SyncEmailsProgress {
+  stage: 'running' | 'done' | 'error';
+  current: number;
+  total: number;
+  percent: number;
+  currentName: string;
+  currentEmail: string | null;
+  results: N8nEmailResult[];
+}
+
+export async function fetchEmailFromN8n(cpf: string): Promise<string | null> {
+  try {
+    const response = await fetch(N8N_WEBHOOK_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ cpf }),
+    });
+
+    if (!response.ok) return null;
+
+    const text = await response.text();
+    if (!text || text === '""' || text === '') return null;
+
+    const json = JSON.parse(text);
+    // Resposta esperada: { value: [{ EMAIL: "...", ... }], Count: 1 }
+    if (json?.value && Array.isArray(json.value) && json.value.length > 0) {
+      return json.value[0]?.EMAIL ?? null;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+export async function syncMissingEmailsFromN8n(
+  informesSemEmail: InformeRecord[],
+  onProgress: (progress: SyncEmailsProgress) => void,
+  abortSignal?: AbortSignal
+): Promise<SyncEmailsProgress> {
+  const total = informesSemEmail.length;
+  const results: N8nEmailResult[] = [];
+
+  for (let i = 0; i < total; i++) {
+    if (abortSignal?.aborted) break;
+
+    const informe = informesSemEmail[i];
+    onProgress({
+      stage: 'running',
+      current: i + 1,
+      total,
+      percent: Math.round(((i + 1) / total) * 100),
+      currentName: informe.nome_completo,
+      currentEmail: null,
+      results: [...results],
+    });
+
+    const emailEncontrado = await fetchEmailFromN8n(informe.cpf);
+    let atualizado = false;
+
+    if (emailEncontrado) {
+      try {
+        await updateInformeEmail(informe.id, emailEncontrado);
+        atualizado = true;
+      } catch {
+        atualizado = false;
+      }
+    }
+
+    results.push({
+      id: informe.id,
+      nome_completo: informe.nome_completo,
+      cpf: informe.cpf,
+      emailEncontrado,
+      atualizado,
+    });
+
+    onProgress({
+      stage: 'running',
+      current: i + 1,
+      total,
+      percent: Math.round(((i + 1) / total) * 100),
+      currentName: informe.nome_completo,
+      currentEmail: emailEncontrado,
+      results: [...results],
+    });
+  }
+
+  const finalProgress: SyncEmailsProgress = {
+    stage: 'done',
+    current: total,
+    total,
+    percent: 100,
+    currentName: '',
+    currentEmail: null,
+    results,
+  };
+
+  onProgress(finalProgress);
+  return finalProgress;
+}
+
+// ─────────────────────────────────────────────────────────────
 // DELETE — exclui registros do banco + arquivos do Storage
 // ─────────────────────────────────────────────────────────────
 
