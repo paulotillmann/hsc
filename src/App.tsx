@@ -31,7 +31,7 @@ const App: React.FC = () => {
 
               {/* Rota dinâmica: resolve qualquer módulo cadastrado no banco */}
               {/* A permissão e o componente são resolvidos em DynamicRoute */}
-              <Route path="/:moduleSlug" element={<DynamicRoute />} />
+              <Route path="/:moduleSlug/*" element={<DynamicRoute />} />
             </Route>
           </Route>
 

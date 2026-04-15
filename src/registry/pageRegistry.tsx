@@ -17,6 +17,7 @@ export const pageRegistry: Record<string, React.LazyExoticComponent<React.Compon
   'configuracoes':lazy(() => import('../pages/Configuracoes')),
 
   // ── Adicione novas telas abaixo ──────────────────────────────────────────
+  'notificacoes': lazy(() => import('../pages/Notificacoes/index')),
   // Exemplo:
   // 'relatorios': lazy(() => import('../pages/Relatorios')),
 };

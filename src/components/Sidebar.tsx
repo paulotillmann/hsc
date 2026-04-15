@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { NavLink, useNavigate } from 'react-router-dom';
-import { LogOut, Sun, Moon, ChevronLeft, ChevronRight } from 'lucide-react';
+import { NavLink, useNavigate, useLocation } from 'react-router-dom';
+import { LogOut, Sun, Moon, ChevronLeft, ChevronRight, ChevronDown } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { usePermissions } from '../hooks/usePermissions';
 import DynamicIcon from './DynamicIcon';
@@ -11,6 +11,18 @@ const Sidebar: React.FC = () => {
   const { userModules } = usePermissions();
   const [isDark, setIsDark] = useState(false);
   const [isCollapsed, setIsCollapsed] = useState(false);
+  const location = useLocation();
+
+  // Acordeão específico para notificações
+  const [isNotificacoesExpanded, setIsNotificacoesExpanded] = useState(() => {
+    return window.location.pathname.startsWith('/notificacoes');
+  });
+
+  useEffect(() => {
+    if (location.pathname.startsWith('/notificacoes') && !isNotificacoesExpanded && !isCollapsed) {
+      setIsNotificacoesExpanded(true);
+    }
+  }, [location.pathname, isCollapsed]);
 
   useEffect(() => {
     setIsDark(document.documentElement.classList.contains('dark'));
@@ -82,17 +94,84 @@ const Sidebar: React.FC = () => {
       <nav className="flex-1 p-3 flex flex-col gap-2 overflow-x-hidden overflow-y-auto pt-8">
         {userModules
           .filter(m => m.slug !== 'configuracoes') // Configurações fica na área inferior
-          .map(module => (
-            <NavLink
-              key={module.slug}
-              to={`/${module.slug}`}
-              title={module.name}
-              className={({ isActive }) => navLinkClass(isActive)}
-            >
-              <DynamicIcon name={module.icon} className="h-5 w-5 flex-shrink-0" />
-              {!isCollapsed && <span className="truncate">{module.name}</span>}
-            </NavLink>
-          ))
+          .map(module => {
+            if (module.slug === 'notificacoes') {
+              const isActiveLocal = location.pathname.startsWith('/notificacoes');
+              return (
+                <div key={module.slug} className="flex flex-col">
+                  {isCollapsed ? (
+                    <NavLink
+                      to={`/${module.slug}`}
+                      title={module.name}
+                      className={navLinkClass(isActiveLocal)}
+                    >
+                      <DynamicIcon name={module.icon} className="h-5 w-5 flex-shrink-0" />
+                    </NavLink>
+                  ) : (
+                    <button
+                      onClick={() => {
+                        setIsNotificacoesExpanded(!isNotificacoesExpanded);
+                        if (!isActiveLocal) navigate('/notificacoes');
+                      }}
+                      className={`flex items-center rounded-md text-sm transition-all duration-200 justify-start gap-3 px-3 py-2 w-full ${
+                        isActiveLocal
+                          ? 'bg-primary text-primary-foreground shadow-sm hover:shadow-md hover:shadow-primary/20 font-medium'
+                          : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                      }`}
+                    >
+                      <DynamicIcon name={module.icon} className="h-5 w-5 flex-shrink-0" />
+                      <div className="flex flex-1 items-center justify-between">
+                        <span className="truncate">{module.name}</span>
+                        <ChevronRight className={`h-4 w-4 transition-transform ${isNotificacoesExpanded ? 'rotate-90' : ''}`} />
+                      </div>
+                    </button>
+                  )}
+
+                  {!isCollapsed && isNotificacoesExpanded && (
+                    <div className="flex flex-col ml-9 mt-1 gap-1 border-l-2 border-border pl-2 border-primary/20">
+                      <NavLink
+                        to="/notificacoes"
+                        end
+                        className={({ isActive }) => 
+                          `text-sm px-3 py-2 rounded-md transition-colors ${
+                            isActive 
+                              ? 'bg-primary text-primary-foreground shadow-sm font-medium' 
+                              : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                          }`
+                        }
+                      >
+                         Cadastros
+                      </NavLink>
+                      <NavLink
+                        to="/notificacoes/graficos"
+                        className={({ isActive }) => 
+                          `text-sm px-3 py-2 rounded-md transition-colors ${
+                            isActive 
+                              ? 'bg-primary text-primary-foreground shadow-sm font-medium' 
+                              : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                          }`
+                        }
+                      >
+                         Gráficos
+                      </NavLink>
+                    </div>
+                  )}
+                </div>
+              );
+            }
+
+            return (
+              <NavLink
+                key={module.slug}
+                to={`/${module.slug}`}
+                title={module.name}
+                className={({ isActive }) => navLinkClass(isActive)}
+              >
+                <DynamicIcon name={module.icon} className="h-5 w-5 flex-shrink-0" />
+                {!isCollapsed && <span className="truncate">{module.name}</span>}
+              </NavLink>
+            );
+          })
         }
       </nav>
 

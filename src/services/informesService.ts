@@ -133,7 +133,22 @@ export async function uploadInformePDF(
   // Passamos uma CÓPIA para o pdfjs e mantemos o original para o pdf-lib.
   const pdfjsData = new Uint8Array(arrayBuffer.slice(0));
 
-  // ── 1. Descobrir quantas páginas e colaboradores existem ──
+  // ── 1. Buscar registros já existentes no banco para este ano (deduplicação) ──
+  onProgress({ stage: 'reading', current: 0, total: 0, percent: 3, message: 'Verificando registros existentes...' });
+  const { data: existingRecords } = await supabase
+    .from('informes')
+    .select('cpf, nome_completo')
+    .eq('ano_referencia', anoReferencia);
+
+  const existingCpfs = new Set(
+    (existingRecords ?? []).map((r: { cpf: string }) => r.cpf.replace(/\D/g, ''))
+  );
+  const existingNames = new Set(
+    (existingRecords ?? []).map((r: { nome_completo: string }) => r.nome_completo.trim().toUpperCase())
+  );
+  console.log(`[Upload] Registros já existentes no ano ${anoReferencia}: ${existingCpfs.size}`);
+
+  // ── 2. Descobrir quantas páginas e colaboradores existem ──
   console.log('[Upload] Iniciando leitura do PDF...');
   const pdfDoc = await pdfjs.getDocument({ data: pdfjsData }).promise;
   const totalPages = pdfDoc.numPages;
@@ -143,6 +158,7 @@ export async function uploadInformePDF(
   onProgress({ stage: 'extracting', current: 0, total: totalColabs, percent: 5, message: 'Analisando colaboradores...' });
 
   const results: InformeRecord[] = [];
+  let skippedCount = 0;
 
   // ── 2. Iterar de 2 em 2 páginas ──
   for (let startPage = 1; startPage <= totalPages; startPage += 2) {
@@ -170,6 +186,15 @@ export async function uploadInformePDF(
 
     if (!cpf || !nomeCompleto) {
       console.warn(`[Upload] Página ${startPage}: não encontrou CPF/Nome, pulando.`);
+      continue;
+    }
+
+    // ── Verificação de duplicata: pular se CPF ou Nome já existem no banco ──
+    const cleanCpf = cpf.replace(/\D/g, '');
+    const upperName = nomeCompleto.trim().toUpperCase();
+    if (existingCpfs.has(cleanCpf) || existingNames.has(upperName)) {
+      console.log(`[Upload] Duplicata detectada, pulando: ${nomeCompleto} (${cpf})`);
+      skippedCount++;
       continue;
     }
 
@@ -260,7 +285,7 @@ export async function uploadInformePDF(
 
     const { data: saved, error: dbError } = await supabase
       .from('informes')
-      .upsert(upsertPayload, { onConflict: 'cpf,ano_referencia' })
+      .insert(upsertPayload)
       .select()
       .single();
 
@@ -271,16 +296,21 @@ export async function uploadInformePDF(
       throw new Error(msg);
     }
 
+    // Adiciona ao set de CPFs/nomes para evitar duplicatas dentro do próprio PDF
+    existingCpfs.add(cleanCpf);
+    existingNames.add(upperName);
+
     console.log(`[Upload] ✓ ${nomeCompleto} salvo com id=${saved.id}`);
     results.push(saved as InformeRecord);
   }
 
+  const skippedMsg = skippedCount > 0 ? ` ${skippedCount} duplicata(s) ignorada(s).` : '';
   onProgress({
     stage: 'done',
     current: results.length,
     total: totalColabs,
     percent: 100,
-    message: `${results.length} informes importados com sucesso!`,
+    message: `${results.length} informe(s) importado(s) com sucesso!${skippedMsg}`,
   });
 
   return results;

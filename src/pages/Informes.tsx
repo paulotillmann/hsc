@@ -39,8 +39,9 @@ const Informes: React.FC = () => {
 
   // ── Filtro / Paginação / Ordenação ──
   const [filter, setFilter] = useState('');
+  const [emailFilter, setEmailFilter] = useState<'todos' | 'com_email' | 'sem_email'>('todos');
   const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 8;
+  const itemsPerPage = 12;
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc' | null>(null);
 
   // ── Ano de referência (filtro de listagem) ──
@@ -89,6 +90,10 @@ const Informes: React.FC = () => {
     const rawFilter     = filter.toLowerCase();
     const cleanSearchCpf = rawFilter.replace(/\D/g, '');
     const rawCpf        = c.cpf.replace(/\D/g, '');
+
+    if (emailFilter === 'com_email' && !c.email) return false;
+    if (emailFilter === 'sem_email' && c.email) return false;
+
     return (
       c.nome_completo.toLowerCase().includes(rawFilter) ||
       (cleanSearchCpf && rawCpf.includes(cleanSearchCpf))
@@ -105,7 +110,7 @@ const Informes: React.FC = () => {
     });
   }
 
-  useEffect(() => { setCurrentPage(1); }, [filter, sortDirection, filterAno]);
+  useEffect(() => { setCurrentPage(1); }, [filter, sortDirection, filterAno, emailFilter]);
 
   const totalPages   = Math.ceil(filteredData.length / itemsPerPage) || 1;
   const paginatedData = filteredData.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
@@ -318,15 +323,38 @@ const Informes: React.FC = () => {
       {/* ── TABELA ── */}
       <div className="bg-card border border-border shadow-sm rounded-xl overflow-hidden">
         <div className="p-4 border-b border-border bg-muted/20 flex flex-col sm:flex-row gap-4 justify-between items-center">
-          <div className="relative w-full max-w-sm">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <input
-              type="text"
-              placeholder="Pesquisar por nome ou CPF..."
-              value={filter}
-              onChange={e => setFilter(e.target.value)}
-              className="w-full bg-background border border-border rounded-md pl-9 pr-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary transition-all"
-            />
+          <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto flex-1">
+            <div className="relative w-full max-w-sm">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <input
+                type="text"
+                placeholder="Pesquisar por nome ou CPF..."
+                value={filter}
+                onChange={e => setFilter(e.target.value)}
+                className="w-full bg-background border border-border rounded-md pl-9 pr-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary transition-all"
+              />
+            </div>
+            
+            <div className="flex bg-background border border-border rounded-md p-1 self-start sm:self-center">
+              <button 
+                onClick={() => setEmailFilter('todos')} 
+                className={`px-3 py-1 text-xs font-medium rounded-sm transition-colors ${emailFilter === 'todos' ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:bg-muted'}`}
+              >
+                Todos
+              </button>
+              <button 
+                onClick={() => setEmailFilter('com_email')} 
+                className={`px-3 py-1 text-xs font-medium rounded-sm transition-colors ${emailFilter === 'com_email' ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:bg-muted'}`}
+              >
+                Com E-mail
+              </button>
+              <button 
+                onClick={() => setEmailFilter('sem_email')} 
+                className={`px-3 py-1 text-xs font-medium rounded-sm transition-colors ${emailFilter === 'sem_email' ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:bg-muted'}`}
+              >
+                Sem E-mail
+              </button>
+            </div>
           </div>
           <div className="text-xs font-medium text-muted-foreground">
             {filteredData.length} de {data.length} registros
