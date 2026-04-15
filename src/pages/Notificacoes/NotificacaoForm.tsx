@@ -1,9 +1,19 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect as useEffectHook } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Save, Search, Loader2, X } from 'lucide-react';
+import { ArrowLeft, Save, Search, Loader2, X, CheckCircle2, AlertCircle, ChevronDown } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
-import { getNotificacaoById } from '../../services/notificacaoService';
+import { getNotificacaoById, getTodasOcupacoes, getTodosResultados } from '../../services/notificacaoService';
+
+interface DoencaItem {
+  DS_DOENCA_COMPULSORIA: string;
+  CD_DOENCA_CID: string | null;
+}
+
+interface SetorItem {
+  CD_SETOR_ATENDIMENTO: number;
+  DS_SETOR_ATENDIMENTO: string;
+}
 
 interface N8nPaciente {
   CD_PESSOA_FISICA: string;
@@ -19,6 +29,18 @@ interface N8nPaciente {
 export default function NotificacaoForm() {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
+
+  // Toast
+  type ToastAction = { type: 'success' | 'error'; message: string };
+  const [toast, setToast] = useState<ToastAction | null>(null);
+
+  const showToast = (type: 'success' | 'error', message: string, onComplete?: () => void) => {
+    setToast({ type, message });
+    setTimeout(() => {
+      setToast(null);
+      if (onComplete) onComplete();
+    }, 2000);
+  };
 
   // Campos do formulário
   const [paciente, setPaciente] = useState('');
@@ -40,15 +62,98 @@ export default function NotificacaoForm() {
   const [isSaving, setIsSaving] = useState(false);
   const [isLoadingForm, setIsLoadingForm] = useState(false);
 
+  // Dropdowns dinâmicos do banco
+  const [ocupacoesList, setOcupacoesList] = useState<string[]>([]);
+  const [resultadosList, setResultadosList] = useState<string[]>([]);
+
+  // Doenças da API n8n
+  const [doencasList, setDoencasList] = useState<DoencaItem[]>([]);
+  const [doencasLoading, setDoencasLoading] = useState(false);
+  const [doencaSearch, setDoencaSearch] = useState('');
+  const [doencaDropdownOpen, setDoencaDropdownOpen] = useState(false);
+  const doencaRef = useRef<HTMLDivElement>(null);
+
+  // Setores da API n8n
+  const [setoresList, setSetoresList] = useState<SetorItem[]>([]);
+  const [setoresLoading, setSetoresLoading] = useState(false);
+  const [setorSearch, setSetorSearch] = useState('');
+  const [setorDropdownOpen, setSetorDropdownOpen] = useState(false);
+  const setorRef = useRef<HTMLDivElement>(null);
+
   // Modal de Busca
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [searchName, setSearchName] = useState('');
 
+  // Fecha os dropdowns ao clicar fora
+  useEffectHook(() => {
+    const handler = (e: MouseEvent) => {
+      if (doencaRef.current && !doencaRef.current.contains(e.target as Node)) {
+        setDoencaDropdownOpen(false);
+      }
+      if (setorRef.current && !setorRef.current.contains(e.target as Node)) {
+        setSetorDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
   React.useEffect(() => {
+    async function loadDropdowns() {
+      const [ocupData, resData] = await Promise.all([
+        getTodasOcupacoes(),
+        getTodosResultados()
+      ]);
+      setOcupacoesList(ocupData);
+      setResultadosList(resData);
+    }
+    loadDropdowns();
+    loadDoencas();
+    loadSetores();
+
     if (id) {
       loadNotification(id);
     }
   }, [id]);
+
+  const loadDoencas = async () => {
+    setDoencasLoading(true);
+    try {
+      const resp = await fetch('https://n8n.technocode.site/webhook/consulta_doencas', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      });
+      if (!resp.ok) throw new Error('Falha ao carregar doenças.');
+      const data: DoencaItem[] = await resp.json();
+      // Ordena alfabeticamente
+      data.sort((a, b) => a.DS_DOENCA_COMPULSORIA.localeCompare(b.DS_DOENCA_COMPULSORIA, 'pt-BR'));
+      setDoencasList(data);
+    } catch (err) {
+      console.error('Erro ao carregar doenças:', err);
+    } finally {
+      setDoencasLoading(false);
+    }
+  };
+
+  const loadSetores = async () => {
+    setSetoresLoading(true);
+    try {
+      const resp = await fetch('https://n8n.technocode.site/webhook/consulta_setores', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      });
+      if (!resp.ok) throw new Error('Falha ao carregar setores.');
+      const data: SetorItem[] = await resp.json();
+      data.sort((a, b) => a.DS_SETOR_ATENDIMENTO.localeCompare(b.DS_SETOR_ATENDIMENTO, 'pt-BR'));
+      setSetoresList(data);
+    } catch (err) {
+      console.error('Erro ao carregar setores:', err);
+    } finally {
+      setSetoresLoading(false);
+    }
+  };
 
   const loadNotification = async (notificacaoId: string) => {
     setIsLoadingForm(true);
@@ -57,7 +162,7 @@ export default function NotificacaoForm() {
       if (data) {
         setPaciente(data.Paciente || '');
         setIdade(data.IdadePaciente || '');
-        setSexo(data.SexoPaciente || '');
+        setSexo((data.SexoPaciente || '').toUpperCase());
         setCorRaca(data.CorRacaPaciente || '');
         setEscolaridade(data.EscolaridadePaciente || '');
         setOcupacao(data.OcupacaoPaciente || '');
@@ -69,7 +174,7 @@ export default function NotificacaoForm() {
       }
     } catch (err) {
       console.error(err);
-      alert('Erro ao carregar notificação para edição.');
+      showToast('error', 'Erro ao carregar notificação para edição.');
     } finally {
       setIsLoadingForm(false);
     }
@@ -92,12 +197,22 @@ export default function NotificacaoForm() {
         body: JSON.stringify({ nome_paciente: searchName }),
       });
       if (!resp.ok) throw new Error('Falha ao comunicar com API de consulta.');
-      const data = await resp.json();
+      
+      let data;
+      try {
+        data = await resp.json();
+      } catch (jsonErr) {
+        // Se a API retornar vazio ou falhar no JSON (ex: webhook encerrou sem corpo)
+        setSearchError('Nenhum paciente encontrado com este nome.');
+        setIsSearching(false);
+        return;
+      }
+
       if (!data || !Array.isArray(data)) {
-        setSearchError('Nenhum paciente encontrado.');
+        setSearchError('Nenhum paciente encontrado com este nome.');
       } else {
         setSearchResults(data);
-        if (data.length === 0) setSearchError('Nenhum paciente encontrado.');
+        if (data.length === 0) setSearchError('Nenhum paciente encontrado com este nome.');
       }
     } catch (err: any) {
       setSearchError(err.message || 'Erro ao buscar paciente.');
@@ -116,22 +231,38 @@ export default function NotificacaoForm() {
     setIsModalOpen(false);
   };
 
+  const handleCancel = () => {
+    setPaciente('');
+    setIdade('');
+    setSexo('');
+    setCorRaca('');
+    setEscolaridade('');
+    setOcupacao('');
+    setDataSintoma('');
+    setDoencaAgravo('');
+    setSetor('');
+    setResultado('');
+    setSaida('');
+    window.scrollTo(0, 0);
+    navigate('/notificacoes');
+  };
+
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSaving(true);
     try {
       const payload = {
-        Paciente: paciente,
-        IdadePaciente: idade,
-        SexoPaciente: sexo,
-        CorRacaPaciente: corRaca,
-        EscolaridadePaciente: escolaridade,
-        OcupacaoPaciente: ocupacao,
+        Paciente: paciente?.toUpperCase(),
+        IdadePaciente: idade?.toUpperCase(),
+        SexoPaciente: sexo?.toUpperCase(),
+        CorRacaPaciente: corRaca?.toUpperCase(),
+        EscolaridadePaciente: escolaridade?.toUpperCase(),
+        OcupacaoPaciente: ocupacao?.toUpperCase(),
         DataSintoma: dataSintoma ? new Date(dataSintoma).toISOString() : null,
         DoencaAgravo: doencaAgravo,
-        Resultado: resultado,
-        Saida: saida,
-        Setor: setor
+        Resultado: resultado?.toUpperCase(),
+        Saida: saida?.toUpperCase(),
+        Setor: setor?.toUpperCase()
       };
 
       if (id) {
@@ -141,7 +272,7 @@ export default function NotificacaoForm() {
           DataNotificacao: new Date().toISOString()
         }).eq('id', id);
         if (error) throw error;
-        alert('Notificação atualizada com sucesso!');
+        showToast('success', 'Notificação atualizada com sucesso!', () => navigate('/notificacoes'));
       } else {
         // Insere
         const fakeBubbleId = `manual_${Date.now()}`;
@@ -151,14 +282,11 @@ export default function NotificacaoForm() {
           DataNotificacao: new Date().toISOString()
         }]);
         if (error) throw error;
-        alert('Notificação salva com sucesso!');
+        showToast('success', 'Notificação salva com sucesso!', () => navigate('/notificacoes'));
       }
-      
-      navigate('/notificacoes');
     } catch (err: any) {
       console.error(err);
-      alert('Erro ao salvar notificação: ' + err.message);
-    } finally {
+      showToast('error', 'Erro ao salvar: ' + (err.message || 'Falha desconhecida.'));
       setIsSaving(false);
     }
   };
@@ -243,9 +371,9 @@ export default function NotificacaoForm() {
                   onChange={(e) => setSexo(e.target.value)}
                 >
                   <option className="bg-background text-foreground" value="">Selecione...</option>
-                  <option className="bg-background text-foreground" value="Masculino">Masculino</option>
-                  <option className="bg-background text-foreground" value="Feminino">Feminino</option>
-                  <option className="bg-background text-foreground" value="Ignorado">Ignorado</option>
+                  <option className="bg-background text-foreground" value="MASCULINO">Masculino</option>
+                  <option className="bg-background text-foreground" value="FEMININO">Feminino</option>
+                  <option className="bg-background text-foreground" value="IGNORADO">Ignorado</option>
                 </select>
               </div>
               <div className="md:col-span-2">
@@ -273,13 +401,16 @@ export default function NotificacaoForm() {
               </div>
               <div>
                 <label className="block text-sm font-medium mb-1">Ocupação</label>
-                <input
-                  type="text"
-                  placeholder="Enfermeiro, Médico, etc."
+                <select
                   className="flex h-10 w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   value={ocupacao}
                   onChange={(e) => setOcupacao(e.target.value)}
-                />
+                >
+                  <option className="bg-background text-foreground" value="">Selecione...</option>
+                  {ocupacoesList.map((oc) => (
+                    <option key={oc} className="bg-background text-foreground" value={oc}>{oc}</option>
+                  ))}
+                </select>
               </div>
             </div>
 
@@ -287,33 +418,196 @@ export default function NotificacaoForm() {
         </div>
 
         {/* Bloco Doença */}
-        <div className="bg-card text-card-foreground rounded-xl border border-border shadow-sm overflow-hidden">
-          <div className="border-b border-border bg-muted/20 px-6 py-4">
+        <div className="bg-card text-card-foreground rounded-xl border border-border shadow-sm overflow-visible">
+          <div className="border-b border-border bg-muted/20 px-6 py-4 rounded-t-xl">
             <h2 className="text-lg font-semibold">Dados da Notificação</h2>
           </div>
           <div className="p-6 space-y-6">
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
+              <div ref={doencaRef} className="relative">
                 <label className="block text-sm font-medium mb-1">Agravo / Doença</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="Ex: Arbovirose (Dengue, Zika...)"
-                  className="flex h-10 w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                  value={doencaAgravo}
-                  onChange={(e) => setDoencaAgravo(e.target.value)}
-                />
+                {/* Combobox pesquisável */}
+                <div
+                  className={`flex h-10 w-full rounded-md border bg-transparent text-sm cursor-pointer items-center justify-between px-3 transition-all ${
+                    doencaDropdownOpen ? 'border-ring ring-2 ring-ring' : 'border-input'
+                  }`}
+                  onClick={() => {
+                    setDoencaDropdownOpen(prev => !prev);
+                    setDoencaSearch('');
+                  }}
+                >
+                  <span className={doencaAgravo ? 'text-foreground' : 'text-muted-foreground'}>
+                    {doencaAgravo || (doencasLoading ? 'Carregando doenças...' : 'Selecione ou pesquise...')}
+                  </span>
+                  {doencasLoading
+                    ? <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                    : <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform ${doencaDropdownOpen ? 'rotate-180' : ''}`} />
+                  }
+                </div>
+
+                <AnimatePresence>
+                  {doencaDropdownOpen && (
+                    <motion.div
+                      initial={{ opacity: 0, y: -4 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -4 }}
+                      transition={{ duration: 0.15 }}
+                      className="absolute z-50 mt-1 w-full bg-card border border-border rounded-md shadow-xl overflow-hidden"
+                    >
+                      {/* Campo de pesquisa */}
+                      <div className="p-2 border-b border-border">
+                        <div className="relative">
+                          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                          <input
+                            autoFocus
+                            type="text"
+                            placeholder="Pesquisar doença..."
+                            className="w-full pl-8 pr-3 py-1.5 text-sm bg-background border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-ring"
+                            value={doencaSearch}
+                            onChange={e => setDoencaSearch(e.target.value)}
+                            onClick={e => e.stopPropagation()}
+                          />
+                        </div>
+                      </div>
+
+                      {/* Lista filtrada */}
+                      <div className="max-h-60 overflow-y-auto">
+                        {/* Opção limpar */}
+                        <button
+                          type="button"
+                          className="w-full text-left px-3 py-2 text-sm text-muted-foreground hover:bg-muted/60 transition-colors"
+                          onClick={() => { setDoencaAgravo(''); setDoencaDropdownOpen(false); }}
+                        >
+                          — Nenhum / Limpar —
+                        </button>
+
+                        {doencasList
+                          .filter(d =>
+                            d.DS_DOENCA_COMPULSORIA.toLowerCase().includes(doencaSearch.toLowerCase()) ||
+                            (d.CD_DOENCA_CID || '').toLowerCase().includes(doencaSearch.toLowerCase())
+                          )
+                          .map((d, i) => (
+                            <button
+                              key={i}
+                              type="button"
+                              className={`w-full text-left px-3 py-2 text-sm hover:bg-muted/60 transition-colors flex items-center justify-between gap-2 ${
+                                doencaAgravo === d.DS_DOENCA_COMPULSORIA ? 'bg-primary/10 text-primary font-medium' : 'text-foreground'
+                              }`}
+                              onClick={() => {
+                                setDoencaAgravo(d.DS_DOENCA_COMPULSORIA);
+                                setDoencaDropdownOpen(false);
+                                setDoencaSearch('');
+                              }}
+                            >
+                              <span>{d.DS_DOENCA_COMPULSORIA}</span>
+                              {d.CD_DOENCA_CID && (
+                                <span className="text-xs text-muted-foreground font-mono shrink-0">{d.CD_DOENCA_CID}</span>
+                              )}
+                            </button>
+                          ))
+                        }
+
+                        {doencasList.filter(d =>
+                          d.DS_DOENCA_COMPULSORIA.toLowerCase().includes(doencaSearch.toLowerCase()) ||
+                          (d.CD_DOENCA_CID || '').toLowerCase().includes(doencaSearch.toLowerCase())
+                        ).length === 0 && (
+                          <p className="px-3 py-4 text-sm text-center text-muted-foreground">Nenhuma doença encontrada.</p>
+                        )}
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </div>
-              <div>
+              <div ref={setorRef} className="relative">
                 <label className="block text-sm font-medium mb-1">Setor</label>
-                <input
-                  type="text"
-                  placeholder="Setor da notificação"
-                  className="flex h-10 w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                  value={setor}
-                  onChange={(e) => setSetor(e.target.value)}
-                />
+                {/* Combobox pesquisável */}
+                <div
+                  className={`flex h-10 w-full rounded-md border bg-transparent text-sm cursor-pointer items-center justify-between px-3 transition-all ${
+                    setorDropdownOpen ? 'border-ring ring-2 ring-ring' : 'border-input'
+                  }`}
+                  onClick={() => {
+                    setSetorDropdownOpen(prev => !prev);
+                    setSetorSearch('');
+                  }}
+                >
+                  <span className={setor ? 'text-foreground' : 'text-muted-foreground'}>
+                    {setor || (setoresLoading ? 'Carregando setores...' : 'Selecione ou pesquise...')}
+                  </span>
+                  {setoresLoading
+                    ? <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                    : <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform ${setorDropdownOpen ? 'rotate-180' : ''}`} />
+                  }
+                </div>
+
+                <AnimatePresence>
+                  {setorDropdownOpen && (
+                    <motion.div
+                      initial={{ opacity: 0, y: -4 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -4 }}
+                      transition={{ duration: 0.15 }}
+                      className="absolute z-50 mt-1 w-full bg-card border border-border rounded-md shadow-xl overflow-hidden"
+                    >
+                      {/* Campo de pesquisa */}
+                      <div className="p-2 border-b border-border">
+                        <div className="relative">
+                          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                          <input
+                            autoFocus
+                            type="text"
+                            placeholder="Pesquisar setor..."
+                            className="w-full pl-8 pr-3 py-1.5 text-sm bg-background border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-ring"
+                            value={setorSearch}
+                            onChange={e => setSetorSearch(e.target.value)}
+                            onClick={e => e.stopPropagation()}
+                          />
+                        </div>
+                      </div>
+
+                      {/* Lista filtrada */}
+                      <div className="max-h-60 overflow-y-auto">
+                        {/* Opção limpar */}
+                        <button
+                          type="button"
+                          className="w-full text-left px-3 py-2 text-sm text-muted-foreground hover:bg-muted/60 transition-colors"
+                          onClick={() => { setSetor(''); setSetorDropdownOpen(false); }}
+                        >
+                          — Nenhum / Limpar —
+                        </button>
+
+                        {setoresList
+                          .filter(s =>
+                            s.DS_SETOR_ATENDIMENTO.toLowerCase().includes(setorSearch.toLowerCase())
+                          )
+                          .map((s) => (
+                            <button
+                              key={s.CD_SETOR_ATENDIMENTO}
+                              type="button"
+                              className={`w-full text-left px-3 py-2 text-sm hover:bg-muted/60 transition-colors flex items-center justify-between gap-2 ${
+                                setor === s.DS_SETOR_ATENDIMENTO ? 'bg-primary/10 text-primary font-medium' : 'text-foreground'
+                              }`}
+                              onClick={() => {
+                                setSetor(s.DS_SETOR_ATENDIMENTO);
+                                setSetorDropdownOpen(false);
+                                setSetorSearch('');
+                              }}
+                            >
+                              <span>{s.DS_SETOR_ATENDIMENTO}</span>
+                              <span className="text-xs text-muted-foreground font-mono shrink-0">{s.CD_SETOR_ATENDIMENTO}</span>
+                            </button>
+                          ))
+                        }
+
+                        {setoresList.filter(s =>
+                          s.DS_SETOR_ATENDIMENTO.toLowerCase().includes(setorSearch.toLowerCase())
+                        ).length === 0 && (
+                          <p className="px-3 py-4 text-sm text-center text-muted-foreground">Nenhum setor encontrado.</p>
+                        )}
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </div>
             </div>
 
@@ -335,11 +629,9 @@ export default function NotificacaoForm() {
                   onChange={(e) => setResultado(e.target.value)}
                 >
                   <option className="bg-background text-foreground" value="">Selecione...</option>
-                  <option className="bg-background text-foreground" value="POSITIVO">POSITIVO</option>
-                  <option className="bg-background text-foreground" value="NEGATIVO">NEGATIVO</option>
-                  <option className="bg-background text-foreground" value="INCONCLUSIVO">INCONCLUSIVO</option>
-                  <option className="bg-background text-foreground" value="AGUARDANDO RESULTADO">AGUARDANDO RESULTADO</option>
-                  <option className="bg-background text-foreground" value="NÃO COLETOU">NÃO COLETOU</option>
+                  {resultadosList.map((res) => (
+                    <option key={res} className="bg-background text-foreground" value={res}>{res}</option>
+                  ))}
                 </select>
               </div>
               <div>
@@ -350,6 +642,7 @@ export default function NotificacaoForm() {
                   onChange={(e) => setSaida(e.target.value)}
                 >
                   <option className="bg-background text-foreground" value="">Selecione...</option>
+                  <option className="bg-background text-foreground" value="INTERNAÇÃO">INTERNAÇÃO</option>
                   <option className="bg-background text-foreground" value="ALTA">ALTA</option>
                   <option className="bg-background text-foreground" value="ÓBITO">ÓBITO</option>
                   <option className="bg-background text-foreground" value="TRANSFERÊNCIA">TRANSFERÊNCIA</option>
@@ -362,11 +655,19 @@ export default function NotificacaoForm() {
         </div>
 
         {/* ACTIONS */}
-        <div className="flex justify-end pt-4">
+        <div className="flex justify-end pt-4 gap-3">
+          <button
+            type="button"
+            onClick={handleCancel}
+            disabled={isSaving}
+            className="inline-flex items-center justify-center rounded-md text-sm font-medium border border-input bg-background hover:bg-muted hover:text-foreground h-10 px-6 transition-colors"
+          >
+            Cancelar
+          </button>
           <button
             type="submit"
             disabled={isSaving}
-            className="inline-flex items-center justify-center rounded-md text-sm font-medium bg-primary text-primary-foreground hover:bg-primary/90 h-10 px-6 disabled:opacity-50"
+            className="inline-flex items-center justify-center rounded-md text-sm font-medium bg-primary text-primary-foreground hover:bg-primary/90 h-10 px-6 disabled:opacity-50 transition-colors"
           >
             {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
             Salvar Notificação
@@ -388,7 +689,7 @@ export default function NotificacaoForm() {
             >
               {/* Modal Header */}
               <div className="flex items-center justify-between p-4 border-b border-border">
-                <h3 className="font-semibold text-lg">Buscar Paciente (Integração N8N)</h3>
+                <h3 className="font-semibold text-lg">Buscar Paciente</h3>
                 <button
                   onClick={() => {
                     setIsModalOpen(false);
@@ -471,6 +772,26 @@ export default function NotificacaoForm() {
               </div>
             </motion.div>
           </div>
+        )}
+      </AnimatePresence>
+
+      {/* ── Toast ── */}
+      <AnimatePresence>
+        {toast && (
+          <motion.div
+            key="toast"
+            initial={{ opacity: 0, y: 40 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 40 }}
+            className={`fixed bottom-6 right-6 z-50 flex items-center gap-3 px-5 py-3 rounded-lg shadow-lg border text-sm font-medium ${
+              toast.type === 'success'
+                ? 'bg-green-50 border-green-200 text-green-700 dark:bg-green-500/10 dark:border-green-500/20 dark:text-green-400'
+                : 'bg-red-50 border-red-200 text-red-700 dark:bg-red-500/10 dark:border-red-500/20 dark:text-red-400'
+            }`}
+          >
+            {toast.type === 'success' ? <CheckCircle2 className="h-5 w-5" /> : <AlertCircle className="h-5 w-5" />}
+            {toast.message}
+          </motion.div>
         )}
       </AnimatePresence>
 

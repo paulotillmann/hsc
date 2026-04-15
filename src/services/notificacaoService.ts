@@ -116,3 +116,40 @@ export async function syncNotificacoes(): Promise<SyncResult> {
 
   return data as SyncResult;
 }
+
+// ─────────────────────────────────────────────────────────────
+// FETCH DASHBOARD FILTERS (Ocupações e Resultados)
+// ─────────────────────────────────────────────────────────────
+
+export async function getTodasOcupacoes(): Promise<string[]> {
+  const { data, error } = await supabase
+    .from('notificacao_ocupacao')
+    .select('DescricaoOcupacao')
+    .order('DescricaoOcupacao', { ascending: true });
+
+  if (error) {
+    console.error('[notificacaoService] Erro listar ocupações:', error);
+    return [];
+  }
+  
+  return data
+    .map(item => item.DescricaoOcupacao)
+    .filter((v): v is string => !!v);
+}
+
+export async function getTodosResultados(): Promise<string[]> {
+  const { data, error } = await supabase
+    .from('notificacao_resultado')
+    .select('DescricaoResultado')
+    .order('DescricaoResultado', { ascending: true });
+
+  if (error) {
+    console.error('[notificacaoService] Erro listar resultados:', error);
+    return [];
+  }
+  
+  return data
+    .map(item => item.DescricaoResultado)
+    .filter((v): v is string => !!v);
+}
+

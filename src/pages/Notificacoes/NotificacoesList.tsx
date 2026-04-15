@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { motion } from 'framer-motion';
-import { Search, Filter, Plus, UserCircle2, ArrowUpDown, ChevronLeft, ChevronRight, Edit, Trash2 } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Search, Filter, Plus, UserCircle2, ArrowUpDown, ChevronLeft, ChevronRight, Edit, Trash2, AlertTriangle } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { fetchNotificacoes, deleteNotificacao, NotificacaoRecord } from '../../services/notificacaoService';
 
@@ -42,7 +42,15 @@ export default function NotificacoesList() {
   const [dateFrom, setDateFrom] = useState(firstDay);
   const [dateTo, setDateTo] = useState(lastDay);
 
-  const [currentPage, setCurrentPage] = useState(1);
+  const [currentPage, setCurrentPage] = useState(() => {
+    const saved = sessionStorage.getItem('notificacoes_current_page');
+    return saved ? parseInt(saved, 10) : 1;
+  });
+  
+  useEffect(() => {
+    sessionStorage.setItem('notificacoes_current_page', currentPage.toString());
+  }, [currentPage]);
+
   const itemsPerPage = 10;
 
   const [sortConfig, setSortConfig] = useState<{ key: keyof NotificacaoRecord; direction: 'asc' | 'desc' } | null>(null);
@@ -110,9 +118,21 @@ export default function NotificacoesList() {
     return matchBusca && matchSexo && matchEscolaridade && matchDate;
   });
 
-  // Reset page when filters change
+  const prevFilters = React.useRef({ searchTerm, sexoFilter, escolaridadeFilter, dateFrom, dateTo });
+
+  // Reset page *only* when filters actually change
   useEffect(() => {
-    setCurrentPage(1);
+    const p = prevFilters.current;
+    if (
+      p.searchTerm !== searchTerm ||
+      p.sexoFilter !== sexoFilter ||
+      p.escolaridadeFilter !== escolaridadeFilter ||
+      p.dateFrom !== dateFrom ||
+      p.dateTo !== dateTo
+    ) {
+      setCurrentPage(1);
+      prevFilters.current = { searchTerm, sexoFilter, escolaridadeFilter, dateFrom, dateTo };
+    }
   }, [searchTerm, sexoFilter, escolaridadeFilter, dateFrom, dateTo]);
 
   const sortedData = [...filteredData];
@@ -395,33 +415,51 @@ export default function NotificacoesList() {
       </div>
 
       {/* Delete Confirmation Modal */}
-      {deleteModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm p-4">
-          <div className="bg-card w-full max-w-sm rounded-xl border border-border shadow-lg p-6 flex flex-col gap-4">
-            <h3 className="text-lg font-semibold">Excluir Notificação</h3>
-            <p className="text-sm text-muted-foreground">
-              Tem certeza que deseja excluir esta notificação? Esta ação não pode ser desfeita.
-            </p>
-            <div className="flex items-center justify-end gap-3 mt-4">
-              <button
-                onClick={() => setDeleteModalOpen(false)}
-                disabled={deleteLoading}
-                className="px-4 py-2 text-sm font-medium rounded-md border border-input bg-background hover:bg-muted"
-              >
-                Cancelar
-              </button>
-              <button
-                onClick={handleDelete}
-                disabled={deleteLoading}
-                className="px-4 py-2 text-sm font-medium rounded-md bg-destructive text-destructive-foreground hover:bg-destructive/90 flex items-center gap-2"
-              >
-                {deleteLoading && <div className="h-3 w-3 rounded-full border-2 border-current border-t-transparent animate-spin" />}
-                Excluir
-              </button>
-            </div>
+      <AnimatePresence>
+        {deleteModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm p-4">
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-card w-full max-w-md rounded-2xl border border-destructive/20 shadow-2xl overflow-hidden flex flex-col"
+            >
+              <div className="p-6 flex gap-4">
+                <div className="flex-shrink-0 w-12 h-12 mt-1 rounded-full bg-destructive/10 flex items-center justify-center text-destructive">
+                  <AlertTriangle className="h-6 w-6" />
+                </div>
+                <div>
+                  <h3 className="text-xl font-bold tracking-tight mb-2 text-foreground">Excluir Notificação</h3>
+                  <p className="text-sm text-muted-foreground leading-relaxed">
+                    Você tem certeza que deseja excluir esta notificação permanentemente? Esta ação não poderá ser desfeita.
+                  </p>
+                </div>
+              </div>
+              <div className="bg-muted/30 px-6 py-4 flex items-center justify-end gap-3 border-t border-border">
+                <button
+                  onClick={() => setDeleteModalOpen(false)}
+                  disabled={deleteLoading}
+                  className="inline-flex items-center justify-center rounded-md text-sm font-medium border border-input bg-background hover:bg-muted hover:text-foreground h-10 px-6 transition-colors disabled:opacity-50"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={handleDelete}
+                  disabled={deleteLoading}
+                  className="inline-flex items-center justify-center rounded-md text-sm font-medium bg-primary text-primary-foreground hover:bg-primary/90 h-10 px-6 disabled:opacity-50 transition-colors"
+                >
+                  {deleteLoading ? (
+                    <div className="mr-2 h-4 w-4 rounded-full border-2 border-current border-t-transparent animate-spin" />
+                  ) : (
+                    <Trash2 className="mr-2 h-4 w-4" />
+                  )}
+                  {deleteLoading ? 'Excluindo...' : 'Sim, excluir'}
+                </button>
+              </div>
+            </motion.div>
           </div>
-        </div>
-      )}
+        )}
+      </AnimatePresence>
 
     </motion.div>
   );
