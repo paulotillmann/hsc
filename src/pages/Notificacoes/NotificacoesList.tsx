@@ -171,11 +171,29 @@ export default function NotificacoesList() {
     { label: 'Notificado Em', key: 'DataNotificacao' },
   ];
 
-  const handleGeneratePDF = () => {
+  const handleGeneratePDF = async () => {
     const doc = new jsPDF('landscape', 'pt', 'a4');
 
+    // 1. Carrega a logomarca
+    const img = new Image();
+    img.src = '/LOGO_HSC_PRIMARY.png';
+    await new Promise((resolve) => {
+      img.onload = resolve;
+      img.onerror = resolve; // ignora falha para não travar
+    });
+
+    let currentY = 40;
+
+    if (img.complete && img.naturalWidth > 0) {
+      const targetHeight = 35;
+      const targetWidth = (img.naturalWidth / img.naturalHeight) * targetHeight;
+      doc.addImage(img, 'PNG', 40, currentY, targetWidth, targetHeight);
+      currentY += targetHeight + 20;
+    }
+
     doc.setFontSize(16);
-    doc.text('Relatório de Notificações Epidemiológicas', 40, 40);
+    doc.text('RELATÓRIO DE NOTIFICAÇÕES EPIDEMIOLÓGICAS', 40, currentY);
+    currentY += 20;
 
     const tableColumn = [
       "Paciente", "Idade", "Sexo", "Cor/Raça", "Escolaridade", "Ocupação", 
@@ -205,11 +223,21 @@ export default function NotificacoesList() {
     autoTable(doc, {
       head: [tableColumn],
       body: tableRows,
-      startY: 55,
+      startY: currentY,
       styles: { fontSize: 8 },
       headStyles: { fillColor: [41, 128, 185], textColor: 255 },
       alternateRowStyles: { fillColor: [245, 245, 245] },
-      margin: { top: 55 }
+      margin: { top: currentY, bottom: 40 },
+      didDrawPage: (data) => {
+        // Footer
+        const str = `Página ${doc.internal.getNumberOfPages()}`;
+        doc.setFontSize(10);
+        const pageSize = doc.internal.pageSize;
+        const pageHeight = pageSize.height ? pageSize.height : pageSize.getHeight();
+        const pageWidth = pageSize.width ? pageSize.width : pageSize.getWidth();
+        // Centraliza a paginação no rodapé
+        doc.text(str, pageWidth / 2, pageHeight - 20, { align: 'center' });
+      }
     });
 
     // Gera o PDF como Blob e abre em uma nova aba
