@@ -19,11 +19,11 @@
 
 @layer base {
   :root {
-    /* Paleta baseada no anexo (Fundo cinza claro, Primary Vermelho Bordô) */
-    --background: #f0f2f5;
-    --foreground: #1e293b;
+    /* Paleta customizada (Fundo cinza conforme anexo) */
+    --background: #E2E8F0;
+    --foreground: #0f172a;
     --card: #ffffff;
-    --card-foreground: #1e293b;
+    --card-foreground: #0f172a;
     --primary: #5A1010; /* Bordô do Hospital Santa Casa de Araguari */
     --primary-foreground: #ffffff;
     --muted: #f1f5f9;
