@@ -105,7 +105,7 @@ export default function NotificacoesList() {
     const nomeOriginal = (item.Paciente || '').toLowerCase();
     const matchBusca = nomeOriginal.includes(term) || (item.DoencaAgravo || '').toLowerCase().includes(term);
 
-    const matchSexo = sexoFilter ? item.SexoPaciente === sexoFilter : true;
+    const matchSexo = sexoFilter ? (item.SexoPaciente || '').toUpperCase().startsWith(sexoFilter.toUpperCase()) : true;
     const matchEscolaridade = escolaridadeFilter ? item.EscolaridadePaciente === escolaridadeFilter : true;
     const matchSetor = setorFilter ? item.Setor === setorFilter : true;
 
@@ -187,42 +187,54 @@ export default function NotificacoesList() {
       img.onerror = resolve; // ignora falha para não travar
     });
 
-    let currentY = 40;
+    const drawHeader = () => {
+      let currentY = 40;
 
+      if (img.complete && img.naturalWidth > 0) {
+        const targetHeight = 35;
+        const targetWidth = (img.naturalWidth / img.naturalHeight) * targetHeight;
+        doc.addImage(img, 'PNG', 40, currentY, targetWidth, targetHeight);
+        currentY += targetHeight + 20;
+      }
+
+      doc.setFontSize(16);
+      doc.setTextColor(0);
+      doc.text('RELATÓRIO DE NOTIFICAÇÕES EPIDEMIOLÓGICAS', 40, currentY);
+      currentY += 20;
+
+      // ----- Renderiza os Filtros -----
+      doc.setFontSize(10);
+      doc.setTextColor(100);
+      const filtrosLayout: string[] = [];
+      if (searchTerm) filtrosLayout.push(`Busca: '${searchTerm}'`);
+      if (dateFrom || dateTo) {
+        filtrosLayout.push(`Período: ${dateFrom ? new Date(dateFrom).toLocaleDateString('pt-BR', {timeZone: 'UTC'}) : ''} até ${dateTo ? new Date(dateTo).toLocaleDateString('pt-BR', {timeZone: 'UTC'}) : ''}`);
+      }
+      if (sexoFilter) filtrosLayout.push(`Sexo: ${sexoFilter === 'M' ? 'Masculino' : 'Feminino'}`);
+      if (escolaridadeFilter) filtrosLayout.push(`Escolaridade: ${escolaridadeFilter}`);
+      if (setorFilter) filtrosLayout.push(`Setor: ${setorFilter}`);
+      
+      if (filtrosLayout.length > 0) {
+        doc.text(`Filtros: ${filtrosLayout.join(' | ')}`, 40, currentY);
+      } else {
+        doc.text(`Filtros: Nenhum filtro específico aplicado.`, 40, currentY);
+      }
+      currentY += 15;
+      
+      doc.text(`Total de Registros: ${sortedData.length}`, 40, currentY);
+      currentY += 15;
+      doc.setTextColor(0); // Volta para preto
+
+      return currentY;
+    };
+
+    // Calcula a altura real do header dinamicamente chamando a função uma primeira vez sem desenhar (na verdade, desenha por cima dps)
+    // Para simplificar, vou calcular a altura
+    let headerHeightCalc = 40;
     if (img.complete && img.naturalWidth > 0) {
-      const targetHeight = 35;
-      const targetWidth = (img.naturalWidth / img.naturalHeight) * targetHeight;
-      doc.addImage(img, 'PNG', 40, currentY, targetWidth, targetHeight);
-      currentY += targetHeight + 20;
+      headerHeightCalc += 35 + 20;
     }
-
-    doc.setFontSize(16);
-    doc.setTextColor(0);
-    doc.text('RELATÓRIO DE NOTIFICAÇÕES EPIDEMIOLÓGICAS', 40, currentY);
-    currentY += 20;
-
-    // ----- Renderiza os Filtros -----
-    doc.setFontSize(10);
-    doc.setTextColor(100);
-    const filtrosLayout: string[] = [];
-    if (searchTerm) filtrosLayout.push(`Busca: '${searchTerm}'`);
-    if (dateFrom || dateTo) {
-      filtrosLayout.push(`Período: ${dateFrom ? new Date(dateFrom).toLocaleDateString('pt-BR', {timeZone: 'UTC'}) : ''} até ${dateTo ? new Date(dateTo).toLocaleDateString('pt-BR', {timeZone: 'UTC'}) : ''}`);
-    }
-    if (sexoFilter) filtrosLayout.push(`Sexo: ${sexoFilter === 'M' ? 'Masculino' : 'Feminino'}`);
-    if (escolaridadeFilter) filtrosLayout.push(`Escolaridade: ${escolaridadeFilter}`);
-    if (setorFilter) filtrosLayout.push(`Setor: ${setorFilter}`);
-    
-    if (filtrosLayout.length > 0) {
-      doc.text(`Filtros: ${filtrosLayout.join(' | ')}`, 40, currentY);
-    } else {
-      doc.text(`Filtros: Nenhum filtro específico aplicado.`, 40, currentY);
-    }
-    currentY += 15;
-    
-    doc.text(`Total de Registros: ${sortedData.length}`, 40, currentY);
-    currentY += 15;
-    doc.setTextColor(0); // Volta para preto
+    headerHeightCalc += 20 + 15 + 15;
 
     const tableColumn = [
       "Paciente",
@@ -254,12 +266,14 @@ export default function NotificacoesList() {
     autoTable(doc, {
       head: [tableColumn],
       body: tableRows,
-      startY: currentY,
+      startY: headerHeightCalc + 10,
       styles: { fontSize: 8 },
       headStyles: { fillColor: [41, 128, 185], textColor: 255 },
       alternateRowStyles: { fillColor: [245, 245, 245] },
-      margin: { top: currentY, bottom: 40 },
+      margin: { top: headerHeightCalc + 10, bottom: 40 },
       didDrawPage: (data) => {
+        drawHeader();
+        
         // Footer
         const str = `Página ${doc.internal.getNumberOfPages()}`;
         doc.setFontSize(10);
