@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Search, Filter, Plus, UserCircle2, ArrowUpDown, ChevronLeft, ChevronRight, Edit, Trash2, AlertTriangle } from 'lucide-react';
+import { Search, Filter, Plus, UserCircle2, ArrowUpDown, ChevronLeft, ChevronRight, Edit, Trash2, AlertTriangle, FileText } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 import { fetchNotificacoes, deleteNotificacao, NotificacaoRecord } from '../../services/notificacaoService';
 
 const getSetorColorClass = (setor?: string) => {
@@ -169,6 +171,53 @@ export default function NotificacoesList() {
     { label: 'Notificado Em', key: 'DataNotificacao' },
   ];
 
+  const handleGeneratePDF = () => {
+    const doc = new jsPDF('landscape', 'pt', 'a4');
+
+    doc.setFontSize(16);
+    doc.text('Relatório de Notificações Epidemiológicas', 40, 40);
+
+    const tableColumn = [
+      "Paciente", "Idade", "Sexo", "Cor/Raça", "Escolaridade", "Ocupação", 
+      "Data Sintoma", "Data Notif.", "Doença/Agravo", "Resultado", "Saída", "Setor"
+    ];
+
+    const tableRows: any[] = [];
+
+    sortedData.forEach(item => {
+      const rowData = [
+        item.Paciente || '-',
+        item.IdadePaciente || '-',
+        item.SexoPaciente || '-',
+        item.CorRacaPaciente || '-',
+        item.EscolaridadePaciente || '-',
+        item.OcupacaoPaciente || '-',
+        item.DataSintoma ? new Date(item.DataSintoma).toLocaleDateString('pt-BR') : '-',
+        item.DataNotificacao ? new Date(item.DataNotificacao).toLocaleDateString('pt-BR') : '-',
+        item.DoencaAgravo || '-',
+        item.Resultado || '-',
+        item.Saida || '-',
+        item.Setor || '-'
+      ];
+      tableRows.push(rowData);
+    });
+
+    autoTable(doc, {
+      head: [tableColumn],
+      body: tableRows,
+      startY: 55,
+      styles: { fontSize: 8 },
+      headStyles: { fillColor: [41, 128, 185], textColor: 255 },
+      alternateRowStyles: { fillColor: [245, 245, 245] },
+      margin: { top: 55 }
+    });
+
+    // Gera o PDF como Blob e abre em uma nova aba
+    const pdfBlob = doc.output('blob');
+    const blobUrl = URL.createObjectURL(pdfBlob);
+    window.open(blobUrl, '_blank');
+  };
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 10 }}
@@ -182,6 +231,14 @@ export default function NotificacoesList() {
           <p className="text-sm text-muted-foreground">Listagem e busca de registros epidemiológicos</p>
         </div>
         <div className="flex items-center gap-2">
+          <button
+            onClick={handleGeneratePDF}
+            className="inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors focus-visible:outline-none border border-border bg-background hover:bg-muted text-foreground h-10 px-4 py-2"
+            title="Exportar dados filtrados para PDF"
+          >
+            <FileText className="mr-2 h-4 w-4" />
+            Gerar Relatório
+          </button>
           <button
             onClick={() => navigate('/notificacoes/nova')}
             className="inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 bg-primary text-primary-foreground hover:bg-primary/90 h-10 px-4 py-2"
