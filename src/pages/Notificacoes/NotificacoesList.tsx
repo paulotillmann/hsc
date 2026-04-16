@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Search, Filter, Plus, UserCircle2, ArrowUpDown, ChevronLeft, ChevronRight, Edit, Trash2, AlertTriangle, FileText } from 'lucide-react';
+import { Search, Filter, Plus, UserCircle2, ArrowUpDown, ChevronLeft, ChevronRight, Edit, Trash2, AlertTriangle, FileText, RefreshCw } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { fetchNotificacoes, deleteNotificacao, NotificacaoRecord } from '../../services/notificacaoService';
+import { fetchNotificacoes, deleteNotificacao, syncNotificacoes, NotificacaoRecord } from '../../services/notificacaoService';
 
 const getSetorColorClass = (setor?: string) => {
   if (!setor) return 'bg-muted border-border text-muted-foreground';
@@ -62,6 +62,30 @@ export default function NotificacoesList() {
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [itemToDelete, setItemToDelete] = useState<string | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
+
+  // Estado de Sincronização
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [syncMessage, setSyncMessage] = useState<string | null>(null);
+
+  const handleSync = async () => {
+    setIsSyncing(true);
+    setSyncMessage(null);
+    try {
+      const result = await syncNotificacoes();
+      if (result.success) {
+        setSyncMessage(`✓ Sync concluída: ${result.totalUpserted} registros atualizados.`);
+        await loadData(); // Recarrega a listagem após o sync
+      } else {
+        setSyncMessage(`✗ Erro: ${result.error}`);
+      }
+    } catch (err: any) {
+      setSyncMessage(`✗ Erro inesperado: ${err.message}`);
+    } finally {
+      setIsSyncing(false);
+      // Limpa a mensagem após 6 segundos
+      setTimeout(() => setSyncMessage(null), 6000);
+    }
+  };
 
   useEffect(() => {
     loadData();
@@ -169,6 +193,7 @@ export default function NotificacoesList() {
 
   const tableHeaders: { label: string; key: keyof NotificacaoRecord }[] = [
     { label: 'Paciente', key: 'Paciente' },
+    { label: 'Dt. Nascimento', key: 'DataNascimento' },
     { label: 'Endereço', key: 'Endereco' },
     { label: 'Sexo', key: 'SexoPaciente' },
     { label: 'Doença/Agravo', key: 'DoencaAgravo' },
@@ -268,7 +293,7 @@ export default function NotificacoesList() {
       body: tableRows,
       startY: headerHeightCalc + 10,
       styles: { fontSize: 8 },
-      headStyles: { fillColor: [41, 128, 185], textColor: 255 },
+      headStyles: { fillColor: [90, 16, 16], textColor: 255 },
       alternateRowStyles: { fillColor: [245, 245, 245] },
       margin: { top: headerHeightCalc + 10, bottom: 40 },
       didDrawPage: (data) => {
@@ -305,6 +330,15 @@ export default function NotificacoesList() {
         </div>
         <div className="flex items-center gap-2">
           <button
+            onClick={handleSync}
+            disabled={isSyncing}
+            className="inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors focus-visible:outline-none border border-border bg-background hover:bg-muted text-foreground h-10 px-4 py-2 disabled:opacity-50"
+            title="Sincronizar dados do Bubble.io"
+          >
+            <RefreshCw className={`mr-2 h-4 w-4 ${isSyncing ? 'animate-spin' : ''}`} />
+            {isSyncing ? 'Sincronizando...' : 'Sincronizar'}
+          </button>
+          <button
             onClick={handleGeneratePDF}
             className="inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors focus-visible:outline-none border border-border bg-background hover:bg-muted text-foreground h-10 px-4 py-2"
             title="Exportar dados filtrados para PDF"
@@ -321,6 +355,24 @@ export default function NotificacoesList() {
           </button>
         </div>
       </div>
+
+      {/* SYNC FEEDBACK */}
+      <AnimatePresence>
+        {syncMessage && (
+          <motion.div
+            initial={{ opacity: 0, y: -8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -8 }}
+            className={`text-sm px-4 py-3 rounded-lg border font-medium ${
+              syncMessage.startsWith('✓')
+                ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-600 dark:text-emerald-400'
+                : 'bg-red-500/10 border-red-500/30 text-red-600 dark:text-red-400'
+            }`}
+          >
+            {syncMessage}
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* FILTERS */}
       <div className="bg-card text-card-foreground rounded-xl border border-border shadow-sm">
@@ -428,7 +480,7 @@ export default function NotificacoesList() {
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={6} className="h-24 text-center">
+                  <td colSpan={7} className="h-24 text-center">
                     <div className="flex items-center justify-center gap-2">
                       <div className="h-4 w-4 rounded-full border-2 border-primary border-t-transparent animate-spin" />
                       <span className="text-muted-foreground">Carregando...</span>
@@ -437,7 +489,7 @@ export default function NotificacoesList() {
                 </tr>
               ) : sortedData.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="h-24 text-center text-muted-foreground">
+                  <td colSpan={7} className="h-24 text-center text-muted-foreground">
                     Nenhum registro encontrado.
                   </td>
                 </tr>
@@ -454,6 +506,9 @@ export default function NotificacoesList() {
                           <span className="text-xs text-muted-foreground">{item.IdadePaciente}</span>
                         </div>
                       </div>
+                    </td>
+                    <td className="p-4 align-middle text-muted-foreground whitespace-nowrap">
+                      {item.DataNascimento ? new Date(item.DataNascimento).toLocaleDateString('pt-BR', { timeZone: 'UTC' }) : '-'}
                     </td>
                     <td className="p-4 align-middle text-muted-foreground truncate max-w-[200px]" title={item.Endereco || ''}>
                       {item.Endereco || '-'}

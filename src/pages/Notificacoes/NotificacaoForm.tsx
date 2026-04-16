@@ -52,6 +52,7 @@ export default function NotificacaoForm() {
   const [dataNascimento, setDataNascimento] = useState('');
   const [ocupacao, setOcupacao] = useState('');
   const [dataSintoma, setDataSintoma] = useState('');
+  const [dataNotificacao, setDataNotificacao] = useState(() => new Date().toISOString().substring(0, 10));
   const [doencaAgravo, setDoencaAgravo] = useState('');
   const [setor, setSetor] = useState('');
   const [resultado, setResultado] = useState('');
@@ -171,6 +172,7 @@ export default function NotificacaoForm() {
         setEscolaridade(data.EscolaridadePaciente || '');
         setOcupacao(data.OcupacaoPaciente || '');
         setDataSintoma(data.DataSintoma ? data.DataSintoma.substring(0, 10) : '');
+        setDataNotificacao(data.DataNotificacao ? data.DataNotificacao.substring(0, 10) : new Date().toISOString().substring(0, 10));
         setDoencaAgravo(data.DoencaAgravo || '');
         setSetor(data.Setor || '');
         setResultado(data.Resultado || '');
@@ -252,6 +254,7 @@ export default function NotificacaoForm() {
     setEndereco('');
     setOcupacao('');
     setDataSintoma('');
+    setDataNotificacao(new Date().toISOString().substring(0, 10));
     setDoencaAgravo('');
     setSetor('');
     setResultado('');
@@ -284,7 +287,7 @@ export default function NotificacaoForm() {
         // Atualiza
         const { error } = await supabase.from('notificacao').update({
           ...payload,
-          DataNotificacao: new Date().toISOString()
+          DataNotificacao: dataNotificacao ? new Date(dataNotificacao).toISOString() : new Date().toISOString()
         }).eq('id', id);
         if (error) throw error;
         showToast('success', 'Notificação atualizada com sucesso!', () => navigate('/notificacoes'));
@@ -294,7 +297,7 @@ export default function NotificacaoForm() {
         const { error } = await supabase.from('notificacao').insert([{
           ...payload,
           bubble_id: fakeBubbleId,
-          DataNotificacao: new Date().toISOString()
+          DataNotificacao: dataNotificacao ? new Date(dataNotificacao).toISOString() : new Date().toISOString()
         }]);
         if (error) throw error;
         showToast('success', 'Notificação salva com sucesso!', () => navigate('/notificacoes'));
@@ -646,9 +649,18 @@ export default function NotificacaoForm() {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
               <div>
-                <label className="block text-sm font-medium mb-1">Data dos 1ºs Sintomas</label>
+                <label className="block text-sm font-medium mb-1 drop-shadow-sm">Data de Notificação</label>
+                <input
+                  type="date"
+                  className="flex h-10 w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  value={dataNotificacao}
+                  onChange={(e) => setDataNotificacao(e.target.value)}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1 drop-shadow-sm">Data dos 1ºs Sintomas</label>
                 <input
                   type="date"
                   className="flex h-10 w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
