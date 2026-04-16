@@ -15,6 +15,7 @@ interface Profile {
   role: string;
   role_id: string | null;
   avatar_url: string | null;
+  default_module_slug: string | null;
   roles: Role | null;
 }
 
@@ -26,6 +27,7 @@ interface AuthContextType {
   userModules: Module[];
   loading: boolean;
   profileLoaded: boolean;
+  defaultModuleSlug: string | null;
   signIn: (email: string, password: string) => Promise<{ error: string | null }>;
   signUp: (email: string, password: string, fullName: string, phone: string, avatarUrl?: string) => Promise<{ error: string | null }>;
   signOut: () => Promise<void>;
@@ -217,10 +219,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const isAdmin = profile?.role === 'admin';
+  const defaultModuleSlug = profile?.default_module_slug ?? null;
 
   return (
     <AuthContext.Provider value={{
       session, user, profile, permissions, userModules, loading, profileLoaded,
+      defaultModuleSlug,
       signIn, signUp, signOut, refreshProfile, isAdmin,
     }}>
       {children}

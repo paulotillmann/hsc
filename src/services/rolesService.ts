@@ -50,17 +50,33 @@ export interface UserProfile {
   role_id: string | null;
   avatar_url: string | null;
   created_at: string;
+  default_module_slug: string | null;
   roles: { name: string; slug: string } | null;
 }
 
 export async function fetchUsers(): Promise<UserProfile[]> {
   const { data, error } = await supabase
     .from('profiles')
-    .select('id, full_name, email, cpf, role, role_id, avatar_url, created_at, roles(name, slug)')
+    .select('id, full_name, email, cpf, role, role_id, avatar_url, created_at, default_module_slug, roles(name, slug)')
     .order('full_name', { ascending: true });
 
   if (error) throw new Error(error.message);
   return (data as unknown as UserProfile[]) ?? [];
+}
+
+export async function updateUserDefaultModule(
+  userId: string,
+  slug: string | null
+): Promise<{ success: boolean; error?: string }> {
+  const { data, error } = await supabase
+    .from('profiles')
+    .update({ default_module_slug: slug })
+    .eq('id', userId)
+    .select('id');
+
+  if (error) return { success: false, error: error.message };
+  if (!data || data.length === 0) return { success: false, error: 'Sem permissão para atualizar este perfil.' };
+  return { success: true };
 }
 
 export async function updateUserRole(

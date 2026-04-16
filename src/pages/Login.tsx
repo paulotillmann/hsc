@@ -7,7 +7,7 @@ import { supabase } from '../lib/supabase';
 
 const Login: React.FC = () => {
   const navigate = useNavigate();
-  const { signIn, signUp, session, loading } = useAuth();
+  const { signIn, signUp, session, loading, profileLoaded, defaultModuleSlug } = useAuth();
 
   const [isRegistering, setIsRegistering] = useState(false);
   const [isDark, setIsDark] = useState(false);
@@ -33,12 +33,13 @@ const Login: React.FC = () => {
   const [showRegPassword, setShowRegPassword] = useState(false);
   const [showRegConfirm, setShowRegConfirm] = useState(false);
 
-  // Redireciona se já estiver logado
+  // Redireciona se já estiver logado — aguarda o profile carregar para usar defaultModuleSlug
   useEffect(() => {
-    if (!loading && session) {
-      navigate('/dashboard', { replace: true });
+    if (!loading && session && profileLoaded) {
+      const target = defaultModuleSlug ? `/${defaultModuleSlug}` : '/dashboard';
+      navigate(target, { replace: true });
     }
-  }, [session, loading, navigate]);
+  }, [session, loading, profileLoaded, defaultModuleSlug, navigate]);
 
   useEffect(() => {
     setIsDark(document.documentElement.classList.contains('dark'));
@@ -73,9 +74,8 @@ const Login: React.FC = () => {
 
     if (authError) {
       setError(authError);
-    } else {
-      navigate('/dashboard', { replace: true });
     }
+    // O redirect será feito pelo useEffect acima assim que o profile for carregado
   };
 
   const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {

@@ -10,9 +10,10 @@ import {
 } from '../services/settingsService';
 import {
   fetchRoles, createRole, updateRole, deleteRole,
-  fetchUsers, updateUserRole, UserProfile,
+  fetchUsers, updateUserRole, updateUserDefaultModule, UserProfile,
 } from '../services/rolesService';
 import { Role } from '../types/permissions';
+import { fetchModulesWithRoles, ModuleWithRoles } from '../services/modulesService';
 import ModulesManager from '../components/configuracoes/ModulesManager';
 
 // ── Tabs ─────────────────────────────────────────────────────────────────
@@ -242,10 +243,19 @@ const Configuracoes: React.FC = () => {
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [usersLoading, setUsersLoading] = useState(false);
   const [updatingUser, setUpdatingUser] = useState<string | null>(null);
+  const [updatingDefaultModule, setUpdatingDefaultModule] = useState<string | null>(null);
+  const [allModules, setAllModules] = useState<ModuleWithRoles[]>([]);
 
   const loadUsers = useCallback(async () => {
     setUsersLoading(true);
-    try { setUsers(await fetchUsers()); } catch (e) { showToast('error', 'Erro ao carregar usuários.'); }
+    try {
+      const [usersData, modulesData] = await Promise.all([
+        fetchUsers(),
+        fetchModulesWithRoles(),
+      ]);
+      setUsers(usersData);
+      setAllModules(modulesData.filter(m => m.is_active));
+    } catch (e) { showToast('error', 'Erro ao carregar usuários.'); }
     setUsersLoading(false);
   }, [showToast]);
 
@@ -257,6 +267,16 @@ const Configuracoes: React.FC = () => {
     const result = await updateUserRole(userId, roleId);
     setUpdatingUser(null);
     result.success ? showToast('success', 'Perfil do usuário atualizado!') : showToast('error', result.error || 'Erro ao atualizar.');
+    if (result.success) await loadUsers();
+  };
+
+  const handleUserDefaultModuleChange = async (userId: string, slug: string | null) => {
+    setUpdatingDefaultModule(userId);
+    const result = await updateUserDefaultModule(userId, slug);
+    setUpdatingDefaultModule(null);
+    result.success
+      ? showToast('success', 'Módulo padrão atualizado!')
+      : showToast('error', result.error || 'Erro ao atualizar módulo padrão.');
     if (result.success) await loadUsers();
   };
 
@@ -542,6 +562,7 @@ const Configuracoes: React.FC = () => {
                     <th className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Usuário</th>
                     <th className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden md:table-cell">CPF</th>
                     <th className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Perfil</th>
+                    <th className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Módulo Inicial</th>
                     <th className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden lg:table-cell">Criado em</th>
                   </tr>
                 </thead>
@@ -578,6 +599,25 @@ const Configuracoes: React.FC = () => {
                                 <option value="" disabled>Selecionar perfil</option>
                                 {roles.map(r => (
                                   <option key={r.id} value={r.id}>{r.name}</option>
+                                ))}
+                              </select>
+                            )
+                          }
+                        </div>
+                      </td>
+                      <td className="px-5 py-3.5">
+                        <div className="flex items-center gap-2">
+                          {updatingDefaultModule === u.id
+                            ? <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                            : (
+                              <select
+                                value={u.default_module_slug || ''}
+                                onChange={e => handleUserDefaultModuleChange(u.id, e.target.value || null)}
+                                className="bg-background border border-border rounded-md px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary transition-all cursor-pointer max-w-[180px]"
+                              >
+                                <option value="">Padrão do sistema</option>
+                                {allModules.map(m => (
+                                  <option key={m.id} value={m.slug}>{m.name}</option>
                                 ))}
                               </select>
                             )
