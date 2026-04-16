@@ -48,6 +48,8 @@ export default function NotificacaoForm() {
   const [sexo, setSexo] = useState('');
   const [corRaca, setCorRaca] = useState('');
   const [escolaridade, setEscolaridade] = useState('');
+  const [endereco, setEndereco] = useState('');
+  const [dataNascimento, setDataNascimento] = useState('');
   const [ocupacao, setOcupacao] = useState('');
   const [dataSintoma, setDataSintoma] = useState('');
   const [doencaAgravo, setDoencaAgravo] = useState('');
@@ -162,8 +164,10 @@ export default function NotificacaoForm() {
       if (data) {
         setPaciente(data.Paciente || '');
         setIdade(data.IdadePaciente || '');
+        setDataNascimento(data.DataNascimento ? data.DataNascimento.substring(0, 10) : '');
         setSexo((data.SexoPaciente || '').toUpperCase());
         setCorRaca(data.CorRacaPaciente || '');
+        setEndereco(data.Endereco || '');
         setEscolaridade(data.EscolaridadePaciente || '');
         setOcupacao(data.OcupacaoPaciente || '');
         setDataSintoma(data.DataSintoma ? data.DataSintoma.substring(0, 10) : '');
@@ -224,19 +228,28 @@ export default function NotificacaoForm() {
   const handleSelectN8nPaciente = (p: N8nPaciente) => {
     setPaciente(p.NM_PACIENTE);
     setIdade(p.DS_IDADE || '');
+    // N8N return DT_NASCIMENTO inside p. If unavailable, it'll remain early.
+    if (p.DT_NASCIMENTO) {
+      setDataNascimento(p.DT_NASCIMENTO.substring(0, 10));
+    } else {
+      setDataNascimento('');
+    }
     setSexo(p.DS_SEXO || '');
     setEscolaridade(p.ESCOLARIDADE || '');
     setCorRaca(p.COR || '');
-    setSearchResults([]); 
+    setEndereco(p.DS_ENDERECO || '');
+    setSearchResults([]);  
     setIsModalOpen(false);
   };
 
   const handleCancel = () => {
     setPaciente('');
     setIdade('');
+    setDataNascimento('');
     setSexo('');
     setCorRaca('');
     setEscolaridade('');
+    setEndereco('');
     setOcupacao('');
     setDataSintoma('');
     setDoencaAgravo('');
@@ -254,10 +267,12 @@ export default function NotificacaoForm() {
       const payload = {
         Paciente: paciente?.toUpperCase(),
         IdadePaciente: idade?.toUpperCase(),
+        DataNascimento: dataNascimento || null,
         SexoPaciente: sexo?.toUpperCase(),
         CorRacaPaciente: corRaca?.toUpperCase(),
         EscolaridadePaciente: escolaridade?.toUpperCase(),
         OcupacaoPaciente: ocupacao?.toUpperCase(),
+        Endereco: endereco?.toUpperCase(),
         DataSintoma: dataSintoma ? new Date(dataSintoma).toISOString() : null,
         DoencaAgravo: doencaAgravo,
         Resultado: resultado?.toUpperCase(),
@@ -354,6 +369,15 @@ export default function NotificacaoForm() {
 
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
               <div>
+                <label className="block text-sm font-medium mb-1">Data Nascimento</label>
+                <input
+                  type="date"
+                  className="flex h-10 w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  value={dataNascimento}
+                  onChange={(e) => setDataNascimento(e.target.value)}
+                />
+              </div>
+              <div>
                 <label className="block text-sm font-medium mb-1">Idade</label>
                 <input
                   type="text"
@@ -376,19 +400,6 @@ export default function NotificacaoForm() {
                   <option className="bg-background text-foreground" value="IGNORADO">Ignorado</option>
                 </select>
               </div>
-              <div className="md:col-span-2">
-                <label className="block text-sm font-medium mb-1">Escolaridade</label>
-                <input
-                  type="text"
-                  placeholder="Escolaridade do paciente"
-                  className="flex h-10 w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                  value={escolaridade}
-                  onChange={(e) => setEscolaridade(e.target.value)}
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium mb-1">Cor / Raça</label>
                 <input
@@ -397,6 +408,19 @@ export default function NotificacaoForm() {
                   className="flex h-10 w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   value={corRaca}
                   onChange={(e) => setCorRaca(e.target.value)}
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium mb-1">Escolaridade</label>
+                <input
+                  type="text"
+                  placeholder="Escolaridade do paciente"
+                  className="flex h-10 w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  value={escolaridade}
+                  onChange={(e) => setEscolaridade(e.target.value)}
                 />
               </div>
               <div>
@@ -412,6 +436,17 @@ export default function NotificacaoForm() {
                   ))}
                 </select>
               </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium mb-1">Endereço</label>
+              <input
+                type="text"
+                placeholder="Endereço completo do paciente"
+                className="flex h-10 w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                value={endereco}
+                onChange={(e) => setEndereco(e.target.value)}
+              />
             </div>
 
           </div>

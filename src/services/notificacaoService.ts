@@ -14,10 +14,12 @@ export interface NotificacaoRecord {
   bubble_id: string;
   Paciente: string | null;
   IdadePaciente: string | null;
+  DataNascimento: string | null;
   SexoPaciente: string | null;
   CorRacaPaciente: string | null;
   EscolaridadePaciente: string | null;
   OcupacaoPaciente: string | null;
+  Endereco: string | null;
   DataSintoma: string | null;
   DataNotificacao: string | null;
   DoencaAgravo: string | null;

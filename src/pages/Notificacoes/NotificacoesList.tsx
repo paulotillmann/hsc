@@ -35,6 +35,7 @@ export default function NotificacoesList() {
   const [searchTerm, setSearchTerm] = useState('');
   const [sexoFilter, setSexoFilter] = useState('');
   const [escolaridadeFilter, setEscolaridadeFilter] = useState('');
+  const [setorFilter, setSetorFilter] = useState('');
   
   // Calcula datas padrão (Primeiro e Último dia do mês atual)
   const today = new Date();
@@ -106,6 +107,7 @@ export default function NotificacoesList() {
 
     const matchSexo = sexoFilter ? item.SexoPaciente === sexoFilter : true;
     const matchEscolaridade = escolaridadeFilter ? item.EscolaridadePaciente === escolaridadeFilter : true;
+    const matchSetor = setorFilter ? item.Setor === setorFilter : true;
 
     // Filter by Period
     let matchDate = true;
@@ -117,10 +119,10 @@ export default function NotificacoesList() {
       matchDate = (!dateFrom && !dateTo);
     }
 
-    return matchBusca && matchSexo && matchEscolaridade && matchDate;
+    return matchBusca && matchSexo && matchEscolaridade && matchSetor && matchDate;
   });
 
-  const prevFilters = React.useRef({ searchTerm, sexoFilter, escolaridadeFilter, dateFrom, dateTo });
+  const prevFilters = React.useRef({ searchTerm, sexoFilter, escolaridadeFilter, setorFilter, dateFrom, dateTo });
 
   // Reset page *only* when filters actually change
   useEffect(() => {
@@ -129,13 +131,16 @@ export default function NotificacoesList() {
       p.searchTerm !== searchTerm ||
       p.sexoFilter !== sexoFilter ||
       p.escolaridadeFilter !== escolaridadeFilter ||
+      p.setorFilter !== setorFilter ||
       p.dateFrom !== dateFrom ||
       p.dateTo !== dateTo
     ) {
       setCurrentPage(1);
-      prevFilters.current = { searchTerm, sexoFilter, escolaridadeFilter, dateFrom, dateTo };
+      prevFilters.current = { searchTerm, sexoFilter, escolaridadeFilter, setorFilter, dateFrom, dateTo };
     }
-  }, [searchTerm, sexoFilter, escolaridadeFilter, dateFrom, dateTo]);
+  }, [searchTerm, sexoFilter, escolaridadeFilter, setorFilter, dateFrom, dateTo]);
+
+  const uniqueSetores = Array.from(new Set(data.map(d => d.Setor).filter(Boolean))).sort();
 
   const sortedData = [...filteredData];
   if (sortConfig !== null) {
@@ -164,9 +169,9 @@ export default function NotificacoesList() {
 
   const tableHeaders: { label: string; key: keyof NotificacaoRecord }[] = [
     { label: 'Paciente', key: 'Paciente' },
-    { label: 'Doença/Agravo', key: 'DoencaAgravo' },
+    { label: 'Endereço', key: 'Endereco' },
     { label: 'Sexo', key: 'SexoPaciente' },
-    { label: 'Escolaridade', key: 'EscolaridadePaciente' },
+    { label: 'Doença/Agravo', key: 'DoencaAgravo' },
     { label: 'Setor', key: 'Setor' },
     { label: 'Notificado Em', key: 'DataNotificacao' },
   ];
@@ -192,12 +197,42 @@ export default function NotificacoesList() {
     }
 
     doc.setFontSize(16);
+    doc.setTextColor(0);
     doc.text('RELATÓRIO DE NOTIFICAÇÕES EPIDEMIOLÓGICAS', 40, currentY);
     currentY += 20;
 
+    // ----- Renderiza os Filtros -----
+    doc.setFontSize(10);
+    doc.setTextColor(100);
+    const filtrosLayout: string[] = [];
+    if (searchTerm) filtrosLayout.push(`Busca: '${searchTerm}'`);
+    if (dateFrom || dateTo) {
+      filtrosLayout.push(`Período: ${dateFrom ? new Date(dateFrom).toLocaleDateString('pt-BR', {timeZone: 'UTC'}) : ''} até ${dateTo ? new Date(dateTo).toLocaleDateString('pt-BR', {timeZone: 'UTC'}) : ''}`);
+    }
+    if (sexoFilter) filtrosLayout.push(`Sexo: ${sexoFilter === 'M' ? 'Masculino' : 'Feminino'}`);
+    if (escolaridadeFilter) filtrosLayout.push(`Escolaridade: ${escolaridadeFilter}`);
+    if (setorFilter) filtrosLayout.push(`Setor: ${setorFilter}`);
+    
+    if (filtrosLayout.length > 0) {
+      doc.text(`Filtros: ${filtrosLayout.join(' | ')}`, 40, currentY);
+    } else {
+      doc.text(`Filtros: Nenhum filtro específico aplicado.`, 40, currentY);
+    }
+    currentY += 15;
+    
+    doc.text(`Total de Registros: ${sortedData.length}`, 40, currentY);
+    currentY += 15;
+    doc.setTextColor(0); // Volta para preto
+
     const tableColumn = [
-      "Paciente", "Idade", "Sexo", "Cor/Raça", "Escolaridade", "Ocupação", 
-      "Data Sintoma", "Data Notif.", "Doença/Agravo", "Resultado", "Saída", "Setor"
+      "Paciente",
+      "Data Nasc.",
+      "Sexo",
+      "Endereço",
+      "Doença",
+      "Setor",
+      "Data 1º sintoma",
+      "Data Notificação"
     ];
 
     const tableRows: any[] = [];
@@ -205,17 +240,13 @@ export default function NotificacoesList() {
     sortedData.forEach(item => {
       const rowData = [
         item.Paciente || '-',
-        item.IdadePaciente || '-',
+        item.DataNascimento ? new Date(item.DataNascimento).toLocaleDateString('pt-BR', {timeZone: 'UTC'}) : '-',
         item.SexoPaciente || '-',
-        item.CorRacaPaciente || '-',
-        item.EscolaridadePaciente || '-',
-        item.OcupacaoPaciente || '-',
-        item.DataSintoma ? new Date(item.DataSintoma).toLocaleDateString('pt-BR') : '-',
-        item.DataNotificacao ? new Date(item.DataNotificacao).toLocaleDateString('pt-BR') : '-',
+        item.Endereco || '-',
         item.DoencaAgravo || '-',
-        item.Resultado || '-',
-        item.Saida || '-',
-        item.Setor || '-'
+        item.Setor || '-',
+        item.DataSintoma ? new Date(item.DataSintoma).toLocaleDateString('pt-BR', {timeZone: 'UTC'}) : '-',
+        item.DataNotificacao ? new Date(item.DataNotificacao).toLocaleDateString('pt-BR', {timeZone: 'UTC'}) : '-',
       ];
       tableRows.push(rowData);
     });
@@ -342,6 +373,19 @@ export default function NotificacoesList() {
               <option className="bg-background text-foreground" value="Não informado pela pessoa">Não informado</option>
             </select>
           </div>
+
+          <div className="w-full md:w-48">
+            <select
+              className="flex h-10 w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 capitalize"
+              value={setorFilter}
+              onChange={(e) => setSetorFilter(e.target.value)}
+            >
+              <option className="bg-background text-foreground" value="">Todos (Setor)</option>
+              {uniqueSetores.map(s => (
+                <option key={s!} className="bg-background text-foreground" value={s!}>{s!.toLowerCase()}</option>
+              ))}
+            </select>
+          </div>
         </div>
       </div>
 
@@ -397,8 +441,8 @@ export default function NotificacoesList() {
                         </div>
                       </div>
                     </td>
-                    <td className="p-4 align-middle text-foreground font-medium">
-                      {item.DoencaAgravo}
+                    <td className="p-4 align-middle text-muted-foreground truncate max-w-[200px]" title={item.Endereco || ''}>
+                      {item.Endereco || '-'}
                     </td>
                     <td className="p-4 align-middle">
                       <span className={`inline-flex items-center justify-center rounded-full border-2 px-3 py-1 text-[11px] font-black uppercase tracking-widest ${
@@ -411,8 +455,8 @@ export default function NotificacoesList() {
                         {item.SexoPaciente === 'M' ? 'MASCULINO' : item.SexoPaciente === 'F' ? 'FEMININO' : (item.SexoPaciente || '-').toUpperCase()}
                       </span>
                     </td>
-                    <td className="p-4 align-middle text-muted-foreground">
-                      {item.EscolaridadePaciente}
+                    <td className="p-4 align-middle text-foreground font-medium">
+                      {item.DoencaAgravo}
                     </td>
                     <td className="p-4 align-middle">
                       {item.Setor ? (
