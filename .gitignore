@@ -32,3 +32,9 @@ dist-ssr
 INFORMES2026-pag.pdf
 output/
 public/informes/INFORME_*.pdf
+
+# wrangler files
+.wrangler
+.dev.vars*
+!.dev.vars.example
+!.env.example
