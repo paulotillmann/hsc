@@ -30,6 +30,7 @@
     "@types/node": "^22.14.0",
     "@vitejs/plugin-react": "^5.0.0",
     "multer": "^1.4.5-lts.1",
+    "react-grab": "^0.1.32",
     "tailwindcss": "^4.2.2",
     "typescript": "~5.8.2",
     "vite": "^6.2.0"

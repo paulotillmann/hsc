@@ -6,6 +6,7 @@ import DynamicRoute from './components/DynamicRoute';
 import Login from './pages/Login';
 import Perfil from './pages/Perfil';
 import Layout from './components/Layout';
+import EtiquetaVisita from './pages/Recepcao/EtiquetaVisita';
 
 const App: React.FC = () => {
   // Configuração Global de Tema
@@ -25,6 +26,10 @@ const App: React.FC = () => {
 
           {/* Rotas protegidas — exigem sessão ativa */}
           <Route element={<PrivateRoute />}>
+            
+            {/* Rota de Impressão (Sem Layout da aplicação) */}
+            <Route path="/imprimir/etiqueta/:id" element={<EtiquetaVisita />} />
+
             <Route element={<Layout />}>
               {/* Perfil: rota pública para qualquer usuário autenticado */}
               <Route path="/perfil" element={<Perfil />} />

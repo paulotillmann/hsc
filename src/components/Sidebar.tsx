@@ -24,6 +24,17 @@ const Sidebar: React.FC = () => {
     }
   }, [location.pathname, isCollapsed]);
 
+  // Acordeão específico para Recepção
+  const [isRecepcaoExpanded, setIsRecepcaoExpanded] = useState(() => {
+    return window.location.pathname.startsWith('/recepcao');
+  });
+
+  useEffect(() => {
+    if (location.pathname.startsWith('/recepcao') && !isRecepcaoExpanded && !isCollapsed) {
+      setIsRecepcaoExpanded(true);
+    }
+  }, [location.pathname, isCollapsed]);
+
   useEffect(() => {
     setIsDark(document.documentElement.classList.contains('dark'));
   }, []);
@@ -153,6 +164,83 @@ const Sidebar: React.FC = () => {
                         }
                       >
                          Gráficos
+                      </NavLink>
+                    </div>
+                  )}
+                </div>
+              );
+            }
+
+            if (module.slug === 'recepcao') {
+              const isActiveLocal = location.pathname.startsWith('/recepcao');
+              return (
+                <div key={module.slug} className="flex flex-col">
+                  {isCollapsed ? (
+                    <NavLink
+                      to={`/${module.slug}`}
+                      title={module.name}
+                      className={navLinkClass(isActiveLocal)}
+                    >
+                      <DynamicIcon name={module.icon} className="h-5 w-5 flex-shrink-0" />
+                    </NavLink>
+                  ) : (
+                    <button
+                      onClick={() => {
+                        setIsRecepcaoExpanded(!isRecepcaoExpanded);
+                        if (!isActiveLocal) navigate('/recepcao');
+                      }}
+                      className={`flex items-center rounded-md text-sm transition-all duration-200 justify-start gap-3 px-3 py-2 w-full ${
+                        isActiveLocal
+                          ? 'bg-primary text-primary-foreground shadow-sm hover:shadow-md hover:shadow-primary/20 font-medium'
+                          : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                      }`}
+                    >
+                      <DynamicIcon name={module.icon} className="h-5 w-5 flex-shrink-0" />
+                      <div className="flex flex-1 items-center justify-between">
+                        <span className="truncate">{module.name}</span>
+                        <ChevronRight className={`h-4 w-4 transition-transform ${isRecepcaoExpanded ? 'rotate-90' : ''}`} />
+                      </div>
+                    </button>
+                  )}
+
+                  {!isCollapsed && isRecepcaoExpanded && (
+                    <div className="flex flex-col ml-9 mt-1 gap-1 border-l-2 border-border pl-2 border-primary/20">
+                      <NavLink
+                        to="/recepcao"
+                        end
+                        className={({ isActive }) => 
+                          `text-sm px-3 py-2 rounded-md transition-colors ${
+                            isActive 
+                              ? 'bg-primary text-primary-foreground shadow-sm font-medium' 
+                              : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                          }`
+                        }
+                      >
+                         Visão Geral
+                      </NavLink>
+                      <NavLink
+                        to="/recepcao/visitantes"
+                        className={({ isActive }) => 
+                          `text-sm px-3 py-2 rounded-md transition-colors ${
+                            isActive 
+                              ? 'bg-primary text-primary-foreground shadow-sm font-medium' 
+                              : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                          }`
+                        }
+                      >
+                         Visitantes
+                      </NavLink>
+                      <NavLink
+                        to="/recepcao/terceiros"
+                        className={({ isActive }) => 
+                          `text-sm px-3 py-2 rounded-md transition-colors ${
+                            isActive 
+                              ? 'bg-primary text-primary-foreground shadow-sm font-medium' 
+                              : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                          }`
+                        }
+                      >
+                         Terceiros
                       </NavLink>
                     </div>
                   )}

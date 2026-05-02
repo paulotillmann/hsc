@@ -56,3 +56,10 @@
     -moz-osx-font-smoothing: grayscale;
   }
 }
+
+/* Reduz proporcionalmente a escala geral do sistema em telas menores */
+@media (max-width: 1366px) {
+  html {
+    font-size: 80% !important;
+  }
+}
