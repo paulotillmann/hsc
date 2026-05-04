@@ -9,9 +9,9 @@ const NotificacoesRouter: React.FC = () => {
   return (
     <Routes>
       <Route path="/" element={<NotificacoesList />} />
-      <Route path="/graficos" element={<NotificacoesGraficos />} />
-      <Route path="/nova" element={<NotificacaoForm />} />
-      <Route path="/editar/:id" element={<NotificacaoForm />} />
+      <Route path="graficos" element={<NotificacoesGraficos />} />
+      <Route path="nova" element={<NotificacaoForm />} />
+      <Route path="editar/:id" element={<NotificacaoForm />} />
     </Routes>
   );
 };

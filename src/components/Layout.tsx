@@ -4,7 +4,10 @@ import Sidebar from './Sidebar';
 
 const Layout: React.FC = () => {
   const location = useLocation();
-  const isWidePage = ['/dashboard', '/informes', '/holerites', '/configuracoes'].includes(location.pathname) || location.pathname.startsWith('/notificacoes') || location.pathname.startsWith('/recepcao');
+  const isWidePage = ['/dashboard', '/informes', '/holerites', '/configuracoes'].includes(location.pathname) || 
+    location.pathname.startsWith('/notificacoes') || 
+    location.pathname.startsWith('/recepcao') || 
+    location.pathname.startsWith('/taxa-ocupacao');
 
   return (
     <div className="flex h-screen w-full bg-background text-foreground transition-colors overflow-hidden">

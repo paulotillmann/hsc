@@ -13,26 +13,23 @@ const Sidebar: React.FC = () => {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const location = useLocation();
 
-  // Acordeão específico para notificações
-  const [isNotificacoesExpanded, setIsNotificacoesExpanded] = useState(() => {
-    return window.location.pathname.startsWith('/notificacoes');
+  // Controle unificado de acordeão (apenas um aberto por vez)
+  const [expandedMenu, setExpandedMenu] = useState<string | null>(() => {
+    if (window.location.pathname.startsWith('/notificacoes')) return 'notificacoes';
+    if (window.location.pathname.startsWith('/recepcao')) return 'recepcao';
+    if (window.location.pathname.startsWith('/taxa-ocupacao')) return 'taxa-ocupacao';
+    return null;
   });
 
   useEffect(() => {
-    if (location.pathname.startsWith('/notificacoes') && !isNotificacoesExpanded && !isCollapsed) {
-      setIsNotificacoesExpanded(true);
+    if (isCollapsed) {
+      setExpandedMenu(null);
+      return;
     }
-  }, [location.pathname, isCollapsed]);
 
-  // Acordeão específico para Recepção
-  const [isRecepcaoExpanded, setIsRecepcaoExpanded] = useState(() => {
-    return window.location.pathname.startsWith('/recepcao');
-  });
-
-  useEffect(() => {
-    if (location.pathname.startsWith('/recepcao') && !isRecepcaoExpanded && !isCollapsed) {
-      setIsRecepcaoExpanded(true);
-    }
+    if (location.pathname.startsWith('/notificacoes')) setExpandedMenu('notificacoes');
+    else if (location.pathname.startsWith('/recepcao')) setExpandedMenu('recepcao');
+    else if (location.pathname.startsWith('/taxa-ocupacao')) setExpandedMenu('taxa-ocupacao');
   }, [location.pathname, isCollapsed]);
 
   useEffect(() => {
@@ -121,7 +118,7 @@ const Sidebar: React.FC = () => {
                   ) : (
                     <button
                       onClick={() => {
-                        setIsNotificacoesExpanded(!isNotificacoesExpanded);
+                        setExpandedMenu(expandedMenu === 'notificacoes' ? null : 'notificacoes');
                         if (!isActiveLocal) navigate('/notificacoes');
                       }}
                       className={`flex items-center rounded-md text-sm transition-all duration-200 justify-start gap-3 px-3 py-2 w-full ${
@@ -133,12 +130,12 @@ const Sidebar: React.FC = () => {
                       <DynamicIcon name={module.icon} className="h-5 w-5 flex-shrink-0" />
                       <div className="flex flex-1 items-center justify-between">
                         <span className="truncate">{module.name}</span>
-                        <ChevronRight className={`h-4 w-4 transition-transform ${isNotificacoesExpanded ? 'rotate-90' : ''}`} />
+                        <ChevronRight className={`h-4 w-4 transition-transform ${expandedMenu === 'notificacoes' ? 'rotate-90' : ''}`} />
                       </div>
                     </button>
                   )}
 
-                  {!isCollapsed && isNotificacoesExpanded && (
+                  {!isCollapsed && expandedMenu === 'notificacoes' && (
                     <div className="flex flex-col ml-9 mt-1 gap-1 border-l-2 border-border pl-2 border-primary/20">
                       <NavLink
                         to="/notificacoes"
@@ -186,7 +183,7 @@ const Sidebar: React.FC = () => {
                   ) : (
                     <button
                       onClick={() => {
-                        setIsRecepcaoExpanded(!isRecepcaoExpanded);
+                        setExpandedMenu(expandedMenu === 'recepcao' ? null : 'recepcao');
                         if (!isActiveLocal) navigate('/recepcao');
                       }}
                       className={`flex items-center rounded-md text-sm transition-all duration-200 justify-start gap-3 px-3 py-2 w-full ${
@@ -198,12 +195,12 @@ const Sidebar: React.FC = () => {
                       <DynamicIcon name={module.icon} className="h-5 w-5 flex-shrink-0" />
                       <div className="flex flex-1 items-center justify-between">
                         <span className="truncate">{module.name}</span>
-                        <ChevronRight className={`h-4 w-4 transition-transform ${isRecepcaoExpanded ? 'rotate-90' : ''}`} />
+                        <ChevronRight className={`h-4 w-4 transition-transform ${expandedMenu === 'recepcao' ? 'rotate-90' : ''}`} />
                       </div>
                     </button>
                   )}
 
-                  {!isCollapsed && isRecepcaoExpanded && (
+                  {!isCollapsed && expandedMenu === 'recepcao' && (
                     <div className="flex flex-col ml-9 mt-1 gap-1 border-l-2 border-border pl-2 border-primary/20">
                       <NavLink
                         to="/recepcao"
@@ -241,6 +238,95 @@ const Sidebar: React.FC = () => {
                         }
                       >
                          Terceiros
+                      </NavLink>
+                    </div>
+                  )}
+                </div>
+              );
+            }
+
+            if (module.slug === 'taxa-ocupacao') {
+              const isActiveLocal = location.pathname.startsWith('/taxa-ocupacao');
+              return (
+                <div key={module.slug} className="flex flex-col">
+                  {isCollapsed ? (
+                    <NavLink
+                      to={`/${module.slug}`}
+                      title={module.name}
+                      className={navLinkClass(isActiveLocal)}
+                    >
+                      <DynamicIcon name={module.icon} className="h-5 w-5 flex-shrink-0" />
+                    </NavLink>
+                  ) : (
+                    <button
+                      onClick={() => {
+                        setExpandedMenu(expandedMenu === 'taxa-ocupacao' ? null : 'taxa-ocupacao');
+                        if (!isActiveLocal) navigate('/taxa-ocupacao');
+                      }}
+                      className={`flex items-center rounded-md text-sm transition-all duration-200 justify-start gap-3 px-3 py-2 w-full ${
+                        isActiveLocal
+                          ? 'bg-primary text-primary-foreground shadow-sm hover:shadow-md hover:shadow-primary/20 font-medium'
+                          : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                      }`}
+                    >
+                      <DynamicIcon name={module.icon} className="h-5 w-5 flex-shrink-0" />
+                      <div className="flex flex-1 items-center justify-between">
+                        <span className="truncate">{module.name}</span>
+                        <ChevronRight className={`h-4 w-4 transition-transform ${expandedMenu === 'taxa-ocupacao' ? 'rotate-90' : ''}`} />
+                      </div>
+                    </button>
+                  )}
+
+                  {!isCollapsed && expandedMenu === 'taxa-ocupacao' && (
+                    <div className="flex flex-col ml-9 mt-1 gap-1 border-l-2 border-border pl-2 border-primary/20">
+                      <NavLink
+                        to="/taxa-ocupacao"
+                        end
+                        className={({ isActive }) => 
+                          `text-sm px-3 py-2 rounded-md transition-colors ${
+                            isActive 
+                              ? 'bg-primary text-primary-foreground shadow-sm font-medium' 
+                              : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                          }`
+                        }
+                      >
+                         Visão Geral
+                      </NavLink>
+                      <NavLink
+                        to="/taxa-ocupacao/cadastro-setor-leitos"
+                        className={({ isActive }) => 
+                          `text-sm px-3 py-2 rounded-md transition-colors ${
+                            isActive 
+                              ? 'bg-primary text-primary-foreground shadow-sm font-medium' 
+                              : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                          }`
+                        }
+                      >
+                         Cadastro Setor e Leitos
+                      </NavLink>
+                      <NavLink
+                        to="/taxa-ocupacao/lancamento-taxas"
+                        className={({ isActive }) => 
+                          `text-sm px-3 py-2 rounded-md transition-colors ${
+                            isActive 
+                              ? 'bg-primary text-primary-foreground shadow-sm font-medium' 
+                              : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                          }`
+                        }
+                      >
+                         Lançamento de Taxas
+                      </NavLink>
+                      <NavLink
+                        to="/taxa-ocupacao/relatorios"
+                        className={({ isActive }) => 
+                          `text-sm px-3 py-2 rounded-md transition-colors ${
+                            isActive 
+                              ? 'bg-primary text-primary-foreground shadow-sm font-medium' 
+                              : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                          }`
+                        }
+                      >
+                         Relatórios
                       </NavLink>
                     </div>
                   )}

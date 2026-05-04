@@ -25,10 +25,12 @@
     "sharp": "^0.34.5"
   },
   "devDependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
     "@tailwindcss/vite": "^4.2.2",
     "@types/multer": "^2.1.0",
     "@types/node": "^22.14.0",
     "@vitejs/plugin-react": "^5.0.0",
+    "eventsource": "^4.1.0",
     "multer": "^1.4.5-lts.1",
     "react-grab": "^0.1.32",
     "tailwindcss": "^4.2.2",

@@ -10,10 +10,10 @@ const Recepcao: React.FC = () => {
   return (
     <Routes>
       <Route path="/" element={<VisaoGeral />} />
-      <Route path="/visitantes" element={<Visitantes />} />
-      <Route path="/visitantes/novo" element={<VisitanteForm />} />
-      <Route path="/visitantes/editar/:id" element={<VisitanteForm />} />
-      <Route path="/terceiros" element={<Terceiros />} />
+      <Route path="visitantes" element={<Visitantes />} />
+      <Route path="visitantes/novo" element={<VisitanteForm />} />
+      <Route path="visitantes/editar/:id" element={<VisitanteForm />} />
+      <Route path="terceiros" element={<Terceiros />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
