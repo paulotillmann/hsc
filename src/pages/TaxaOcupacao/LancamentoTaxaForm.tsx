@@ -75,15 +75,35 @@ const LancamentoTaxaForm: React.FC = () => {
 
 
   const fetchSetores = async () => {
-    // TODO: Ideally filter by 'taxa_setores_usuarios' based on current user
+    const { data: { user }, error: userError } = await supabase.auth.getUser();
+    if (userError || !user) {
+      console.error("Erro ao obter usuário logado:", userError);
+      return;
+    }
+
     const { data, error } = await supabase
       .from('taxa_setores')
-      .select('id, nome_setor, total_leitos, total_leitos_sus')
+      .select(`
+        id, 
+        nome_setor, 
+        total_leitos, 
+        total_leitos_sus,
+        taxa_setores_usuarios!inner(usuario_id)
+      `)
       .eq('ativo', true)
+      .eq('taxa_setores_usuarios.usuario_id', user.id)
       .order('nome_setor');
       
     if (data && !error) {
-      setSetores(data);
+      const setoresMapeados = data.map(item => ({
+        id: item.id,
+        nome_setor: item.nome_setor,
+        total_leitos: item.total_leitos,
+        total_leitos_sus: item.total_leitos_sus
+      }));
+      setSetores(setoresMapeados);
+    } else if (error) {
+      console.error("Erro ao buscar setores autorizados:", error);
     }
   };
 
