@@ -148,21 +148,8 @@ export default function VisaoGeral() {
     };
   }, [lancamentos]);
 
-  // Label Customizado para % dentro do gráfico
-  const renderCustomizedLabel = ({ cx, cy, midAngle, innerRadius, outerRadius, percent, index }: any) => {
-    const RADIAN = Math.PI / 180;
-    const radius = innerRadius + (outerRadius - innerRadius) * 0.5;
-    const x = cx + radius * Math.cos(-midAngle * RADIAN);
-    const y = cy + radius * Math.sin(-midAngle * RADIAN);
-
-    if (percent < 0.05) return null;
-
-    return (
-      <text x={x} y={y} fill="white" fontSize="16" fontWeight="bold" textAnchor="middle" dominantBaseline="central">
-        {`${(percent * 100).toFixed(0)}%`}
-      </text>
-    );
-  };
+  const percentGeral = statsGeral.total > 0 ? Math.round((statsGeral.ocupados / statsGeral.total) * 100) : 0;
+  const percentSUS = statsSUS.total > 0 ? Math.round((statsSUS.ocupados / statsSUS.total) * 100) : 0;
 
   const dataChartGeral = [
     { name: 'Ocupados', value: statsGeral.ocupados, color: COLOR_OCUPADOS },
@@ -263,41 +250,37 @@ export default function VisaoGeral() {
                       data={dataChartGeral}
                       cx="50%"
                       cy="50%"
-                      innerRadius={70}
+                      innerRadius={85}
                       outerRadius={110}
                       startAngle={90}
                       endAngle={-270}
                       dataKey="value"
                       stroke="none"
-                      labelLine={false}
-                      label={renderCustomizedLabel}
+                      cornerRadius={20}
+                      paddingAngle={5}
                     >
                       {dataChartGeral.map((entry, index) => (
                         <Cell key={`cell-${index}`} fill={entry.color} />
                       ))}
                     </Pie>
-                    <Tooltip 
-                      contentStyle={{ borderRadius: '8px', border: '1px solid hsl(var(--border))' }}
-                      formatter={(val: number) => [`${val} leito(s)`, '']}
-                    />
+
                   </PieChart>
                 </ResponsiveContainer>
                 {/* Texto Central */}
                 <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                  <span className="text-4xl font-extrabold text-[#002f5a] dark:text-blue-100 leading-none">{statsGeral.total}</span>
-                  <span className="text-sm font-bold text-[#002f5a] dark:text-blue-100 mt-1">leitos</span>
+                  <span className="text-5xl font-extrabold text-foreground leading-none">{statsGeral.total}</span>
+                  <span className="text-sm font-medium text-muted-foreground mt-2">leitos</span>
                 </div>
               </div>
 
-              {/* Legenda Customizada */}
-              <div className="mt-8 flex flex-col gap-2 text-[15px] font-medium w-full max-w-[200px]">
-                <div className="flex items-center gap-3">
-                  <div className="w-4 h-4 rounded-sm" style={{ backgroundColor: COLOR_OCUPADOS }}></div>
-                  <span className="text-foreground">Ocupados: {statsGeral.ocupados}</span>
+              <div className="mt-8 flex justify-center items-center gap-6 text-[15px] font-medium w-full">
+                <div className="flex items-center gap-2">
+                  <div className="w-4 h-4 rounded-full" style={{ backgroundColor: COLOR_OCUPADOS }}></div>
+                  <span className="text-foreground">Ocupados ({statsGeral.ocupados})</span>
                 </div>
-                <div className="flex items-center gap-3">
-                  <div className="w-4 h-4 rounded-sm" style={{ backgroundColor: COLOR_LIVRES }}></div>
-                  <span className="text-foreground">Livres: {statsGeral.livres}</span>
+                <div className="flex items-center gap-2">
+                  <div className="w-4 h-4 rounded-full" style={{ backgroundColor: COLOR_LIVRES }}></div>
+                  <span className="text-foreground">Livres ({statsGeral.livres})</span>
                 </div>
               </div>
             </div>
@@ -315,41 +298,37 @@ export default function VisaoGeral() {
                       data={dataChartSUS}
                       cx="50%"
                       cy="50%"
-                      innerRadius={70}
+                      innerRadius={85}
                       outerRadius={110}
                       startAngle={90}
                       endAngle={-270}
                       dataKey="value"
                       stroke="none"
-                      labelLine={false}
-                      label={renderCustomizedLabel}
+                      cornerRadius={20}
+                      paddingAngle={5}
                     >
                       {dataChartSUS.map((entry, index) => (
                         <Cell key={`cell-${index}`} fill={entry.color} />
                       ))}
                     </Pie>
-                    <Tooltip 
-                      contentStyle={{ borderRadius: '8px', border: '1px solid hsl(var(--border))' }}
-                      formatter={(val: number) => [`${val} leito(s)`, '']}
-                    />
+
                   </PieChart>
                 </ResponsiveContainer>
                 {/* Texto Central */}
                 <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                  <span className="text-4xl font-extrabold text-[#002f5a] dark:text-blue-100 leading-none">{statsSUS.total}</span>
-                  <span className="text-sm font-bold text-[#002f5a] dark:text-blue-100 mt-1">leitos</span>
+                  <span className="text-5xl font-extrabold text-foreground leading-none">{statsSUS.total}</span>
+                  <span className="text-sm font-medium text-muted-foreground mt-2">leitos</span>
                 </div>
               </div>
 
-              {/* Legenda Customizada */}
-              <div className="mt-8 flex flex-col gap-2 text-[15px] font-medium w-full max-w-[200px]">
-                <div className="flex items-center gap-3">
-                  <div className="w-4 h-4 rounded-sm" style={{ backgroundColor: COLOR_OCUPADOS }}></div>
-                  <span className="text-foreground">Ocupados: {statsSUS.ocupados}</span>
+              <div className="mt-8 flex justify-center items-center gap-6 text-[15px] font-medium w-full">
+                <div className="flex items-center gap-2">
+                  <div className="w-4 h-4 rounded-full" style={{ backgroundColor: COLOR_OCUPADOS }}></div>
+                  <span className="text-foreground">Ocupados ({statsSUS.ocupados})</span>
                 </div>
-                <div className="flex items-center gap-3">
-                  <div className="w-4 h-4 rounded-sm" style={{ backgroundColor: COLOR_LIVRES }}></div>
-                  <span className="text-foreground">Livres: {statsSUS.livres}</span>
+                <div className="flex items-center gap-2">
+                  <div className="w-4 h-4 rounded-full" style={{ backgroundColor: COLOR_LIVRES }}></div>
+                  <span className="text-foreground">Livres ({statsSUS.livres})</span>
                 </div>
               </div>
             </div>
