@@ -240,7 +240,8 @@ export default function Visitantes() {
         startCursor, 
         reverseOrder: reverseSyncVisitas,
         dateFrom: dateFromVisitas || undefined,
-        dateTo: dateToVisitas || undefined
+        dateTo: dateToVisitas || undefined,
+        identificadoComo: ['VISITANTE', 'ACOMPANHANTE']
       }
     );
     setIsSyncingVisitas(false);
@@ -258,7 +259,8 @@ export default function Visitantes() {
         reverseOrder: reverseSyncVisitas, 
         previousProgress: syncVisitasProgress,
         dateFrom: dateFromVisitas || undefined,
-        dateTo: dateToVisitas || undefined
+        dateTo: dateToVisitas || undefined,
+        identificadoComo: ['VISITANTE', 'ACOMPANHANTE']
       }
     );
     setIsSyncingVisitas(false);
@@ -391,8 +393,16 @@ export default function Visitantes() {
                 placeholder="Pesquisar por nome, CPF ou telefone..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full bg-background border border-border rounded-md pl-9 pr-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary transition-all"
+                className="w-full bg-background border border-border rounded-md pl-9 pr-10 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary transition-all"
               />
+              {searchTerm && (
+                <button
+                  onClick={() => setSearchTerm('')}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              )}
             </div>
             
             <div className="relative group w-full sm:w-auto">
@@ -469,7 +479,7 @@ export default function Visitantes() {
                           )}
                         </div>
                         <div className="flex flex-col">
-                          <span className="font-medium text-foreground truncate">{item.nome}</span>
+                          <span className="font-medium text-foreground truncate">{item.nome || 'NÃO INFORMADO'}</span>
                           <div className="flex items-center gap-1 mt-0.5">
                             {item.bloqueado && (
                               <span className="inline-flex items-center rounded-full bg-destructive/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-destructive border border-destructive/20">

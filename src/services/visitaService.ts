@@ -27,6 +27,8 @@ export interface Visita {
   atendente: string | null;
   bubble_created_by: string | null;
   ativo: boolean;
+  motivo_acesso_terceiro?: string | null;
+  setor_acesso_terceiro?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -66,7 +68,7 @@ const BUBBLE_LIMIT = 50;
 export async function sincronizarVisitas(
   onProgress: (progress: SyncProgress) => void,
   cancelRef: { current: boolean },
-  options?: { startCursor?: number; reverseOrder?: boolean; previousProgress?: SyncProgress; dateFrom?: string; dateTo?: string }
+  options?: { startCursor?: number; reverseOrder?: boolean; previousProgress?: SyncProgress; dateFrom?: string; dateTo?: string; identificadoComo?: string[] }
 ): Promise<SyncProgress> {
   const isResume = !!options?.startCursor && options.startCursor > 0;
 
@@ -93,7 +95,7 @@ export async function sincronizarVisitas(
     let cursor = options?.startCursor || 0;
 
     // 1. Busca primeiro lote para descobrir o total
-    const firstRes = await fetchBubblePage(cursor, options?.reverseOrder, 10, options?.dateFrom, options?.dateTo);
+    const firstRes = await fetchBubblePage(cursor, options?.reverseOrder, 10, options?.dateFrom, options?.dateTo, options?.identificadoComo);
 
     if (!isResume) {
       progress.total = firstRes.count + firstRes.remaining;
@@ -120,7 +122,7 @@ export async function sincronizarVisitas(
         return progress;
       }
 
-      const res = await fetchBubblePage(cursor, options?.reverseOrder, 10, options?.dateFrom, options?.dateTo);
+      const res = await fetchBubblePage(cursor, options?.reverseOrder, 10, options?.dateFrom, options?.dateTo, options?.identificadoComo);
       remaining = res.remaining;
 
       await processLote(res.results, progress, onProgress);
@@ -158,6 +160,24 @@ export async function listarVisitasPorVisitante(visitante_id: string): Promise<V
   }
 
   return data as Visita[];
+}
+
+export async function listarVisitasPorPaciente(pacienteNome: string): Promise<Visita[]> {
+  const { data, error } = await supabase
+    .from('visitas')
+    .select(`
+      *,
+      visitante:visitantes(nome)
+    `)
+    .eq('paciente', pacienteNome)
+    .order('data_hora_entrada', { ascending: false });
+
+  if (error) {
+    console.error('Erro ao buscar visitas por paciente:', error);
+    throw error;
+  }
+
+  return data as any[];
 }
 
 export async function obterProximoCracha(): Promise<number> {
@@ -279,15 +299,23 @@ interface BubbleVisitaPage {
 
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-async function fetchBubblePage(cursor: number, reverseOrder: boolean = false, retries = 10, dateFrom?: string, dateTo?: string): Promise<BubbleVisitaPage> {
+async function fetchBubblePage(cursor: number, reverseOrder: boolean = false, retries = 10, dateFrom?: string, dateTo?: string, identificadoComo?: string[]): Promise<BubbleVisitaPage> {
   const sortParams = reverseOrder ? '&sort_field=Created%20Date&descending=true' : '';
   
-  // Constraints de filtro por data (para contornar limite de 50k do cursor)
+  // Constraints de filtro
   let constraintParams = '';
-  if (dateFrom || dateTo) {
-    const constraints: any[] = [];
-    if (dateFrom) constraints.push({ key: 'Created Date', constraint_type: 'greater than', value: `${dateFrom}T00:00:00Z` });
-    if (dateTo) constraints.push({ key: 'Created Date', constraint_type: 'less than', value: `${dateTo}T00:00:00Z` });
+  const constraints: any[] = [];
+  if (dateFrom) constraints.push({ key: 'Created Date', constraint_type: 'greater than', value: `${dateFrom}T00:00:00Z` });
+  if (dateTo) constraints.push({ key: 'Created Date', constraint_type: 'less than', value: `${dateTo}T00:00:00Z` });
+  if (identificadoComo && identificadoComo.length > 0) {
+    if (identificadoComo.length === 1) {
+      constraints.push({ key: 'IdentificadoComo', constraint_type: 'equals', value: identificadoComo[0] });
+    } else {
+      constraints.push({ key: 'IdentificadoComo', constraint_type: 'in', value: identificadoComo });
+    }
+  }
+  
+  if (constraints.length > 0) {
     constraintParams = `&constraints=${encodeURIComponent(JSON.stringify(constraints))}`;
   }
   
@@ -346,9 +374,10 @@ function trimOrNull(value: string | null | undefined): string | null {
 async function processLote(results: any[], progress: SyncProgress, onProgress: (p: SyncProgress) => void) {
   if (results.length === 0) return;
 
-  // Filtra registros que possuem Paciente vazio ou nulo
+  // Filtra registros que possuem Paciente vazio ou nulo (exceto Terceiros)
   const registrosValidos = results.filter((r: any) => {
     const paciente = (r.Paciente ?? '').trim();
+    if (r.IdentificadoComo === 'TERCEIRO') return true;
     return paciente.length > 0;
   });
 
@@ -358,13 +387,15 @@ async function processLote(results: any[], progress: SyncProgress, onProgress: (
   const rows = registrosValidos.map((r: any) => ({
     bubble_id: r._id,
     visitante_bubble_id: r.Visitante ?? null,
-    paciente: (r.Paciente ?? '').trim(),
+    paciente: (r.Paciente && r.Paciente.trim().length > 0) ? r.Paciente.trim() : (r.IdentificadoComo === 'TERCEIRO' ? 'NÃO APLICÁVEL (TERCEIRO)' : ''),
     clinica: trimOrNull(r.Clinica),
     leito: trimOrNull(r.Leito),
     apartamento: trimOrNull(r.Apartamento),
     id_cracha: r.IDcracha ?? null,
     identificado_como: r.IdentificadoComo ?? 'VISITANTE',
     parentesco: trimOrNull(r.Parentesco),
+    motivo_acesso_terceiro: trimOrNull(r.MotivoAcessoTerceiro),
+    setor_acesso_terceiro: trimOrNull(r.SetorAcessoTerceiro),
     data_hora_entrada: r.DataHoraEntrada ?? null,
     data_hora_saida: r.DataHoraSaida ?? null,
     data_internacao: parseDataInternacao(r.DataInternacao),

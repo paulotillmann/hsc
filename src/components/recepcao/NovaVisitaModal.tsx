@@ -18,6 +18,7 @@ const OPCOES_PARENTESCO_PADRAO = ['PAI', 'MÃE', 'FILHO(A)', 'CÔNJUGE', 'IRMÃO
 
 export default function NovaVisitaModal({ isOpen, onClose, visitanteId, visitanteNome, onVisitaCriada }: NovaVisitaModalProps) {
   const [loading, setLoading] = useState(false);
+  const isTerceiroRoute = window.location.pathname.includes('/terceiros');
   
   // Dados Automáticos
   const [dataHoraEntrada, setDataHoraEntrada] = useState<Date>(new Date());
@@ -38,6 +39,11 @@ export default function NovaVisitaModal({ isOpen, onClose, visitanteId, visitant
   const [parentescoTipo, setParentescoTipo] = useState('OUTRO');
   const [parentescoCustom, setParentescoCustom] = useState('');
 
+  // Terceiros
+  const [setores, setSetores] = useState<string[]>([]);
+  const [setorAcesso, setSetorAcesso] = useState('');
+  const [motivoAcesso, setMotivoAcesso] = useState('');
+
   // Inicialização
   useEffect(() => {
     if (isOpen) {
@@ -46,15 +52,32 @@ export default function NovaVisitaModal({ isOpen, onClose, visitanteId, visitant
       carregarProximoCracha();
       carregarAtendenteLogado();
       
+      
+      if (isTerceiroRoute) {
+        carregarSetores();
+      }
+
       // Reset form
       setPacienteBusca('');
       setPacienteSelecionado(null);
       setIdentificadoComo('VISITANTE');
       setParentescoTipo('OUTRO');
       setParentescoCustom('');
+      setSetorAcesso('');
+      setMotivoAcesso('');
       setVisitaRegistradaId(null);
     }
-  }, [isOpen]);
+  }, [isOpen, isTerceiroRoute]);
+
+  const carregarSetores = async () => {
+    try {
+      const { data, error } = await supabase.from('taxa_setores').select('nome_setor').order('nome_setor');
+      if (error) throw error;
+      setSetores(data.map(d => d.nome_setor));
+    } catch (err) {
+      console.error('Erro ao carregar setores', err);
+    }
+  };
 
   // Busca de Pacientes
   useEffect(() => {
@@ -113,7 +136,7 @@ export default function NovaVisitaModal({ isOpen, onClose, visitanteId, visitant
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!pacienteSelecionado) {
+    if (!isTerceiroRoute && !pacienteSelecionado) {
       alert('Por favor, selecione um paciente.');
       return;
     }
@@ -125,13 +148,15 @@ export default function NovaVisitaModal({ isOpen, onClose, visitanteId, visitant
       const novaVisita = await inserirVisita({
         bubble_id: crypto.randomUUID(), // Temporário para não conflitar com importações do bubble
         visitante_id: visitanteId,
-        paciente: pacienteSelecionado.nome,
-        clinica: pacienteSelecionado.clinica,
-        leito: pacienteSelecionado.leito,
-        apartamento: pacienteSelecionado.apartamento,
-        data_internacao: pacienteSelecionado.data_internacao,
-        identificado_como: identificadoComo,
-        parentesco: parentescoFinal || null,
+        paciente: isTerceiroRoute ? 'NÃO APLICÁVEL (TERCEIRO)' : (pacienteSelecionado?.nome || ''),
+        clinica: pacienteSelecionado?.clinica || null,
+        leito: pacienteSelecionado?.leito || null,
+        apartamento: pacienteSelecionado?.apartamento || null,
+        data_internacao: pacienteSelecionado?.data_internacao || null,
+        identificado_como: isTerceiroRoute ? 'TERCEIRO' : identificadoComo,
+        parentesco: isTerceiroRoute ? null : (parentescoFinal || null),
+        setor_acesso_terceiro: isTerceiroRoute ? (setorAcesso || null) : null,
+        motivo_acesso_terceiro: isTerceiroRoute ? (motivoAcesso || null) : null,
         data_hora_entrada: dataHoraEntrada.toISOString(),
         id_cracha: idCracha,
         qrcode: qrcode,
@@ -163,7 +188,7 @@ export default function NovaVisitaModal({ isOpen, onClose, visitanteId, visitant
               <div>
                 <h3 className="text-xl font-bold flex items-center gap-2 text-foreground">
                   <UserCircle2 className="h-6 w-6 text-primary" />
-                  Nova Visita
+                  {isTerceiroRoute ? 'Nova Visita Terceiro' : 'Nova Visita'}
                 </h3>
                 <p className="text-sm text-muted-foreground mt-1">
                   Registrando entrada para: <span className="font-semibold text-foreground">{visitanteNome}</span>
@@ -190,7 +215,8 @@ export default function NovaVisitaModal({ isOpen, onClose, visitanteId, visitant
                 <form id="nova-visita-form" onSubmit={handleSubmit} className="space-y-6">
                 
                 {/* Paciente Section */}
-                <div className="bg-muted/10 border border-border rounded-xl p-5 space-y-4">
+                {!isTerceiroRoute && (
+                  <div className="bg-muted/10 border border-border rounded-xl p-5 space-y-4">
                   <h4 className="font-medium flex items-center gap-2 text-foreground">
                     <User className="h-4 w-4 text-primary" />
                     Dados do Paciente
@@ -272,9 +298,11 @@ export default function NovaVisitaModal({ isOpen, onClose, visitanteId, visitant
                     </div>
                   )}
                 </div>
+                )}
 
                 {/* Identificação Section */}
-                <div className="bg-muted/10 border border-border rounded-xl p-5 space-y-4">
+                {!isTerceiroRoute && (
+                  <div className="bg-muted/10 border border-border rounded-xl p-5 space-y-4">
                   <h4 className="font-medium flex items-center gap-2 text-foreground">
                     <BadgeIcon className="h-4 w-4 text-primary" />
                     Identificação da Visita
@@ -296,40 +324,84 @@ export default function NovaVisitaModal({ isOpen, onClose, visitanteId, visitant
                       </select>
                     </div>
                     
-                    <div>
-                      <label className="block text-sm font-medium mb-1">Parentesco</label>
-                      <div className="flex gap-2">
+                    {!isTerceiroRoute && (
+                      <>
+                        <div>
+                          <label className="block text-sm font-medium mb-1">Parentesco</label>
+                          <div className="flex gap-2">
+                            <select
+                              value={parentescoTipo}
+                              onChange={(e) => setParentescoTipo(e.target.value)}
+                              className="w-full h-10 rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                              disabled={loading}
+                            >
+                              <option value="">Selecione...</option>
+                              {OPCOES_PARENTESCO_PADRAO.map(opt => (
+                                <option key={opt} value={opt}>{opt}</option>
+                              ))}
+                              <option value="OUTRO">OUTRO (ESPECIFICAR)</option>
+                            </select>
+                          </div>
+                        </div>
+                        
+                        {parentescoTipo === 'OUTRO' && (
+                          <div className="sm:col-span-2">
+                            <label className="block text-sm font-medium mb-1">Especificar Parentesco *</label>
+                            <input
+                              type="text"
+                              value={parentescoCustom}
+                              onChange={(e) => setParentescoCustom(e.target.value)}
+                              className="w-full h-10 rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary uppercase"
+                              placeholder="EX: VIZINHO, PASTOR, MÉDICO..."
+                              required
+                              disabled={loading}
+                            />
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </div>
+                </div>
+                )}
+
+                {/* Terceiro Data Section */}
+                {isTerceiroRoute && (
+                  <div className="bg-muted/10 border border-border rounded-xl p-5 space-y-4">
+                    <h4 className="font-medium flex items-center gap-2 text-foreground">
+                      <Building className="h-4 w-4 text-primary" />
+                      Dados de Acesso
+                    </h4>
+                    
+                    <div className="grid grid-cols-1 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium mb-1">Setor de Acesso</label>
                         <select
-                          value={parentescoTipo}
-                          onChange={(e) => setParentescoTipo(e.target.value)}
+                          value={setorAcesso}
+                          onChange={(e) => setSetorAcesso(e.target.value)}
                           className="w-full h-10 rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
                           disabled={loading}
                         >
                           <option value="">Selecione...</option>
-                          {OPCOES_PARENTESCO_PADRAO.map(opt => (
+                          {setores.map(opt => (
                             <option key={opt} value={opt}>{opt}</option>
                           ))}
-                          <option value="OUTRO">OUTRO (ESPECIFICAR)</option>
                         </select>
                       </div>
-                    </div>
-                    
-                    {parentescoTipo === 'OUTRO' && (
-                      <div className="sm:col-span-2">
-                        <label className="block text-sm font-medium mb-1">Especificar Parentesco *</label>
-                        <input
-                          type="text"
-                          value={parentescoCustom}
-                          onChange={(e) => setParentescoCustom(e.target.value)}
-                          className="w-full h-10 rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary uppercase"
-                          placeholder="EX: VIZINHO, PASTOR, MÉDICO..."
-                          required
+
+                      <div>
+                        <label className="block text-sm font-medium mb-1">Motivo do Acesso</label>
+                        <textarea
+                          value={motivoAcesso}
+                          onChange={(e) => setMotivoAcesso(e.target.value)}
+                          rows={3}
+                          className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary resize-none"
+                          placeholder="Descreva o motivo do acesso..."
                           disabled={loading}
                         />
                       </div>
-                    )}
+                    </div>
                   </div>
-                </div>
+                )}
 
                 {/* Sistema Automático Section */}
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -391,7 +463,7 @@ export default function NovaVisitaModal({ isOpen, onClose, visitanteId, visitant
                     <button
                       type="submit"
                       form="nova-visita-form"
-                      disabled={loading || !pacienteSelecionado || idCracha === 0}
+                      disabled={loading || (!isTerceiroRoute && !pacienteSelecionado) || idCracha === 0}
                       className="inline-flex items-center justify-center rounded-md text-sm font-medium bg-primary text-primary-foreground hover:bg-primary/90 h-10 px-6 transition-colors disabled:opacity-50"
                     >
                       {loading ? (

@@ -70,6 +70,7 @@ const BUBBLE_LIMIT = 50; // reduzido para não dar timeout (Failed to fetch)
 export async function listarVisitantes(opts?: {
   busca?: string;
   cidade?: string;
+  terceiro?: boolean;
   page?: number;
   perPage?: number;
   orderBy?: string;
@@ -84,7 +85,9 @@ export async function listarVisitantes(opts?: {
     .from('visitantes')
     .select('*', { count: 'exact' })
     .eq('ativo', true)
-    .eq('terceiro', false)
+    .eq('terceiro', opts?.terceiro ?? false)
+    .neq('nome', '')
+    .not('nome', 'is', null)
     .order(opts?.orderBy || 'nome', { ascending: opts?.orderAsc ?? true })
     .range(from, to);
 

@@ -7,7 +7,7 @@ import DynamicIcon from './DynamicIcon';
 
 const Sidebar: React.FC = () => {
   const navigate = useNavigate();
-  const { signOut, profile } = useAuth();
+  const { signOut, profile, isAdmin } = useAuth();
   const { userModules } = usePermissions();
   const [isDark, setIsDark] = useState(false);
   const [isCollapsed, setIsCollapsed] = useState(false);
@@ -239,6 +239,18 @@ const Sidebar: React.FC = () => {
                       >
                          Terceiros
                       </NavLink>
+                      <NavLink
+                        to="/recepcao/pacientes"
+                        className={({ isActive }) => 
+                          `text-sm px-3 py-2 rounded-md transition-colors ${
+                            isActive 
+                              ? 'bg-primary text-primary-foreground shadow-sm font-medium' 
+                              : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                          }`
+                        }
+                      >
+                         Pacientes
+                      </NavLink>
                     </div>
                   )}
                 </div>
@@ -292,6 +304,7 @@ const Sidebar: React.FC = () => {
                       >
                          Visão Geral
                       </NavLink>
+                      {isAdmin && (
                       <NavLink
                         to="/taxa-ocupacao/cadastro-setor-leitos"
                         className={({ isActive }) => 
@@ -304,6 +317,7 @@ const Sidebar: React.FC = () => {
                       >
                          Cadastro Setor e Leitos
                       </NavLink>
+                      )}
                       <NavLink
                         to="/taxa-ocupacao/lancamento-taxas"
                         className={({ isActive }) => 

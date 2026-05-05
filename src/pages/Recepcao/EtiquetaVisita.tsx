@@ -121,11 +121,13 @@ export default function EtiquetaVisita() {
           {visitanteNome}
         </div>
 
-        {/* Dados do Paciente */}
+        {/* Dados do Paciente ou Setor */}
         <div className="mb-4">
-          <div className="text-[13px] text-slate-600">Paciente:</div>
+          <div className="text-[13px] text-slate-600">
+            {visita.identificado_como === 'TERCEIRO' ? 'Setor de Acesso:' : 'Paciente:'}
+          </div>
           <div className="font-bold text-[18px] leading-tight">
-            {visita.paciente}
+            {visita.identificado_como === 'TERCEIRO' ? (visita.setor_acesso_terceiro || 'N/A') : visita.paciente}
           </div>
         </div>
 
@@ -135,12 +137,24 @@ export default function EtiquetaVisita() {
           <div className="font-bold text-[18px] mb-2">
             {dataEntrada}
           </div>
-          <div className="font-bold text-[18px] uppercase">
-            {visita.clinica || 'N/A'}
-          </div>
-          <div className="text-[18px]">
-            Leito: <span className="font-bold uppercase">{visita.leito || 'N/A'}</span>
-          </div>
+          
+          {visita.identificado_como === 'TERCEIRO' ? (
+            <>
+              <div className="text-[13px] text-slate-600">Motivo do Acesso:</div>
+              <div className="font-bold text-[14px] uppercase leading-tight mt-0.5 overflow-hidden text-ellipsis">
+                {visita.motivo_acesso_terceiro || 'N/A'}
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="font-bold text-[18px] uppercase">
+                {visita.clinica || 'N/A'}
+              </div>
+              <div className="text-[18px]">
+                Leito: <span className="font-bold uppercase">{visita.leito || 'N/A'}</span>
+              </div>
+            </>
+          )}
         </div>
 
         {/* Rodapé: Ícone e QRCode */}
