@@ -4,6 +4,7 @@ import { AuthProvider } from './contexts/AuthContext';
 import PrivateRoute from './components/PrivateRoute';
 import DynamicRoute from './components/DynamicRoute';
 import Login from './pages/Login';
+import UpdatePassword from './pages/UpdatePassword';
 import Perfil from './pages/Perfil';
 import Layout from './components/Layout';
 import EtiquetaVisita from './pages/Recepcao/EtiquetaVisita';
@@ -23,6 +24,7 @@ const App: React.FC = () => {
         <Routes>
           {/* Rota pública: Login */}
           <Route path="/" element={<Login />} />
+          <Route path="/update-password" element={<UpdatePassword />} />
 
           {/* Rotas protegidas — exigem sessão ativa */}
           <Route element={<PrivateRoute />}>

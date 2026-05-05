@@ -31,6 +31,8 @@ interface AuthContextType {
   signIn: (email: string, password: string) => Promise<{ error: string | null }>;
   signUp: (email: string, password: string, fullName: string, phone: string, avatarUrl?: string) => Promise<{ error: string | null }>;
   signOut: () => Promise<void>;
+  resetPassword: (email: string) => Promise<{ error: string | null }>;
+  updatePassword: (password: string) => Promise<{ error: string | null }>;
   refreshProfile: () => Promise<void>;
   isAdmin: boolean;
 }
@@ -211,6 +213,27 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setProfileLoaded(false);
   };
 
+  const resetPassword = async (email: string): Promise<{ error: string | null }> => {
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/update-password`,
+    });
+    if (error) {
+      if (error.message.includes('User not found')) {
+        return { error: 'E-mail não encontrado.' };
+      }
+      return { error: 'Erro ao enviar e-mail de recuperação. Tente novamente.' };
+    }
+    return { error: null };
+  };
+
+  const updatePassword = async (password: string): Promise<{ error: string | null }> => {
+    const { error } = await supabase.auth.updateUser({ password });
+    if (error) {
+      return { error: 'Erro ao atualizar a senha. Tente novamente ou solicite um novo link.' };
+    }
+    return { error: null };
+  };
+
   const refreshProfile = async () => {
     if (user?.id) {
       setProfileLoaded(false);
@@ -225,7 +248,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     <AuthContext.Provider value={{
       session, user, profile, permissions, userModules, loading, profileLoaded,
       defaultModuleSlug,
-      signIn, signUp, signOut, refreshProfile, isAdmin,
+      signIn, signUp, signOut, resetPassword, updatePassword, refreshProfile, isAdmin,
     }}>
       {children}
     </AuthContext.Provider>

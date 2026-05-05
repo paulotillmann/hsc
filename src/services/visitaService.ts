@@ -598,3 +598,33 @@ export async function registrarSaidaLoteVisitantes(onProgress?: (p: SaidaLotePro
 
   return processado;
 }
+
+export async function buscarContagemVisitasAbertas(): Promise<Record<string, { visitante: number, acompanhante: number }>> {
+  const { data, error } = await supabase
+    .from('visitas')
+    .select('paciente, identificado_como')
+    .is('data_hora_saida', null)
+    // Filtro case-insensitive para os tipos
+    .in('identificado_como', ['VISITANTE', 'ACOMPANHANTE', 'Visitante', 'Acompanhante']);
+  
+  if (error) {
+    console.error('[Visitas] Erro ao buscar contagem de visitas abertas:', error.message);
+    return {};
+  }
+
+  const result: Record<string, { visitante: number, acompanhante: number }> = {};
+  
+  if (data) {
+    data.forEach(v => {
+      const p = v.paciente;
+      if (!p) return;
+      if (!result[p]) result[p] = { visitante: 0, acompanhante: 0 };
+      
+      const tipo = v.identificado_como?.toUpperCase();
+      if (tipo === 'VISITANTE') result[p].visitante++;
+      else if (tipo === 'ACOMPANHANTE') result[p].acompanhante++;
+    });
+  }
+  
+  return result;
+}

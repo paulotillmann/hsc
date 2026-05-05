@@ -7,9 +7,10 @@ import { supabase } from '../lib/supabase';
 
 const Login: React.FC = () => {
   const navigate = useNavigate();
-  const { signIn, signUp, session, loading, profileLoaded, defaultModuleSlug } = useAuth();
+  const { signIn, signUp, resetPassword, session, loading, profileLoaded, defaultModuleSlug } = useAuth();
 
   const [isRegistering, setIsRegistering] = useState(false);
+  const [isRecovering, setIsRecovering] = useState(false);
   const [isDark, setIsDark] = useState(false);
 
   // Estados de Login
@@ -76,6 +77,32 @@ const Login: React.FC = () => {
       setError(authError);
     }
     // O redirect será feito pelo useEffect acima assim que o profile for carregado
+  };
+
+  const handleRecoverPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    setSuccess(null);
+
+    if (!email.trim()) {
+      setError('Preencha o e-mail para recuperar a senha.');
+      return;
+    }
+
+    setIsSubmitting(true);
+    const { error: resetError } = await resetPassword(email.trim());
+    setIsSubmitting(false);
+
+    if (resetError) {
+      setError(resetError);
+    } else {
+      setSuccess('E-mail de recuperação enviado! Verifique sua caixa de entrada.');
+      setTimeout(() => {
+        setIsRecovering(false);
+        setSuccess(null);
+        setError(null);
+      }, 5000);
+    }
   };
 
   const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -150,11 +177,11 @@ const Login: React.FC = () => {
     }
   };
 
-  // Limpa os erros ao mudar de aba (Login <-> Cadastro)
+  // Limpa os erros ao mudar de aba (Login <-> Cadastro <-> Recuperação)
   useEffect(() => {
     setError(null);
     setSuccess(null);
-  }, [isRegistering]);
+  }, [isRegistering, isRecovering]);
 
   return (
     <div className="flex min-h-screen w-full items-center justify-center p-4 lg:p-6 bg-background transition-colors">
@@ -177,7 +204,7 @@ const Login: React.FC = () => {
         {/* ============================================================== */}
         <div className="md:w-[45%] p-8 bg-primary text-primary-foreground flex flex-col justify-center relative overflow-hidden transition-all duration-300">
           <AnimatePresence mode="wait">
-            {!isRegistering ? (
+            {!isRegistering && !isRecovering ? (
               <motion.div
                 key="left-login"
                 initial={{ opacity: 0, x: -20 }}
@@ -198,7 +225,7 @@ const Login: React.FC = () => {
                   <p className="text-[10px] opacity-70">versão 2.0</p>
                 </div>
               </motion.div>
-            ) : (
+            ) : isRegistering ? (
               <motion.div
                 key="left-register"
                 initial={{ opacity: 0, x: 20 }}
@@ -238,6 +265,34 @@ const Login: React.FC = () => {
                   </div>
                 </div>
               </motion.div>
+            ) : (
+              <motion.div
+                key="left-recovery"
+                initial={{ opacity: 0, x: 20 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: 20 }}
+                transition={{ duration: 0.3 }}
+                className="flex flex-col h-full items-start justify-center"
+              >
+                <h1 className="text-3xl font-bold tracking-tight mb-4 text-left">Recuperar Senha</h1>
+                <p className="font-normal opacity-90 text-sm mb-8 text-left leading-relaxed">
+                  Não se preocupe! Informe seu e-mail e enviaremos um link seguro para você redefinir sua senha.
+                </p>
+
+                <div className="flex flex-col gap-4 w-full">
+                  <div className="bg-black/10 p-4 rounded-xl border border-white/10">
+                    <div className="flex items-center gap-3 mb-2">
+                      <div className="p-2 bg-white/10 rounded-lg">
+                        <ShieldCheck className="w-5 h-5 text-primary-foreground" />
+                      </div>
+                      <h3 className="font-semibold text-sm">Processo Seguro</h3>
+                    </div>
+                    <p className="text-xs opacity-75 leading-relaxed">
+                      O link de recuperação é único e expira em algumas horas para garantir a segurança da sua conta.
+                    </p>
+                  </div>
+                </div>
+              </motion.div>
             )}
           </AnimatePresence>
         </div>
@@ -248,7 +303,7 @@ const Login: React.FC = () => {
         <div className="md:w-[55%] p-8 lg:p-12 flex flex-col justify-center bg-card relative">
           <AnimatePresence mode="wait">
             {/* -------------------- FORMULÁRIO DE LOGIN -------------------- */}
-            {!isRegistering ? (
+            {!isRegistering && !isRecovering ? (
               <motion.div
                 key="form-login"
                 initial={{ opacity: 0, y: 10 }}
@@ -276,7 +331,16 @@ const Login: React.FC = () => {
                   </div>
 
                   <div className="space-y-1 relative group">
-                    <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Senha</label>
+                    <div className="flex justify-between items-center">
+                      <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Senha</label>
+                      <button 
+                        type="button" 
+                        onClick={() => setIsRecovering(true)}
+                        className="text-xs text-primary hover:underline font-medium"
+                      >
+                        Esqueceu a senha?
+                      </button>
+                    </div>
                     <div className="relative">
                       <input
                         type={showLoginPassword ? "text" : "password"}
@@ -321,7 +385,7 @@ const Login: React.FC = () => {
                   </div>
                 </form>
               </motion.div>
-            ) : (
+            ) : isRegistering ? (
               /* -------------------- FORMULÁRIO DE CADASTRO -------------------- */
               <motion.div
                 key="form-register"
@@ -482,6 +546,68 @@ const Login: React.FC = () => {
                       className="px-6 py-2.5 bg-primary text-primary-foreground hover:opacity-90 rounded-md text-sm font-medium flex items-center justify-center gap-2 transition-colors shadow disabled:opacity-70 disabled:cursor-not-allowed"
                     >
                       {isSubmitting ? <><Loader2 className="w-4 h-4 animate-spin" /> Registrando...</> : 'Criar conta'}
+                    </button>
+                  </div>
+                </form>
+              </motion.div>
+            ) : (
+              /* -------------------- FORMULÁRIO DE RECUPERAÇÃO -------------------- */
+              <motion.div
+                key="form-recovery"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                transition={{ duration: 0.3 }}
+                className="w-full max-w-md mx-auto"
+              >
+                <div className="mb-8">
+                  <h2 className="text-4xl font-bold tracking-tight text-foreground mb-2">Esqueceu a Senha?</h2>
+                  <p className="text-sm text-muted-foreground font-medium">Enviaremos as instruções para o seu e-mail.</p>
+                </div>
+
+                <form className="space-y-4" onSubmit={handleRecoverPassword} noValidate>
+                  <div className="space-y-1">
+                    <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">E-mail</label>
+                    <input
+                      type="email"
+                      placeholder="voce@exemplo.com.br"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      disabled={isSubmitting}
+                      className="flex h-12 w-full rounded-md border bg-transparent px-4 py-2 text-sm transition-all focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent disabled:opacity-60"
+                    />
+                  </div>
+
+                  {error && (
+                    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex items-center gap-2 p-3 rounded-md bg-red-50 text-red-600 text-sm border border-red-200 dark:bg-red-500/10 dark:border-red-500/20 dark:text-red-400">
+                      <AlertCircle className="h-4 w-4 shrink-0" />
+                      {error}
+                    </motion.div>
+                  )}
+
+                  {success && (
+                    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex items-center gap-2 p-3 rounded-md bg-green-50 text-green-700 text-sm border border-green-200 dark:bg-green-500/10 dark:border-green-500/20 dark:text-green-400">
+                      <CheckCircle2 className="h-4 w-4 shrink-0" />
+                      {success}
+                    </motion.div>
+                  )}
+
+                  <div className="pt-2 flex flex-col space-y-4">
+                    <button
+                      type="submit"
+                      disabled={isSubmitting}
+                      className="inline-flex h-12 items-center justify-center gap-2 rounded-md bg-primary text-primary-foreground text-sm font-medium shadow hover:opacity-90 transition-all disabled:opacity-70 disabled:cursor-not-allowed"
+                    >
+                      {isSubmitting ? <><Loader2 className="w-4 h-4 animate-spin" /> Enviando...</> : 'Enviar link de recuperação'}
+                    </button>
+                    
+                    <button 
+                      type="button" 
+                      onClick={() => setIsRecovering(false)} 
+                      className="text-center text-sm font-medium text-muted-foreground hover:text-foreground mt-4 transition-colors"
+                      disabled={isSubmitting}
+                    >
+                      Voltar para o Login
                     </button>
                   </div>
                 </form>

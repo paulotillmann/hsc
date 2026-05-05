@@ -15,6 +15,7 @@ import {
   resolverVisitantesFk,
   listarVisitasPorVisitante,
   excluirVisita,
+  registrarSaidaVisita,
   SyncProgress as VisitaSyncProgress,
   ResolverFkProgress,
   Visita
@@ -56,6 +57,11 @@ export default function Visitantes() {
   const [deleteVisitaModalOpen, setDeleteVisitaModalOpen] = useState(false);
   const [visitaToDelete, setVisitaToDelete] = useState<Visita | null>(null);
   const [deleteVisitaLoading, setDeleteVisitaLoading] = useState(false);
+
+  // Encerrar Visita Modal State
+  const [encerrarVisitaModalOpen, setEncerrarVisitaModalOpen] = useState(false);
+  const [visitaToEncerrar, setVisitaToEncerrar] = useState<Visita | null>(null);
+  const [encerrarVisitaLoading, setEncerrarVisitaLoading] = useState(false);
 
   // Saída via QRCode Modal State
   const [saidaQRCodeModalOpen, setSaidaQRCodeModalOpen] = useState(false);
@@ -110,6 +116,11 @@ export default function Visitantes() {
     setDeleteVisitaModalOpen(true);
   };
 
+  const handleEncerrarVisita = (visita: Visita) => {
+    setVisitaToEncerrar(visita);
+    setEncerrarVisitaModalOpen(true);
+  };
+
   const confirmDeleteVisita = async () => {
     if (!visitaToDelete) return;
     setDeleteVisitaLoading(true);
@@ -122,6 +133,21 @@ export default function Visitantes() {
       alert(err.message);
     } finally {
       setDeleteVisitaLoading(false);
+    }
+  };
+
+  const confirmEncerrarVisita = async () => {
+    if (!visitaToEncerrar) return;
+    setEncerrarVisitaLoading(true);
+    try {
+      const updatedVisita = await registrarSaidaVisita(visitaToEncerrar.id);
+      setVisitasDoVisitante(prev => prev.map(v => v.id === updatedVisita.id ? updatedVisita : v));
+      setEncerrarVisitaModalOpen(false);
+      setVisitaToEncerrar(null);
+    } catch (err: any) {
+      alert(err.message);
+    } finally {
+      setEncerrarVisitaLoading(false);
     }
   };
 
@@ -1202,7 +1228,7 @@ export default function Visitantes() {
                           <th className="h-10 px-4 font-bold uppercase text-[10px] tracking-widest">Identificado</th>
                           <th className="h-10 px-4 font-bold uppercase text-[10px] tracking-widest">Parentesco</th>
                           <th className="h-10 px-4 font-bold uppercase text-[10px] tracking-widest">Atendente</th>
-                          {isAdmin && <th className="h-10 px-4 font-bold uppercase text-[10px] tracking-widest text-right">Ações</th>}
+                          <th className="h-10 px-4 font-bold uppercase text-[10px] tracking-widest text-right">Ações</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -1234,17 +1260,28 @@ export default function Visitantes() {
                             <td className="p-3 text-muted-foreground text-[11px] max-w-[100px] truncate" title={v.atendente || ''}>
                               {v.atendente || '-'}
                             </td>
-                            {isAdmin && (
-                              <td className="p-3 text-right">
-                                <button
-                                  onClick={() => handleDeleteVisita(v)}
-                                  className="p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
-                                  title="Excluir Visita"
-                                >
-                                  <Trash2 className="h-4 w-4" />
-                                </button>
-                              </td>
-                            )}
+                            <td className="p-3 text-right">
+                              <div className="flex items-center justify-end gap-2">
+                                {!v.data_hora_saida && (
+                                  <button
+                                    onClick={() => handleEncerrarVisita(v)}
+                                    className="p-1 rounded hover:bg-amber-500/10 text-muted-foreground hover:text-amber-500 transition-colors"
+                                    title="Encerrar Visita"
+                                  >
+                                    <LogOut className="h-4 w-4" />
+                                  </button>
+                                )}
+                                {isAdmin && (
+                                  <button
+                                    onClick={() => handleDeleteVisita(v)}
+                                    className="p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
+                                    title="Excluir Visita"
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </button>
+                                )}
+                              </div>
+                            </td>
                           </tr>
                         ))}
                       </tbody>
@@ -1331,6 +1368,61 @@ export default function Visitantes() {
                       <div className="h-5 w-5 rounded-full border-2 border-white border-t-transparent animate-spin" />
                     ) : (
                       'Confirmar Exclusão'
+                    )}
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Encerrar Visita Modal */}
+      <AnimatePresence>
+        {encerrarVisitaModalOpen && visitaToEncerrar && (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center bg-background/80 backdrop-blur-sm p-4">
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-[#1a1f2e] w-full max-w-sm rounded-3xl border border-white/5 shadow-2xl overflow-hidden p-8"
+            >
+              <div className="flex flex-col items-center text-center">
+                <div className="flex h-20 w-20 items-center justify-center rounded-full bg-amber-500/10 mb-6 border border-amber-500/20">
+                  <LogOut className="h-10 w-10 text-amber-500" />
+                </div>
+
+                <h3 className="text-2xl font-bold text-white mb-2">Encerrar Visita</h3>
+                <p className="text-slate-400 text-sm mb-6 px-4">
+                  Deseja registrar a saída para a visita abaixo?
+                </p>
+
+                <div className="w-full bg-[#242b3d] rounded-2xl p-4 mb-8 text-left border border-white/5">
+                  <p className="text-white font-bold text-sm uppercase truncate mb-1">
+                    {visitaToEncerrar.paciente}
+                  </p>
+                  <p className="text-slate-500 text-xs font-medium">
+                    Clínica/Leito: {visitaToEncerrar.clinica || '-'} / {visitaToEncerrar.leito || '-'}
+                  </p>
+                </div>
+                
+                <div className="grid grid-cols-2 gap-4 w-full">
+                  <button
+                    onClick={() => setEncerrarVisitaModalOpen(false)}
+                    disabled={encerrarVisitaLoading}
+                    className="flex items-center justify-center rounded-2xl text-sm font-bold border border-white/10 bg-[#242b3d]/50 text-slate-300 h-14 hover:bg-[#242b3d] transition-all disabled:opacity-50"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    onClick={confirmEncerrarVisita}
+                    disabled={encerrarVisitaLoading}
+                    className="flex items-center justify-center rounded-2xl text-sm font-bold bg-amber-600 text-white h-14 hover:bg-amber-700 transition-all shadow-[0_0_20px_rgba(217,119,6,0.3)] disabled:opacity-50"
+                  >
+                    {encerrarVisitaLoading ? (
+                      <div className="h-5 w-5 rounded-full border-2 border-white border-t-transparent animate-spin" />
+                    ) : (
+                      'Confirmar Saída'
                     )}
                   </button>
                 </div>

@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Search, ChevronLeft, ChevronRight, RefreshCw, Loader2, UserCircle2, X, ArrowUp, ArrowDown, History } from 'lucide-react';
+import { Search, ChevronLeft, ChevronRight, RefreshCw, Loader2, UserCircle2, X, ArrowUp, ArrowDown, History, LogOut } from 'lucide-react';
 import { buscarPacientes, limparCachePacientes, Paciente } from '../../services/pacienteService';
-import { listarVisitasPorPaciente } from '../../services/visitaService';
+import { listarVisitasPorPaciente, buscarContagemVisitasAbertas, registrarSaidaVisita } from '../../services/visitaService';
 
 export default function Pacientes() {
   const [pacientes, setPacientes] = useState<Paciente[]>([]);
@@ -13,10 +13,16 @@ export default function Pacientes() {
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
   const itemsPerPage = 12;
 
+  const [visitasAbertas, setVisitasAbertas] = useState<Record<string, { visitante: number, acompanhante: number }>>({});
+
   const [modalOpen, setModalOpen] = useState(false);
   const [selectedPaciente, setSelectedPaciente] = useState<Paciente | null>(null);
   const [visitasPaciente, setVisitasPaciente] = useState<any[]>([]);
   const [loadingVisitas, setLoadingVisitas] = useState(false);
+
+  const [encerrarVisitaModalOpen, setEncerrarVisitaModalOpen] = useState(false);
+  const [visitaToEncerrar, setVisitaToEncerrar] = useState<any | null>(null);
+  const [encerrarVisitaLoading, setEncerrarVisitaLoading] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -28,8 +34,12 @@ export default function Pacientes() {
       limparCachePacientes();
     }
     try {
-      const data = await buscarPacientes(searchTerm);
+      const [data, contagens] = await Promise.all([
+        buscarPacientes(searchTerm),
+        buscarContagemVisitasAbertas()
+      ]);
       setPacientes(data);
+      setVisitasAbertas(contagens);
       setCurrentPage(1); // Volta para a primeira página ao pesquisar
     } catch (err) {
       console.error('Erro ao carregar pacientes:', err);
@@ -86,6 +96,43 @@ export default function Pacientes() {
       console.error('Erro ao buscar visitas', error);
     } finally {
       setLoadingVisitas(false);
+    }
+  };
+
+  const handleEncerrarVisita = (visita: any) => {
+    setVisitaToEncerrar(visita);
+    setEncerrarVisitaModalOpen(true);
+  };
+
+  const confirmEncerrarVisita = async () => {
+    if (!visitaToEncerrar) return;
+    setEncerrarVisitaLoading(true);
+    try {
+      const updatedVisita = await registrarSaidaVisita(visitaToEncerrar.id);
+      setVisitasPaciente(prev => prev.map(v => v.id === updatedVisita.id ? updatedVisita : v));
+      
+      // Update counters in the main grid
+      if (selectedPaciente) {
+        setVisitasAbertas(prev => {
+           const pName = selectedPaciente.nome;
+           if (!prev[pName]) return prev;
+           
+           const tipo = visitaToEncerrar.identificado_como?.toUpperCase();
+           const novoCount = { ...prev[pName] };
+           
+           if (tipo === 'VISITANTE') novoCount.visitante = Math.max(0, novoCount.visitante - 1);
+           else if (tipo === 'ACOMPANHANTE') novoCount.acompanhante = Math.max(0, novoCount.acompanhante - 1);
+           
+           return { ...prev, [pName]: novoCount };
+        });
+      }
+
+      setEncerrarVisitaModalOpen(false);
+      setVisitaToEncerrar(null);
+    } catch (err: any) {
+      alert(err.message);
+    } finally {
+      setEncerrarVisitaLoading(false);
     }
   };
 
@@ -173,13 +220,15 @@ export default function Pacientes() {
                     {sortField === 'data_internacao' && (sortOrder === 'asc' ? <ArrowUp className="h-4 w-4" /> : <ArrowDown className="h-4 w-4" />)}
                   </button>
                 </th>
+                <th scope="col" className="h-12 px-4 text-center align-middle font-medium text-muted-foreground">Visitantes</th>
+                <th scope="col" className="h-12 px-4 text-center align-middle font-medium text-muted-foreground">Acompanhantes</th>
                 <th scope="col" className="h-12 px-4 text-center align-middle font-medium text-muted-foreground w-20">Ações</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
               {loading ? (
                 <tr>
-                  <td colSpan={6} className="h-48 text-center">
+                  <td colSpan={8} className="h-48 text-center">
                     <div className="flex flex-col items-center justify-center gap-2">
                       <Loader2 className="h-8 w-8 animate-spin text-primary" />
                       <p className="text-muted-foreground font-medium">Carregando dados do Tasy...</p>
@@ -188,7 +237,7 @@ export default function Pacientes() {
                 </tr>
               ) : currentItems.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="h-32 text-center text-muted-foreground">
+                  <td colSpan={8} className="h-32 text-center text-muted-foreground">
                     Nenhum paciente encontrado.
                   </td>
                 </tr>
@@ -218,6 +267,16 @@ export default function Pacientes() {
                     </td>
                     <td className="p-4 align-middle font-medium">
                       {paciente.data_internacao ? new Date(paciente.data_internacao + 'T12:00:00Z').toLocaleDateString('pt-BR') : '-'}
+                    </td>
+                    <td className="p-4 align-middle text-center">
+                      <span className={`inline-flex items-center justify-center min-w-[2rem] px-2 py-0.5 rounded-full text-xs font-bold border ${visitasAbertas[paciente.nome]?.visitante > 0 ? 'bg-blue-500/15 text-blue-600 dark:text-blue-400 border-blue-500/20' : 'bg-muted text-muted-foreground border-transparent'}`}>
+                        {visitasAbertas[paciente.nome]?.visitante || 0}
+                      </span>
+                    </td>
+                    <td className="p-4 align-middle text-center">
+                      <span className={`inline-flex items-center justify-center min-w-[2rem] px-2 py-0.5 rounded-full text-xs font-bold border ${visitasAbertas[paciente.nome]?.acompanhante > 0 ? 'bg-purple-500/15 text-purple-600 dark:text-purple-400 border-purple-500/20' : 'bg-muted text-muted-foreground border-transparent'}`}>
+                        {visitasAbertas[paciente.nome]?.acompanhante || 0}
+                      </span>
                     </td>
                     <td className="p-4 align-middle text-center">
                       <button
@@ -336,6 +395,7 @@ export default function Pacientes() {
                           <th className="h-10 px-4 text-left font-medium text-muted-foreground">Crachá</th>
                           <th className="h-10 px-4 text-left font-medium text-muted-foreground">Entrada</th>
                           <th className="h-10 px-4 text-left font-medium text-muted-foreground">Saída</th>
+                          <th className="h-10 px-4 text-center font-medium text-muted-foreground w-16">Ações</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-border">
@@ -358,6 +418,17 @@ export default function Pacientes() {
                             <td className="p-4">
                               {v.data_hora_saida ? new Date(v.data_hora_saida).toLocaleString('pt-BR') : '-'}
                             </td>
+                            <td className="p-4 text-center">
+                              {!v.data_hora_saida && (
+                                <button
+                                  onClick={() => handleEncerrarVisita(v)}
+                                  className="p-1 rounded hover:bg-amber-500/10 text-muted-foreground hover:text-amber-500 transition-colors"
+                                  title="Encerrar Visita"
+                                >
+                                  <LogOut className="h-4 w-4" />
+                                </button>
+                              )}
+                            </td>
                           </tr>
                         ))}
                       </tbody>
@@ -372,6 +443,61 @@ export default function Pacientes() {
                 >
                   Fechar
                 </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Encerrar Visita Modal */}
+      <AnimatePresence>
+        {encerrarVisitaModalOpen && visitaToEncerrar && (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center bg-background/80 backdrop-blur-sm p-4">
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-[#1a1f2e] w-full max-w-sm rounded-3xl border border-white/5 shadow-2xl overflow-hidden p-8"
+            >
+              <div className="flex flex-col items-center text-center">
+                <div className="flex h-20 w-20 items-center justify-center rounded-full bg-amber-500/10 mb-6 border border-amber-500/20">
+                  <LogOut className="h-10 w-10 text-amber-500" />
+                </div>
+
+                <h3 className="text-2xl font-bold text-white mb-2">Encerrar Visita</h3>
+                <p className="text-slate-400 text-sm mb-6 px-4">
+                  Deseja registrar a saída para a visita abaixo?
+                </p>
+
+                <div className="w-full bg-[#242b3d] rounded-2xl p-4 mb-8 text-left border border-white/5">
+                  <p className="text-white font-bold text-sm uppercase truncate mb-1">
+                    {visitaToEncerrar.visitante?.nome || 'VISITANTE'}
+                  </p>
+                  <p className="text-slate-500 text-xs font-medium">
+                    Crachá: {visitaToEncerrar.id_cracha || '-'}
+                  </p>
+                </div>
+                
+                <div className="grid grid-cols-2 gap-4 w-full">
+                  <button
+                    onClick={() => setEncerrarVisitaModalOpen(false)}
+                    disabled={encerrarVisitaLoading}
+                    className="flex items-center justify-center rounded-2xl text-sm font-bold border border-white/10 bg-[#242b3d]/50 text-slate-300 h-14 hover:bg-[#242b3d] transition-all disabled:opacity-50"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    onClick={confirmEncerrarVisita}
+                    disabled={encerrarVisitaLoading}
+                    className="flex items-center justify-center rounded-2xl text-sm font-bold bg-amber-600 text-white h-14 hover:bg-amber-700 transition-all shadow-[0_0_20px_rgba(217,119,6,0.3)] disabled:opacity-50"
+                  >
+                    {encerrarVisitaLoading ? (
+                      <div className="h-5 w-5 rounded-full border-2 border-white border-t-transparent animate-spin" />
+                    ) : (
+                      'Confirmar Saída'
+                    )}
+                  </button>
+                </div>
               </div>
             </motion.div>
           </div>
