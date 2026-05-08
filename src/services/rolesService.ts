@@ -52,12 +52,13 @@ export interface UserProfile {
   created_at: string;
   default_module_slug: string | null;
   roles: { name: string; slug: string } | null;
+  is_blocked: boolean;
 }
 
 export async function fetchUsers(): Promise<UserProfile[]> {
   const { data, error } = await supabase
     .from('profiles')
-    .select('id, full_name, email, cpf, role, role_id, avatar_url, created_at, default_module_slug, roles(name, slug)')
+    .select('id, full_name, email, cpf, role, role_id, avatar_url, created_at, default_module_slug, is_blocked, roles(name, slug)')
     .order('full_name', { ascending: true });
 
   if (error) throw new Error(error.message);
@@ -95,3 +96,34 @@ export async function updateUserRole(
   if (!data || data.length === 0) return { success: false, error: 'Sem permissão para atualizar este perfil.' };
   return { success: true };
 }
+
+export async function updateUserBlockedStatus(
+  userId: string,
+  isBlocked: boolean
+): Promise<{ success: boolean; error?: string }> {
+  const { data, error } = await supabase
+    .from('profiles')
+    .update({ is_blocked: isBlocked })
+    .eq('id', userId)
+    .select('id');
+
+  if (error) return { success: false, error: error.message };
+  if (!data || data.length === 0) return { success: false, error: 'Sem permissão para atualizar este perfil.' };
+  return { success: true };
+}
+
+export async function updateUserProfile(
+  userId: string,
+  updates: Partial<Pick<UserProfile, 'full_name' | 'cpf' | 'role_id' | 'default_module_slug'>>
+): Promise<{ success: boolean; error?: string }> {
+  const { data, error } = await supabase
+    .from('profiles')
+    .update(updates)
+    .eq('id', userId)
+    .select('id');
+
+  if (error) return { success: false, error: error.message };
+  if (!data || data.length === 0) return { success: false, error: 'Sem permissão para atualizar este perfil.' };
+  return { success: true };
+}
+

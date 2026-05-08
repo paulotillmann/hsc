@@ -17,6 +17,7 @@ interface Profile {
   avatar_url: string | null;
   default_module_slug: string | null;
   roles: Role | null;
+  is_blocked: boolean;
 }
 
 interface AuthContextType {
@@ -75,6 +76,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
 
       if (data) {
+        if (data.is_blocked) {
+          console.warn('[AuthContext] Usuário bloqueado tentou acessar.');
+          await supabase.auth.signOut();
+          setSession(null);
+          setUser(null);
+          setProfile(null);
+          setPermissions(null);
+          setUserModules([]);
+          setProfileLoaded(true);
+          return;
+        }
+
         setProfile(data as Profile);
 
         const role = data.roles as Role | null;
@@ -167,7 +180,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // ── Auth actions ────────────────────────────────────────────────────────────
   const signIn = async (email: string, password: string): Promise<{ error: string | null }> => {
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) {
       if (error.message.includes('Invalid login credentials')) {
         return { error: 'E-mail ou senha incorretos.' };
@@ -177,6 +190,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
       return { error: 'Erro ao realizar login. Tente novamente.' };
     }
+    
+    // Check if user is blocked
+    if (data?.user) {
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('is_blocked')
+        .eq('id', data.user.id)
+        .single();
+        
+      if (profile?.is_blocked) {
+        await supabase.auth.signOut();
+        return { error: 'Usuário bloqueado. Você está impedido de usar o sistema.' };
+      }
+    }
+    
     return { error: null };
   };
 

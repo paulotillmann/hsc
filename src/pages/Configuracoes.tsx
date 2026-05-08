@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   Save, Send, Eye, EyeOff, CheckCircle2, AlertCircle, Loader2,
   Server, Mail, Shield, Users, Plus, Pencil, Trash2, X, Check, Layout,
+  Lock, Unlock, ChevronLeft, ChevronRight
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import {
@@ -10,7 +11,7 @@ import {
 } from '../services/settingsService';
 import {
   fetchRoles, createRole, updateRole, deleteRole,
-  fetchUsers, updateUserRole, updateUserDefaultModule, UserProfile,
+  fetchUsers, updateUserRole, updateUserDefaultModule, updateUserBlockedStatus, updateUserProfile, UserProfile,
 } from '../services/rolesService';
 import { Role } from '../types/permissions';
 import { fetchModulesWithRoles, ModuleWithRoles } from '../services/modulesService';
@@ -153,6 +154,172 @@ const RoleModal: React.FC<RoleModalProps> = ({ initial, isSystemRole, onSave, on
   );
 };
 
+// ── EditUserModal ──────────────────────────────────────────────────────────
+interface EditUserModalProps {
+  userProfile: UserProfile;
+  roles: Role[];
+  modules: ModuleWithRoles[];
+  onSave: (updates: Partial<Pick<UserProfile, 'full_name' | 'cpf' | 'role_id' | 'default_module_slug'>>) => void;
+  onClose: () => void;
+  saving: boolean;
+}
+
+const EditUserModal: React.FC<EditUserModalProps> = ({ userProfile, roles, modules, onSave, onClose, saving }) => {
+  const [form, setForm] = useState({
+    full_name: userProfile.full_name || '',
+    cpf: userProfile.cpf || '',
+    role_id: userProfile.role_id || '',
+    default_module_slug: userProfile.default_module_slug || '',
+  });
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    onSave({
+      full_name: form.full_name,
+      cpf: form.cpf,
+      role_id: form.role_id || null,
+      default_module_slug: form.default_module_slug || null,
+    });
+  };
+
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95 }}
+        animate={{ opacity: 1, scale: 1 }}
+        exit={{ opacity: 0, scale: 0.95 }}
+        className="bg-card border border-border rounded-xl shadow-2xl w-full max-w-md"
+      >
+        <div className="p-5 border-b border-border flex items-center justify-between">
+          <h3 className="font-bold text-foreground">Editar Usuário</h3>
+          <button onClick={onClose} className="text-muted-foreground hover:text-foreground transition-colors">
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="p-5 space-y-4">
+          <div>
+            <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider block mb-1">Nome Completo</label>
+            <input
+              type="text"
+              value={form.full_name}
+              onChange={e => setForm(p => ({ ...p, full_name: e.target.value }))}
+              placeholder="Ex: João da Silva"
+              className="w-full bg-background border border-border rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+            />
+          </div>
+          <div>
+            <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider block mb-1">CPF</label>
+            <input
+              type="text"
+              value={form.cpf}
+              onChange={e => setForm(p => ({ ...p, cpf: e.target.value }))}
+              placeholder="000.000.000-00"
+              className="w-full bg-background border border-border rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+            />
+          </div>
+          <div>
+            <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider block mb-1">Perfil de Acesso</label>
+            <select
+              value={form.role_id}
+              onChange={e => setForm(p => ({ ...p, role_id: e.target.value }))}
+              className="w-full bg-background border border-border rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+            >
+              <option value="">Selecionar perfil</option>
+              {roles.map(r => (
+                <option key={r.id} value={r.id}>{r.name}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider block mb-1">Módulo Inicial Padrão</label>
+            <select
+              value={form.default_module_slug}
+              onChange={e => setForm(p => ({ ...p, default_module_slug: e.target.value }))}
+              className="w-full bg-background border border-border rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+            >
+              <option value="">Padrão do sistema</option>
+              {modules.map(m => (
+                <option key={m.id} value={m.slug}>{m.name}</option>
+              ))}
+            </select>
+          </div>
+
+          <div className="flex gap-2 pt-1 mt-4">
+            <button
+              type="submit"
+              disabled={saving}
+              className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-md bg-primary text-primary-foreground text-sm font-medium hover:opacity-90 disabled:opacity-50 transition-all"
+            >
+              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
+              {saving ? 'Salvando...' : 'Salvar Alterações'}
+            </button>
+            <button type="button" onClick={onClose}
+              className="px-4 py-2.5 rounded-md border border-border text-foreground text-sm hover:bg-muted transition-colors">
+              Cancelar
+            </button>
+          </div>
+        </form>
+      </motion.div>
+    </div>
+  );
+};
+
+// ── ConfirmBlockModal ─────────────────────────────────────────────────────
+interface ConfirmBlockModalProps {
+  userProfile: UserProfile;
+  onConfirm: () => void;
+  onClose: () => void;
+  saving: boolean;
+}
+
+const ConfirmBlockModal: React.FC<ConfirmBlockModalProps> = ({ userProfile, onConfirm, onClose, saving }) => {
+  const isBlocked = userProfile.is_blocked;
+  const actionText = isBlocked ? 'desbloquear' : 'bloquear';
+  
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95 }}
+        animate={{ opacity: 1, scale: 1 }}
+        exit={{ opacity: 0, scale: 0.95 }}
+        className="bg-card border border-border rounded-xl shadow-2xl w-full max-w-md p-6 text-center"
+      >
+        <div className="mx-auto w-12 h-12 rounded-full bg-amber-500/10 flex items-center justify-center mb-4">
+          <AlertCircle className="h-6 w-6 text-amber-500" />
+        </div>
+        <h3 className="font-bold text-lg text-foreground mb-2">
+          Confirmar Ação
+        </h3>
+        <p className="text-sm text-muted-foreground mb-6">
+          Tem certeza que deseja {actionText} o acesso do usuário <strong className="text-foreground">{userProfile.full_name || userProfile.email}</strong>?
+        </p>
+        
+        <div className="flex gap-3 justify-center">
+          <button
+            onClick={onConfirm}
+            disabled={saving}
+            className={`inline-flex items-center justify-center min-w-[120px] px-4 py-2.5 rounded-md text-sm font-medium transition-all ${
+              isBlocked 
+                ? 'bg-primary text-primary-foreground hover:bg-primary/90' 
+                : 'bg-red-600 text-white hover:bg-red-700'
+            } disabled:opacity-50`}
+          >
+            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Confirmar'}
+          </button>
+          <button
+            onClick={onClose}
+            disabled={saving}
+            className="inline-flex items-center justify-center min-w-[120px] px-4 py-2.5 rounded-md bg-muted text-foreground hover:bg-muted/80 text-sm font-medium transition-all"
+          >
+            Cancelar
+          </button>
+        </div>
+      </motion.div>
+    </div>
+  );
+};
+
 // ── Main Page ─────────────────────────────────────────────────────────────
 const Configuracoes: React.FC = () => {
   const { user, profile, isAdmin } = useAuth();
@@ -244,7 +411,16 @@ const Configuracoes: React.FC = () => {
   const [usersLoading, setUsersLoading] = useState(false);
   const [updatingUser, setUpdatingUser] = useState<string | null>(null);
   const [updatingDefaultModule, setUpdatingDefaultModule] = useState<string | null>(null);
+  const [updatingBlockStatus, setUpdatingBlockStatus] = useState<string | null>(null);
   const [allModules, setAllModules] = useState<ModuleWithRoles[]>([]);
+  const [userPage, setUserPage] = useState(1);
+  const [userEditModal, setUserEditModal] = useState<UserProfile | null>(null);
+  const [userEditSaving, setUserEditSaving] = useState(false);
+  const [userConfirmBlockModal, setUserConfirmBlockModal] = useState<UserProfile | null>(null);
+  const USERS_PER_PAGE = 12;
+
+  const totalUserPages = Math.ceil(users.length / USERS_PER_PAGE);
+  const paginatedUsers = users.slice((userPage - 1) * USERS_PER_PAGE, userPage * USERS_PER_PAGE);
 
   const loadUsers = useCallback(async () => {
     setUsersLoading(true);
@@ -278,6 +454,38 @@ const Configuracoes: React.FC = () => {
       ? showToast('success', 'Módulo padrão atualizado!')
       : showToast('error', result.error || 'Erro ao atualizar módulo padrão.');
     if (result.success) await loadUsers();
+  };
+
+  const handleSaveUserEdit = async (updates: Partial<Pick<UserProfile, 'full_name' | 'cpf' | 'role_id' | 'default_module_slug'>>) => {
+    if (!userEditModal) return;
+    setUserEditSaving(true);
+    const result = await updateUserProfile(userEditModal.id, updates);
+    setUserEditSaving(false);
+    if (result.success) {
+      showToast('success', 'Usuário atualizado com sucesso!');
+      setUserEditModal(null);
+      await loadUsers();
+    } else {
+      showToast('error', result.error || 'Erro ao atualizar usuário.');
+    }
+  };
+
+  const handleToggleBlock = async () => {
+    if (!userConfirmBlockModal) return;
+    const newStatus = !userConfirmBlockModal.is_blocked;
+    const action = newStatus ? 'bloquear' : 'desbloquear';
+    
+    setUpdatingBlockStatus(userConfirmBlockModal.id);
+    const result = await updateUserBlockedStatus(userConfirmBlockModal.id, newStatus);
+    setUpdatingBlockStatus(null);
+    
+    if (result.success) {
+      showToast('success', `Usuário ${newStatus ? 'bloqueado' : 'desbloqueado'} com sucesso!`);
+      setUserConfirmBlockModal(null);
+      await loadUsers();
+    } else {
+      showToast('error', result.error || `Erro ao ${action} usuário.`);
+    }
   };
 
   // ── Tabs definition ──
@@ -555,6 +763,7 @@ const Configuracoes: React.FC = () => {
           ) : users.length === 0 ? (
             <div className="p-12 text-center text-muted-foreground text-sm">Nenhum usuário encontrado.</div>
           ) : (
+          <>
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
@@ -564,11 +773,12 @@ const Configuracoes: React.FC = () => {
                     <th className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Perfil</th>
                     <th className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Módulo Inicial</th>
                     <th className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden lg:table-cell">Criado em</th>
+                    <th className="text-right px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Ações</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
-                  {users.map(u => (
-                    <tr key={u.id} className="hover:bg-muted/20 transition-colors">
+                  {paginatedUsers.map(u => (
+                    <tr key={u.id} className={`transition-colors ${u.is_blocked ? 'bg-red-50/50 dark:bg-red-900/10' : 'hover:bg-muted/20'}`}>
                       <td className="px-5 py-3.5">
                         <div className="flex items-center gap-3">
                           <div className="h-8 w-8 rounded-full bg-primary/20 flex items-center justify-center text-primary font-bold text-xs flex-shrink-0 overflow-hidden border border-primary/20">
@@ -588,50 +798,89 @@ const Configuracoes: React.FC = () => {
                       </td>
                       <td className="px-5 py-3.5">
                         <div className="flex items-center gap-2">
-                          {updatingUser === u.id
-                            ? <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-                            : (
-                              <select
-                                value={u.role_id || ''}
-                                onChange={e => handleUserRoleChange(u.id, e.target.value)}
-                                className="bg-background border border-border rounded-md px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary transition-all cursor-pointer max-w-[180px]"
-                              >
-                                <option value="" disabled>Selecionar perfil</option>
-                                {roles.map(r => (
-                                  <option key={r.id} value={r.id}>{r.name}</option>
-                                ))}
-                              </select>
-                            )
-                          }
+                          <span className="text-sm text-foreground bg-muted/40 px-3 py-1 rounded-full border border-border">
+                            {roles.find(r => r.id === u.role_id)?.name || 'Sem perfil'}
+                          </span>
                         </div>
                       </td>
                       <td className="px-5 py-3.5">
-                        <div className="flex items-center gap-2">
-                          {updatingDefaultModule === u.id
-                            ? <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-                            : (
-                              <select
-                                value={u.default_module_slug || ''}
-                                onChange={e => handleUserDefaultModuleChange(u.id, e.target.value || null)}
-                                className="bg-background border border-border rounded-md px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary transition-all cursor-pointer max-w-[180px]"
-                              >
-                                <option value="">Padrão do sistema</option>
-                                {allModules.map(m => (
-                                  <option key={m.id} value={m.slug}>{m.name}</option>
-                                ))}
-                              </select>
-                            )
-                          }
+                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                          {allModules.find(m => m.slug === u.default_module_slug)?.name || 'Padrão do sistema'}
                         </div>
                       </td>
                       <td className="px-5 py-3.5 text-muted-foreground text-xs hidden lg:table-cell">
                         {u.created_at ? new Date(u.created_at).toLocaleDateString('pt-BR') : '—'}
+                      </td>
+                      <td className="px-5 py-3.5 text-right">
+                        <div className="flex items-center justify-end gap-1">
+                          <button
+                            onClick={() => setUserEditModal(u)}
+                            className="p-2 rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+                            title="Editar usuário"
+                          >
+                            <Pencil className="h-4 w-4" />
+                          </button>
+                          <button
+                            onClick={() => setUserConfirmBlockModal(u)}
+                            disabled={user?.id === u.id}
+                            className={`p-2 rounded-md transition-colors disabled:opacity-30 disabled:cursor-not-allowed ${
+                              u.is_blocked
+                                ? 'text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10'
+                                : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                            }`}
+                            title={u.is_blocked ? 'Desbloquear usuário' : 'Bloquear usuário'}
+                          >
+                            {u.is_blocked ? (
+                              <Lock className="h-4 w-4" />
+                            ) : (
+                              <Unlock className="h-4 w-4" />
+                            )}
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
+            
+            {/* Pagination */}
+            {totalUserPages > 1 && (
+              <div className="flex items-center justify-center px-5 py-4 border-t border-border bg-card">
+                <div className="flex items-center gap-1.5">
+                  <button
+                    onClick={() => setUserPage(p => Math.max(1, p - 1))}
+                    disabled={userPage === 1}
+                    className="w-8 h-8 flex items-center justify-center rounded-md bg-[#161b22] border border-border text-muted-foreground hover:text-foreground hover:bg-[#1f2530] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                  </button>
+                  
+                  {Array.from({ length: totalUserPages }, (_, i) => i + 1).map(page => (
+                    <button
+                      key={page}
+                      onClick={() => setUserPage(page)}
+                      className={`w-8 h-8 flex items-center justify-center rounded-md font-medium text-sm transition-colors border ${
+                        userPage === page 
+                          ? 'bg-primary text-primary-foreground border-primary shadow-md shadow-primary/20' 
+                          : 'bg-[#161b22] text-muted-foreground border-border hover:bg-[#1f2530] hover:text-foreground'
+                      }`}
+                    >
+                      {page}
+                    </button>
+                  ))}
+
+                  <button
+                    onClick={() => setUserPage(p => Math.min(totalUserPages, p + 1))}
+                    disabled={userPage === totalUserPages}
+                    className="w-8 h-8 flex items-center justify-center rounded-md bg-[#161b22] border border-border text-muted-foreground hover:text-foreground hover:bg-[#1f2530] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                  >
+                    <ChevronRight className="h-4 w-4" />
+                  </button>
+                </div>
+              </div>
+            )}
+          </>
           )}
         </div>
       )}
@@ -650,6 +899,32 @@ const Configuracoes: React.FC = () => {
             onSave={handleSaveRole}
             onClose={() => setRoleModal(null)}
             saving={roleSaving}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* ── User Edit Modal ── */}
+      <AnimatePresence>
+        {userEditModal && (
+          <EditUserModal
+            userProfile={userEditModal}
+            roles={roles}
+            modules={allModules}
+            onSave={handleSaveUserEdit}
+            onClose={() => setUserEditModal(null)}
+            saving={userEditSaving}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* ── Confirm Block Modal ── */}
+      <AnimatePresence>
+        {userConfirmBlockModal && (
+          <ConfirmBlockModal
+            userProfile={userConfirmBlockModal}
+            onConfirm={handleToggleBlock}
+            onClose={() => setUserConfirmBlockModal(null)}
+            saving={updatingBlockStatus === userConfirmBlockModal.id}
           />
         )}
       </AnimatePresence>
