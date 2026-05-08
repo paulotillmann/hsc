@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   Save, Send, Eye, EyeOff, CheckCircle2, AlertCircle, Loader2,
   Server, Mail, Shield, Users, Plus, Pencil, Trash2, X, Check, Layout,
-  Lock, Unlock, ChevronLeft, ChevronRight
+  Lock, Unlock, ChevronLeft, ChevronRight, Search
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import {
@@ -175,8 +175,8 @@ const EditUserModal: React.FC<EditUserModalProps> = ({ userProfile, roles, modul
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     onSave({
-      full_name: form.full_name,
-      cpf: form.cpf,
+      full_name: form.full_name.trim() || null,
+      cpf: form.cpf.trim() || null,
       role_id: form.role_id || null,
       default_module_slug: form.default_module_slug || null,
     });
@@ -417,10 +417,24 @@ const Configuracoes: React.FC = () => {
   const [userEditModal, setUserEditModal] = useState<UserProfile | null>(null);
   const [userEditSaving, setUserEditSaving] = useState(false);
   const [userConfirmBlockModal, setUserConfirmBlockModal] = useState<UserProfile | null>(null);
+  const [userSearchQuery, setUserSearchQuery] = useState('');
   const USERS_PER_PAGE = 12;
 
-  const totalUserPages = Math.ceil(users.length / USERS_PER_PAGE);
-  const paginatedUsers = users.slice((userPage - 1) * USERS_PER_PAGE, userPage * USERS_PER_PAGE);
+  const filteredUsers = React.useMemo(() => {
+    if (!userSearchQuery.trim()) return users;
+    const query = userSearchQuery.toLowerCase();
+    return users.filter(u => 
+      u.full_name?.toLowerCase().includes(query) || 
+      u.email?.toLowerCase().includes(query)
+    );
+  }, [users, userSearchQuery]);
+
+  const totalUserPages = Math.ceil(filteredUsers.length / USERS_PER_PAGE);
+  const paginatedUsers = filteredUsers.slice((userPage - 1) * USERS_PER_PAGE, userPage * USERS_PER_PAGE);
+
+  useEffect(() => {
+    setUserPage(1);
+  }, [userSearchQuery]);
 
   const loadUsers = useCallback(async () => {
     setUsersLoading(true);
@@ -732,14 +746,29 @@ const Configuracoes: React.FC = () => {
       {/* ── TAB: USUÁRIOS ── */}
       {activeTab === 'usuarios' && (
         <div className="bg-card border border-border shadow-sm rounded-xl overflow-hidden">
-          <div className="p-5 border-b border-border bg-muted/20 flex items-center gap-3">
-            <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center">
-              <Users className="h-5 w-5 text-primary" />
+          <div className="p-5 border-b border-border bg-muted/20 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center">
+                <Users className="h-5 w-5 text-primary" />
+              </div>
+              <div>
+                <h2 className="text-base font-bold text-foreground">Gerenciamento de Usuários</h2>
+                <p className="text-xs text-muted-foreground">Visualize e atribua perfis aos usuários do sistema</p>
+              </div>
             </div>
-            <div>
-              <h2 className="text-base font-bold text-foreground">Gerenciamento de Usuários</h2>
-              <p className="text-xs text-muted-foreground">Visualize e atribua perfis aos usuários do sistema</p>
-            </div>
+
+            {isAdmin && (
+              <div className="relative w-full sm:max-w-xs">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <input
+                  type="text"
+                  placeholder="Buscar por nome ou e-mail..."
+                  value={userSearchQuery}
+                  onChange={e => setUserSearchQuery(e.target.value)}
+                  className="w-full pl-9 pr-4 py-2 bg-background border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all"
+                />
+              </div>
+            )}
           </div>
 
           {/* ── Guard: apenas admin ── */}
@@ -760,8 +789,10 @@ const Configuracoes: React.FC = () => {
               <div className="h-8 w-8 rounded-full border-4 border-primary border-t-transparent animate-spin" />
               Carregando usuários...
             </div>
-          ) : users.length === 0 ? (
-            <div className="p-12 text-center text-muted-foreground text-sm">Nenhum usuário encontrado.</div>
+          ) : filteredUsers.length === 0 ? (
+            <div className="p-12 text-center text-muted-foreground text-sm">
+              {userSearchQuery ? 'Nenhum usuário encontrado para esta busca.' : 'Nenhum usuário cadastrado.'}
+            </div>
           ) : (
           <>
             <div className="overflow-x-auto">
