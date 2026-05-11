@@ -8,6 +8,9 @@ import UpdatePassword from './pages/UpdatePassword';
 import Perfil from './pages/Perfil';
 import Layout from './components/Layout';
 import EtiquetaVisita from './pages/Recepcao/EtiquetaVisita';
+import Totem from './pages/Senhas/Totem';
+import PainelTV from './pages/Senhas/PainelTV';
+import PainelAtendente from './pages/Senhas/PainelAtendente';
 
 const App: React.FC = () => {
   // Configuração Global de Tema
@@ -32,9 +35,16 @@ const App: React.FC = () => {
             {/* Rota de Impressão (Sem Layout da aplicação) */}
             <Route path="/imprimir/etiqueta/:id" element={<EtiquetaVisita />} />
 
+            {/* Rotas de Senhas (Sem Layout) */}
+            <Route path="/totem" element={<Totem />} />
+            <Route path="/painel-tv" element={<PainelTV />} />
+
             <Route element={<Layout />}>
               {/* Perfil: rota pública para qualquer usuário autenticado */}
               <Route path="/perfil" element={<Perfil />} />
+
+              {/* Rota Painel Atendente de Senhas */}
+              <Route path="/senhas-atendente" element={<PainelAtendente />} />
 
               {/* Rota dinâmica: resolve qualquer módulo cadastrado no banco */}
               {/* A permissão e o componente são resolvidos em DynamicRoute */}

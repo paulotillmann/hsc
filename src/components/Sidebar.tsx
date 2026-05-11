@@ -99,7 +99,7 @@ const Sidebar: React.FC = () => {
       </div>
 
       {/* ── Menu dinâmico gerado pelos módulos do perfil ── */}
-      <nav className="flex-1 p-3 flex flex-col gap-2 overflow-x-hidden overflow-y-auto pt-8">
+      <nav className="flex-1 p-3 flex flex-col gap-2 overflow-x-hidden overflow-y-auto pt-8 scrollbar-hide">
         {userModules
           .filter(m => m.slug !== 'configuracoes') // Configurações fica na área inferior
           .map(module => {
@@ -250,6 +250,18 @@ const Sidebar: React.FC = () => {
                         }
                       >
                          Pacientes
+                      </NavLink>
+                      <NavLink
+                        to="/senhas-atendente"
+                        className={({ isActive }) => 
+                          `text-sm px-3 py-2 rounded-md transition-colors ${
+                            isActive 
+                              ? 'bg-primary text-primary-foreground shadow-sm font-medium' 
+                              : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                          }`
+                        }
+                      >
+                         Painel de Senhas
                       </NavLink>
                     </div>
                   )}
