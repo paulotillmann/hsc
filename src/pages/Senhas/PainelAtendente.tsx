@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
 import { senhaService, Senha, ConfiguracaoTV } from '../../services/senhaService';
-import { Play, CheckCircle2, MonitorPlay, Save, Users, RefreshCw, Volume2, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Play, CheckCircle2, MonitorPlay, Save, Users, RefreshCw, Volume2, ChevronLeft, ChevronRight, FileText } from 'lucide-react';
+import RelatorioChamadasModal from '../../components/recepcao/RelatorioChamadasModal';
 
 const PainelAtendente: React.FC = () => {
   const [fila, setFila] = useState<Senha[]>([]);
@@ -15,6 +16,7 @@ const PainelAtendente: React.FC = () => {
   const [videoUrl, setVideoUrl] = useState('');
   const [guiche, setGuiche] = useState('1'); 
   const [loading, setLoading] = useState(false);
+  const [isRelatorioOpen, setIsRelatorioOpen] = useState(false);
 
   const setPage = (page: number) => {
     setCurrentPage(page);
@@ -110,14 +112,24 @@ const PainelAtendente: React.FC = () => {
           <p className="text-muted-foreground">Gerencie a fila e chame as próximas senhas</p>
         </div>
         
-        <div className="flex items-center gap-4 bg-card p-2 px-4 rounded-xl shadow-sm border border-border">
-          <label className="text-sm font-bold text-card-foreground">Meu Guichê:</label>
-          <input 
-            type="text" 
-            value={guiche} 
-            onChange={e => setGuiche(e.target.value)}
-            className="w-16 px-3 py-2 border border-border rounded-lg text-center bg-background text-foreground font-bold focus:ring-2 focus:ring-primary outline-none"
-          />
+        <div className="flex items-center gap-4">
+          <button
+            onClick={() => setIsRelatorioOpen(true)}
+            className="flex items-center gap-2 px-4 py-2 bg-card hover:bg-muted text-foreground border border-border rounded-xl shadow-sm text-sm font-bold transition-colors"
+          >
+            <FileText size={18} />
+            Relatório
+          </button>
+          
+          <div className="flex items-center gap-3 bg-card p-2 px-4 rounded-xl shadow-sm border border-border">
+            <label className="text-sm font-bold text-card-foreground">Meu Guichê:</label>
+            <input 
+              type="text" 
+              value={guiche} 
+              onChange={e => setGuiche(e.target.value)}
+              className="w-16 px-3 py-1.5 border border-border rounded-lg text-center bg-background text-foreground font-bold focus:ring-2 focus:ring-primary outline-none"
+            />
+          </div>
         </div>
       </div>
 
@@ -320,6 +332,11 @@ const PainelAtendente: React.FC = () => {
         </div>
 
       </div>
+
+      <RelatorioChamadasModal 
+        isOpen={isRelatorioOpen} 
+        onClose={() => setIsRelatorioOpen(false)} 
+      />
     </div>
   );
 };

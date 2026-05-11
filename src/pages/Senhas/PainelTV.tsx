@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { VolumeX, Volume2 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { senhaService, Senha } from '../../services/senhaService';
 
@@ -44,9 +45,44 @@ const PainelTV: React.FC = () => {
   const [senhaAtual, setSenhaAtual] = useState<Senha | null>(null);
   const [historico, setHistorico] = useState<Senha[]>([]);
   const [videoUrl, setVideoUrl] = useState('');
+  const [isMuted, setIsMuted] = useState(false); // Inicia com som por padrão
+  const isMutedRef = useRef(false);
+  const [isPlayingVoice, setIsPlayingVoice] = useState(false);
   const [piscar, setPiscar] = useState(false);
   const [interagiu, setInteragiu] = useState(false);
   const interagiuRef = useRef(false);
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+
+  useEffect(() => {
+    isMutedRef.current = isMuted;
+  }, [isMuted]);
+
+  const iframeSrc = useMemo(() => {
+    if (!videoUrl) return '';
+    const id = getYoutubeVideoId(videoUrl);
+    if (!id) return '';
+    return `https://www.youtube.com/embed/${id}?autoplay=1&mute=${isMutedRef.current ? 1 : 0}&loop=1&playlist=${id}&controls=0&modestbranding=1&enablejsapi=1`;
+  }, [videoUrl]);
+
+  const syncMuteState = () => {
+    if (iframeRef.current && iframeRef.current.contentWindow) {
+      const shouldBeMuted = isMuted || isPlayingVoice;
+      iframeRef.current.contentWindow.postMessage(
+        JSON.stringify({ event: 'command', func: shouldBeMuted ? 'mute' : 'unMute', args: [] }),
+        '*'
+      );
+    }
+  };
+
+  useEffect(() => {
+    syncMuteState();
+  }, [isMuted, isPlayingVoice]);
+
+  const handleIframeLoad = () => {
+    syncMuteState();
+    setTimeout(syncMuteState, 1000);
+    setTimeout(syncMuteState, 3000);
+  };
 
   useEffect(() => {
     carregarDadosIniciais();
@@ -78,7 +114,8 @@ const PainelTV: React.FC = () => {
 
   const carregarDadosIniciais = async () => {
     await carregarConfigTV();
-    const h = await senhaService.listarHistorico();
+    const response = await senhaService.listarHistorico(1, 5);
+    const h = response.data;
     setHistorico(h);
     if (h.length > 0 && h[0].status === 'chamando') {
       setSenhaAtual(h[0]);
@@ -104,6 +141,8 @@ const PainelTV: React.FC = () => {
     });
 
     if (interagiuRef.current) {
+      setIsPlayingVoice(true); // Muta o vídeo antes da campainha
+
       try {
         tocarCampainha();
       } catch (e) {
@@ -111,17 +150,40 @@ const PainelTV: React.FC = () => {
       }
 
       setTimeout(() => {
-        const texto = `Senha ${novaSenha.tipo === 'preferencial' ? 'preferencial' : 'normal'}, ${novaSenha.codigo.replace('-', ' ')}, guichê ${novaSenha.guiche}`;
-        const utterance = new SpeechSynthesisUtterance(texto);
-        utterance.lang = 'pt-BR';
-        utterance.rate = 0.9;
-        utterance.pitch = 1.1;
+        const criarUtterance = () => {
+          const texto = `Senha ${novaSenha.tipo === 'preferencial' ? 'preferencial' : 'normal'}, ${novaSenha.codigo.replace('-', ' ')}, guichê ${novaSenha.guiche}`;
+          const utterance = new SpeechSynthesisUtterance(texto);
+          utterance.lang = 'pt-BR';
+          utterance.rate = 0.9;
+          utterance.pitch = 1.1;
 
-        const voices = window.speechSynthesis.getVoices();
-        const vozFeminina = voices.find(v => v.lang === 'pt-BR' && (v.name.includes('Luciana') || v.name.includes('Maria') || v.name.toLowerCase().includes('feminina') || v.name.includes('Google português do Brasil')));
-        if (vozFeminina) utterance.voice = vozFeminina;
+          const voices = window.speechSynthesis.getVoices();
+          const vozMasculina = voices.find(v => v.lang === 'pt-BR' && (v.name.includes('Daniel') || v.name.includes('Thiago') || v.name.toLowerCase().includes('masculin')));
+          if (vozMasculina) {
+            utterance.voice = vozMasculina;
+          } else {
+            // Fallback caso não ache uma voz especificamente masculina
+            const fallback = voices.find(v => v.lang === 'pt-BR');
+            if (fallback) utterance.voice = fallback;
+          }
+          
+          return utterance;
+        };
 
-        window.speechSynthesis.speak(utterance);
+        const utterance1 = criarUtterance();
+        const utterance2 = criarUtterance();
+
+        utterance1.onend = () => {
+          setTimeout(() => {
+            window.speechSynthesis.speak(utterance2);
+          }, 2000);
+        };
+
+        utterance2.onend = () => {
+          setIsPlayingVoice(false);
+        };
+
+        window.speechSynthesis.speak(utterance1);
       }, 1500);
     }
   };
@@ -151,18 +213,27 @@ const PainelTV: React.FC = () => {
         
         {/* LADO ESQUERDO: VÍDEO */}
         <div className="flex-1 bg-black relative border-r-8 border-slate-800 overflow-hidden group">
-          {videoUrl && getYoutubeVideoId(videoUrl) ? (
+          {iframeSrc ? (
             <>
               <iframe
+                ref={iframeRef}
+                onLoad={handleIframeLoad}
                 width="100%"
                 height="100%"
-                src={`https://www.youtube.com/embed/${getYoutubeVideoId(videoUrl)}?autoplay=1&mute=1&loop=1&playlist=${getYoutubeVideoId(videoUrl)}&controls=0&modestbranding=1`}
+                src={iframeSrc}
                 title="YouTube video player"
                 frameBorder="0"
                 allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
                 allowFullScreen
                 style={{ position: 'absolute', top: 0, left: 0 }}
               ></iframe>
+              <button 
+                onClick={() => setIsMuted(!isMuted)}
+                className="absolute top-4 right-4 bg-black/50 hover:bg-black/80 text-white p-3 rounded-full z-50 transition-all"
+                title={isMuted ? "Ativar som do vídeo" : "Desativar som do vídeo"}
+              >
+                {isMuted ? <VolumeX size={24} /> : <Volume2 size={24} />}
+              </button>
               <div className="absolute bottom-4 left-4 bg-black/60 text-white/50 text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity z-50">
                 URL Original: {videoUrl}
               </div>
