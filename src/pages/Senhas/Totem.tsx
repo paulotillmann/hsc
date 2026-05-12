@@ -4,17 +4,12 @@ import { Printer, User, Star } from 'lucide-react';
 
 const Totem: React.FC = () => {
   const [loading, setLoading] = useState(false);
-  const [senhaGerada, setSenhaGerada] = useState<Senha | null>(null);
 
   const emitir = async (tipo: 'normal' | 'preferencial') => {
     try {
       setLoading(true);
       const senha = await senhaService.emitirSenha(tipo);
-      setSenhaGerada(senha);
       imprimirSenha(senha);
-      
-      // Volta ao estado inicial após 3 segundos
-      setTimeout(() => setSenhaGerada(null), 3000);
     } catch (error) {
       console.error('Erro ao emitir senha:', error);
       alert('Erro ao emitir senha. Tente novamente.');
@@ -70,20 +65,7 @@ const Totem: React.FC = () => {
     }
   };
 
-  if (senhaGerada) {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-screen bg-slate-900 text-white p-8">
-        <div className="animate-bounce mb-8">
-          <Printer size={80} className="text-emerald-400" />
-        </div>
-        <h1 className="text-5xl font-bold mb-4">Senha Emitida!</h1>
-        <div className="text-8xl font-black text-emerald-400 my-8 p-12 border-8 border-emerald-400 rounded-3xl shadow-2xl">
-          {senhaGerada.codigo}
-        </div>
-        <p className="text-3xl text-slate-300">Retire sua senha e aguarde.</p>
-      </div>
-    );
-  }
+
 
   return (
     <div className="dark flex flex-col min-h-screen bg-[#020617]">

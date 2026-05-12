@@ -72,9 +72,14 @@ export const senhaService = {
     const start = (page - 1) * limit;
     const end = start + limit - 1;
 
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const startOfDay = today.toISOString();
+
     const { data, error, count } = await supabase
       .from('senhas')
       .select('*', { count: 'exact' })
+      .gte('called_at', startOfDay)
       .in('status', ['chamando', 'atendido'])
       .order('called_at', { ascending: false })
       .range(start, end);

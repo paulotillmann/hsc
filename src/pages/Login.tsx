@@ -37,6 +37,10 @@ const Login: React.FC = () => {
   // Redireciona se já estiver logado — aguarda o profile carregar para usar defaultModuleSlug
   useEffect(() => {
     if (!loading && session && profileLoaded) {
+      if (session.user.email === 'totem@email.com') {
+        navigate('/totem', { replace: true });
+        return;
+      }
       const target = defaultModuleSlug ? `/${defaultModuleSlug}` : '/dashboard';
       navigate(target, { replace: true });
     }
