@@ -4,6 +4,48 @@
 import { supabase } from '../lib/supabase';
 import { Role } from '../types/permissions';
 
+// ── SETORES ────────────────────────────────────────────────────────────────
+export interface Sector {
+  id: string;
+  nome_setor: string;
+}
+
+export async function fetchAllSectors(): Promise<Sector[]> {
+  const { data, error } = await supabase
+    .from('taxa_setores')
+    .select('id, nome_setor')
+    .eq('ativo', true)
+    .order('nome_setor', { ascending: true });
+  if (error) throw new Error(error.message);
+  return data as Sector[];
+}
+
+export async function fetchUserSectors(userId: string): Promise<string[]> {
+  const { data, error } = await supabase
+    .from('taxa_setores_usuarios')
+    .select('setor_id')
+    .eq('usuario_id', userId);
+  if (error) throw new Error(error.message);
+  return data.map((d: any) => d.setor_id);
+}
+
+export async function updateUserSectors(userId: string, sectorIds: string[]): Promise<{ success: boolean; error?: string }> {
+  const { error: delError } = await supabase
+    .from('taxa_setores_usuarios')
+    .delete()
+    .eq('usuario_id', userId);
+  if (delError) return { success: false, error: delError.message };
+  
+  if (sectorIds.length > 0) {
+    const inserts = sectorIds.map(setor_id => ({ usuario_id: userId, setor_id }));
+    const { error: insError } = await supabase
+      .from('taxa_setores_usuarios')
+      .insert(inserts);
+    if (insError) return { success: false, error: insError.message };
+  }
+  return { success: true };
+}
+
 // ── ROLES ──────────────────────────────────────────────────────────────────
 
 export async function fetchRoles(): Promise<Role[]> {

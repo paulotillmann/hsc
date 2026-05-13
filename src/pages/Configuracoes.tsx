@@ -12,6 +12,7 @@ import {
 import {
   fetchRoles, createRole, updateRole, deleteRole,
   fetchUsers, updateUserRole, updateUserDefaultModule, updateUserBlockedStatus, updateUserProfile, UserProfile,
+  Sector, fetchAllSectors, fetchUserSectors, updateUserSectors
 } from '../services/rolesService';
 import { Role } from '../types/permissions';
 import { fetchModulesWithRoles, ModuleWithRoles } from '../services/modulesService';
@@ -159,18 +160,35 @@ interface EditUserModalProps {
   userProfile: UserProfile;
   roles: Role[];
   modules: ModuleWithRoles[];
-  onSave: (updates: Partial<Pick<UserProfile, 'full_name' | 'cpf' | 'role_id' | 'default_module_slug'>>) => void;
+  sectors: Sector[];
+  onSave: (updates: Partial<Pick<UserProfile, 'full_name' | 'cpf' | 'role_id' | 'default_module_slug'>>, sectorIds: string[]) => void;
   onClose: () => void;
   saving: boolean;
 }
 
-const EditUserModal: React.FC<EditUserModalProps> = ({ userProfile, roles, modules, onSave, onClose, saving }) => {
+const EditUserModal: React.FC<EditUserModalProps> = ({ userProfile, roles, modules, sectors, onSave, onClose, saving }) => {
   const [form, setForm] = useState({
     full_name: userProfile.full_name || '',
     cpf: userProfile.cpf || '',
     role_id: userProfile.role_id || '',
     default_module_slug: userProfile.default_module_slug || '',
   });
+  const [selectedSectors, setSelectedSectors] = useState<string[]>([]);
+  const [loadingSectors, setLoadingSectors] = useState(true);
+
+  useEffect(() => {
+    fetchUserSectors(userProfile.id).then(ids => {
+      setSelectedSectors(ids);
+      setLoadingSectors(false);
+    }).catch(e => {
+      console.error(e);
+      setLoadingSectors(false);
+    });
+  }, [userProfile.id]);
+
+  const toggleSector = (id: string) => {
+    setSelectedSectors(prev => prev.includes(id) ? prev.filter(s => s !== id) : [...prev, id]);
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -179,7 +197,7 @@ const EditUserModal: React.FC<EditUserModalProps> = ({ userProfile, roles, modul
       cpf: form.cpf.trim() || null,
       role_id: form.role_id || null,
       default_module_slug: form.default_module_slug || null,
-    });
+    }, selectedSectors);
   };
 
   return (
@@ -243,6 +261,32 @@ const EditUserModal: React.FC<EditUserModalProps> = ({ userProfile, roles, modul
                 <option key={m.id} value={m.slug}>{m.name}</option>
               ))}
             </select>
+          </div>
+
+          <div>
+            <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider block mb-2">Setores Ativos</label>
+            <div className="max-h-40 overflow-y-auto border border-border rounded-md p-2 space-y-1 bg-background/50">
+              {loadingSectors ? (
+                <div className="flex items-center gap-2 p-2 text-sm text-muted-foreground">
+                  <Loader2 className="h-4 w-4 animate-spin" /> Carregando setores...
+                </div>
+              ) : sectors.length === 0 ? (
+                <div className="p-2 text-sm text-muted-foreground">Nenhum setor cadastrado.</div>
+              ) : (
+                sectors.map(sector => (
+                  <label key={sector.id} className="flex items-center gap-2 p-1 hover:bg-muted rounded cursor-pointer transition-colors">
+                    <input
+                      type="checkbox"
+                      checked={selectedSectors.includes(sector.id)}
+                      onChange={() => toggleSector(sector.id)}
+                      className="rounded border-border h-4 w-4"
+                      style={{ accentColor: '#8E1C1C', color: '#8E1C1C' }}
+                    />
+                    <span className="text-sm font-medium text-foreground select-none">{sector.nome_setor}</span>
+                  </label>
+                ))
+              )}
+            </div>
           </div>
 
           <div className="flex gap-2 pt-1 mt-4">
@@ -413,6 +457,7 @@ const Configuracoes: React.FC = () => {
   const [updatingDefaultModule, setUpdatingDefaultModule] = useState<string | null>(null);
   const [updatingBlockStatus, setUpdatingBlockStatus] = useState<string | null>(null);
   const [allModules, setAllModules] = useState<ModuleWithRoles[]>([]);
+  const [allSectors, setAllSectors] = useState<Sector[]>([]);
   const [userPage, setUserPage] = useState(1);
   const [userEditModal, setUserEditModal] = useState<UserProfile | null>(null);
   const [userEditSaving, setUserEditSaving] = useState(false);
@@ -439,12 +484,14 @@ const Configuracoes: React.FC = () => {
   const loadUsers = useCallback(async () => {
     setUsersLoading(true);
     try {
-      const [usersData, modulesData] = await Promise.all([
+      const [usersData, modulesData, sectorsData] = await Promise.all([
         fetchUsers(),
         fetchModulesWithRoles(),
+        fetchAllSectors(),
       ]);
       setUsers(usersData);
       setAllModules(modulesData.filter(m => m.is_active));
+      setAllSectors(sectorsData);
     } catch (e) { showToast('error', 'Erro ao carregar usuários.'); }
     setUsersLoading(false);
   }, [showToast]);
@@ -470,17 +517,18 @@ const Configuracoes: React.FC = () => {
     if (result.success) await loadUsers();
   };
 
-  const handleSaveUserEdit = async (updates: Partial<Pick<UserProfile, 'full_name' | 'cpf' | 'role_id' | 'default_module_slug'>>) => {
+  const handleSaveUserEdit = async (updates: Partial<Pick<UserProfile, 'full_name' | 'cpf' | 'role_id' | 'default_module_slug'>>, sectorIds: string[]) => {
     if (!userEditModal) return;
     setUserEditSaving(true);
     const result = await updateUserProfile(userEditModal.id, updates);
+    const resultSectors = await updateUserSectors(userEditModal.id, sectorIds);
     setUserEditSaving(false);
-    if (result.success) {
-      showToast('success', 'Usuário atualizado com sucesso!');
+    if (result.success && resultSectors.success) {
+      showToast('success', 'Usuário e setores atualizados com sucesso!');
       setUserEditModal(null);
       await loadUsers();
     } else {
-      showToast('error', result.error || 'Erro ao atualizar usuário.');
+      showToast('error', result.error || resultSectors.error || 'Erro ao atualizar usuário.');
     }
   };
 
@@ -941,6 +989,7 @@ const Configuracoes: React.FC = () => {
             userProfile={userEditModal}
             roles={roles}
             modules={allModules}
+            sectors={allSectors}
             onSave={handleSaveUserEdit}
             onClose={() => setUserEditModal(null)}
             saving={userEditSaving}

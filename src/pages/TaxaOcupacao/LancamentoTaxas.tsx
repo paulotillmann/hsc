@@ -39,15 +39,9 @@ const LancamentoTaxas: React.FC = () => {
   // Calendar State
   const [currentDate, setCurrentDate] = useState(() => new Date());
 
-  const [selectedDateStr, setSelectedDateStr] = useState<string | null>(() => formatToLocalISO(new Date()));
-  const [selectedTime, setSelectedTime] = useState<'10:00' | '20:00' | null>(() => {
-    const hour = new Date().getHours();
-    if (hour >= 20) return '20:00';
-    if (hour >= 10) return '10:00';
-    return null;
-  });
+  const [selectedDateStr, setSelectedDateStr] = useState<string | null>(null);
+  const [selectedTime, setSelectedTime] = useState<'10:00' | '20:00' | null>(null);
 
-  const [filterCategoria, setFilterCategoria] = useState<string>('Geral');
   const [isBubbleModalOpen, setIsBubbleModalOpen] = useState(false);
 
   const getMonthBoundaries = (date: Date) => {
@@ -59,6 +53,22 @@ const LancamentoTaxas: React.FC = () => {
   useEffect(() => {
     fetchLancamentos(currentDate);
   }, [currentDate]);
+
+  // Select latest date and time by default when data loads
+  useEffect(() => {
+    if (lancamentos.length > 0 && !selectedDateStr && !selectedTime) {
+      const sortedByDate = [...lancamentos].sort((a, b) => b.data.localeCompare(a.data));
+      const latestDate = sortedByDate[0].data;
+      
+      const recordsForLatestDate = sortedByDate.filter(l => l.data === latestDate);
+      const has20 = recordsForLatestDate.some(l => l.horario_envio === '20:00');
+      const has10 = recordsForLatestDate.some(l => l.horario_envio === '10:00');
+      
+      setSelectedDateStr(latestDate);
+      if (has20) setSelectedTime('20:00');
+      else if (has10) setSelectedTime('10:00');
+    }
+  }, [lancamentos, selectedDateStr, selectedTime]);
 
   const fetchLancamentos = async (date: Date) => {
     try {
@@ -181,20 +191,8 @@ const LancamentoTaxas: React.FC = () => {
   // Data for Side Panel
   const panelRecords = useMemo(() => {
     if (!selectedDateStr || !selectedTime) return [];
-    let filtered = lancamentos.filter(l => l.data === selectedDateStr && l.horario_envio === selectedTime);
-
-    if (filterCategoria === 'SUS') {
-      filtered = filtered.filter(l => l.taxa_setores?.leitos_tipo === 'SUS');
-    } else if (filterCategoria === 'Geral') {
-      filtered = filtered.filter(l =>
-        (l.taxa_setores?.leitos_tipo === 'SUS' && l.taxa_setores?.calcular_taxa === 'Ambos') ||
-        (l.taxa_setores?.leitos_tipo === 'Particular ou convênio' && l.taxa_setores?.calcular_taxa === 'Geral') ||
-        (l.taxa_setores?.leitos_tipo === 'Ambos' && l.taxa_setores?.calcular_taxa === 'Geral')
-      );
-    }
-
-    return filtered;
-  }, [selectedDateStr, selectedTime, lancamentos, filterCategoria]);
+    return lancamentos.filter(l => l.data === selectedDateStr && l.horario_envio === selectedTime);
+  }, [selectedDateStr, selectedTime, lancamentos]);
 
   return (
     <div className="flex flex-1 flex-col gap-6 w-full animate-in fade-in zoom-in duration-500">
@@ -338,20 +336,6 @@ const LancamentoTaxas: React.FC = () => {
                 </p>
               )}
             </div>
-
-            {selectedDateStr && selectedTime && (
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-medium text-muted-foreground whitespace-nowrap">Categoria:</span>
-                <select
-                  value={filterCategoria}
-                  onChange={(e) => setFilterCategoria(e.target.value)}
-                  className="text-xs bg-background border rounded-md px-2 py-1 focus:ring-1 focus:ring-primary outline-none cursor-pointer"
-                >
-                  <option value="Geral">Geral</option>
-                  <option value="SUS">SUS</option>
-                </select>
-              </div>
-            )}
           </div>
 
           <div className="p-4 flex-1 overflow-auto bg-muted/5">
