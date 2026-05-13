@@ -43,10 +43,28 @@ export async function updateEmailEnviadoEm(id: string): Promise<string> {
   return now;
 }
 
+export async function updateHoleriteEmail(id: string, email: string): Promise<void> {
+  const { error } = await supabase
+    .from('holerites')
+    .update({ email })
+    .eq('id', id);
+  if (error) throw new Error(error.message);
+}
+
 export interface HoleriteUploadProgress {
   stage: 'reading' | 'extracting' | 'uploading' | 'saving' | 'done' | 'error' | 'interrupted';
   current: number;
   total: number;
+  percent: number;
+  message: string;
+  error?: string;
+}
+
+export interface SyncProgress {
+  stage: 'syncing' | 'done' | 'error' | 'interrupted';
+  current: number;
+  total: number;
+  updatedCount: number;
   percent: number;
   message: string;
   error?: string;
@@ -303,6 +321,98 @@ export async function uploadHoleritePDF(
   });
 
   return results;
+}
+
+// ─────────────────────────────────────────────────────────────
+// SYNC EMAILS — Sincroniza e-mails em lote via webhook n8n
+// ─────────────────────────────────────────────────────────────
+
+export async function syncEmailsWithN8n(
+  records: HoleriteRecord[],
+  onProgress: (p: SyncProgress) => void,
+  abortSignal?: AbortSignal
+): Promise<number> {
+  const total = records.length;
+  let updatedCount = 0;
+
+  onProgress({
+    stage: 'syncing',
+    current: 0,
+    total,
+    updatedCount,
+    percent: 0,
+    message: 'Iniciando sincronização...',
+  });
+
+  for (let i = 0; i < total; i++) {
+    if (abortSignal?.aborted) {
+      onProgress({
+        stage: 'interrupted',
+        current: i,
+        total,
+        updatedCount,
+        percent: 100,
+        message: `Sincronização interrompida. ${updatedCount} e-mails atualizados.`,
+      });
+      return updatedCount;
+    }
+
+    const record = records[i];
+    const cpfClean = record.cpf.replace(/\D/g, '');
+
+    const pct = Math.round(((i + 1) / total) * 100);
+    onProgress({
+      stage: 'syncing',
+      current: i + 1,
+      total,
+      updatedCount,
+      percent: pct,
+      message: `Verificando: ${record.nome_completo}`,
+    });
+
+    try {
+      const response = await fetch('https://n8n.technocode.site/webhook/colab', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cpf: cpfClean }),
+      });
+
+      if (response.ok) {
+        const text = await response.text();
+        if (text && text.trim() !== '') {
+          try {
+            const data = JSON.parse(text);
+            if (Array.isArray(data) && data.length > 0) {
+              const emailFromN8n = data[0].EMAIL;
+              if (emailFromN8n && typeof emailFromN8n === 'string' && emailFromN8n.trim() !== '') {
+                const newEmail = emailFromN8n.trim().toLowerCase();
+                // Só atualiza se o e-mail for diferente do atual
+                if (newEmail !== record.email) {
+                  await updateHoleriteEmail(record.id, newEmail);
+                  updatedCount++;
+                }
+              }
+            }
+          } catch (e) {
+            console.warn(`[Holerite Sync] Falha ao fazer parse do JSON para CPF ${cpfClean}:`, e);
+          }
+        }
+      }
+    } catch (err) {
+      console.warn(`[Holerite Sync] Erro na requisição para CPF ${cpfClean}:`, err);
+    }
+  }
+
+  onProgress({
+    stage: 'done',
+    current: total,
+    total,
+    updatedCount,
+    percent: 100,
+    message: `Sincronização concluída! ${updatedCount} e-mails atualizados.`,
+  });
+
+  return updatedCount;
 }
 
 // ─────────────────────────────────────────────────────────────

@@ -2,7 +2,7 @@ import React, { useEffect, useState, useRef, useCallback } from 'react';
 import {
   Search, FileText, Trash2, UploadCloud, X,
   CheckCircle2, AlertCircle, ChevronLeft, ChevronRight,
-  ArrowUpDown, ArrowUp, ArrowDown, Calendar, Mail, Loader2,
+  ArrowUpDown, ArrowUp, ArrowDown, Calendar, Mail, Loader2, Edit2, RefreshCw,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../contexts/AuthContext';
@@ -12,9 +12,11 @@ import {
   uploadHoleritePDF,
   deleteHolerites,
   generateMesAnoOptions,
-  updateEmailEnviadoEm,
+  updateHoleriteEmail,
+  syncEmailsWithN8n,
   HoleriteRecord,
   HoleriteUploadProgress,
+  SyncProgress,
 } from '../services/holeitesService';
 import { sendDocumentEmail } from '../services/emailService';
 
@@ -58,6 +60,15 @@ const Holerites: React.FC = () => {
   // ── Modais ──
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [isEditEmailModalOpen, setIsEditEmailModalOpen] = useState(false);
+  const [editingHoleriteId, setEditingHoleriteId] = useState<string | null>(null);
+  const [emailToEdit, setEmailToEdit] = useState('');
+  const [isSavingEmail, setIsSavingEmail] = useState(false);
+  const [isSyncModalOpen, setIsSyncModalOpen] = useState(false);
+
+  // ── Sync N8N ──
+  const [syncProgress, setSyncProgress] = useState<SyncProgress | null>(null);
+  const abortSyncRef = useRef<AbortController | null>(null);
 
   // ── Upload ──
   const [uploadProgress, setUploadProgress] = useState<HoleriteUploadProgress | null>(null);
@@ -149,6 +160,34 @@ const Holerites: React.FC = () => {
     }
   };
 
+  const handleEditEmailConfirm = async () => {
+    if (!editingHoleriteId) return;
+    setIsSavingEmail(true);
+    try {
+      await updateHoleriteEmail(editingHoleriteId, emailToEdit);
+      setData(prev => prev.map(c => c.id === editingHoleriteId ? { ...c, email: emailToEdit } : c));
+      setEmailToast({ type: 'success', message: 'E-mail atualizado com sucesso!' });
+      setIsEditEmailModalOpen(false);
+    } catch (err: any) {
+      console.error(err);
+      setEmailToast({ type: 'error', message: err.message || 'Erro ao atualizar e-mail' });
+    } finally {
+      setIsSavingEmail(false);
+      setTimeout(() => setEmailToast(null), 4000);
+    }
+  };
+
+  const startSync = async () => {
+    const controller = new AbortController();
+    abortSyncRef.current = controller;
+    
+    // Passa todos os dados do mês/ano selecionado para a sincronização
+    await syncEmailsWithN8n(data, setSyncProgress, controller.signal);
+    
+    // Atualiza os dados locais depois que terminar, se precisar refletir na tela
+    loadData();
+  };
+
   // ─────────────────────────────────────────────────────────────
   // UPLOAD HANDLER
   // ─────────────────────────────────────────────────────────────
@@ -232,6 +271,17 @@ const Holerites: React.FC = () => {
             >
               <UploadCloud className="h-4 w-4" />
               Importar Holerite PDF
+            </button>
+          )}
+
+          {can('can_upload') && (
+            <button
+              onClick={() => { setSyncProgress(null); setIsSyncModalOpen(true); }}
+              disabled={data.length === 0}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-md bg-blue-600 text-white shadow transition-colors hover:bg-blue-700 font-medium text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <RefreshCw className="h-4 w-4" />
+              Sincronizar E-mails com Tasy
             </button>
           )}
         </div>
@@ -379,6 +429,17 @@ const Holerites: React.FC = () => {
                           {sendingEmailId === colab.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mail className="h-4 w-4" />}
                         </button>
                       )}
+                      <button
+                        title="Editar E-mail"
+                        onClick={() => {
+                          setEditingHoleriteId(colab.id);
+                          setEmailToEdit(colab.email || '');
+                          setIsEditEmailModalOpen(true);
+                        }}
+                        className="inline-flex items-center gap-2 px-3 py-1.5 rounded-md border text-muted-foreground hover:bg-orange-50 hover:text-orange-600 hover:border-orange-200 dark:hover:bg-orange-500/10 dark:hover:text-orange-500 transition-colors text-sm font-medium"
+                      >
+                        <Edit2 className="h-4 w-4" />
+                      </button>
                       <button
                         onClick={() => { setIdsToDelete([colab.id]); setIsDeleteModalOpen(true); }}
                         className="inline-flex items-center gap-2 px-3 py-1.5 rounded-md border text-muted-foreground hover:bg-red-50 hover:text-red-600 hover:border-red-200 dark:hover:bg-red-500/10 dark:hover:text-red-500 transition-colors text-sm font-medium"
@@ -558,6 +619,138 @@ const Holerites: React.FC = () => {
                 <button onClick={handleDeleteConfirm} className="px-4 py-2 bg-red-600 text-white rounded-md text-sm font-medium flex-1 hover:bg-red-700 cursor-pointer shadow">
                   Confirmar Exclusão
                 </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ══════════════════════════════════════════════════════ */}
+      {/* MODAL — EDITAR E-MAIL                                 */}
+      {/* ══════════════════════════════════════════════════════ */}
+      <AnimatePresence>
+        {isEditEmailModalOpen && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+            <motion.div initial={{ scale: 0.95 }} animate={{ scale: 1 }} exit={{ scale: 0.95 }} className="bg-card w-full max-w-sm rounded-2xl border shadow-xl p-6 relative">
+              <button
+                onClick={() => setIsEditEmailModalOpen(false)}
+                className="absolute right-4 top-4 text-muted-foreground hover:bg-muted p-1 rounded-full"
+              >
+                <X className="h-5 w-5" />
+              </button>
+              <h3 className="text-xl font-bold mb-4">Editar E-mail</h3>
+              <div className="mb-6 space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-foreground mb-1">
+                    Colaborador
+                  </label>
+                  <div className="bg-muted/50 px-3 py-2 rounded-md border border-border text-sm font-medium text-foreground">
+                    {data.find(c => c.id === editingHoleriteId)?.nome_completo}
+                  </div>
+                </div>
+                <div>
+                  <label htmlFor="email-edit" className="block text-sm font-medium text-foreground mb-1">
+                    Endereço de E-mail
+                  </label>
+                  <input
+                    id="email-edit"
+                    type="email"
+                    value={emailToEdit}
+                    onChange={e => setEmailToEdit(e.target.value)}
+                    placeholder="exemplo@email.com"
+                    className="w-full bg-background border border-border rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary transition-all"
+                  />
+                </div>
+              </div>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setIsEditEmailModalOpen(false)}
+                  className="px-4 py-2 border rounded-md text-sm font-medium flex-1 hover:bg-muted cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={handleEditEmailConfirm}
+                  disabled={isSavingEmail}
+                  className="px-4 py-2 bg-primary text-primary-foreground rounded-md text-sm font-medium flex-1 hover:opacity-90 cursor-pointer shadow disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {isSavingEmail && <Loader2 className="h-4 w-4 animate-spin" />}
+                  {isSavingEmail ? 'Salvando...' : 'Salvar E-mail'}
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ══════════════════════════════════════════════════════ */}
+      {/* MODAL — SINCRONIZAÇÃO DE E-MAILS n8n                  */}
+      {/* ══════════════════════════════════════════════════════ */}
+      <AnimatePresence>
+        {isSyncModalOpen && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+            <motion.div initial={{ scale: 0.95 }} animate={{ scale: 1 }} exit={{ scale: 0.95 }} className="bg-card w-full max-w-md rounded-2xl border shadow-xl p-6 relative">
+              <button
+                onClick={() => { if (!syncProgress || syncProgress.stage === 'done' || syncProgress.stage === 'interrupted') { setIsSyncModalOpen(false); } }}
+                className="absolute right-4 top-4 text-muted-foreground hover:bg-muted p-1 rounded-full"
+              >
+                <X className="h-5 w-5" />
+              </button>
+              <h3 className="text-xl font-bold mb-1">Sincronizar E-mails com Tasy</h3>
+              <p className="text-sm text-muted-foreground mb-5">
+                Buscando e-mails na base do n8n para os <strong>{data.length}</strong> colaboradores deste mês.
+              </p>
+
+              <div className="border-2 border-dashed border-border rounded-xl p-8 flex flex-col items-center justify-center text-center">
+                {(!syncProgress || syncProgress.stage === 'error') && (
+                  <>
+                    <RefreshCw className="h-12 w-12 text-blue-500 mb-3" />
+                    <h4 className="text-sm font-medium">Pronto para iniciar</h4>
+                    <p className="text-xs text-muted-foreground mt-1 mb-4">Pode demorar um pouco dependendo da quantidade.</p>
+                    <button onClick={startSync} className="px-4 py-2 bg-blue-600 text-white rounded-md text-sm font-medium hover:bg-blue-700 cursor-pointer">
+                      Iniciar Sincronização
+                    </button>
+                  </>
+                )}
+
+                {syncProgress?.stage === 'syncing' && (
+                  <div className="w-full flex flex-col items-center gap-3">
+                    <RefreshCw className="h-10 w-10 text-blue-500 animate-spin" />
+                    <div className="w-full h-2.5 bg-muted rounded-full overflow-hidden">
+                      <motion.div
+                        className="h-full bg-blue-500 rounded-full"
+                        animate={{ width: `${syncProgress.percent}%` }}
+                        transition={{ duration: 0.2 }}
+                      />
+                    </div>
+                    <p className="text-sm font-medium">{syncProgress.message}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {syncProgress.current} de {syncProgress.total} · {syncProgress.updatedCount} atualizados
+                    </p>
+                    <button
+                      onClick={() => abortSyncRef.current?.abort()}
+                      className="mt-4 px-4 py-2 border border-yellow-500 text-black rounded-md bg-yellow-400 hover:bg-yellow-500 transition-colors text-sm font-bold cursor-pointer"
+                    >
+                      Interromper
+                    </button>
+                  </div>
+                )}
+
+                {syncProgress?.stage === 'done' && (
+                  <>
+                    <CheckCircle2 className="h-16 w-16 text-green-500 mb-2" />
+                    <h4 className="text-lg font-bold text-green-600">Sincronização Concluída!</h4>
+                    <p className="text-sm text-muted-foreground mt-1">{syncProgress.message}</p>
+                  </>
+                )}
+
+                {syncProgress?.stage === 'interrupted' && (
+                  <>
+                    <AlertCircle className="h-16 w-16 text-yellow-500 mb-2" />
+                    <h4 className="text-lg font-bold text-yellow-600">Interrompido</h4>
+                    <p className="text-sm text-muted-foreground font-medium">{syncProgress.message}</p>
+                  </>
+                )}
               </div>
             </motion.div>
           </motion.div>
