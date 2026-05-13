@@ -1,9 +1,43 @@
 import React, { useState } from 'react';
 import { senhaService, Senha } from '../../services/senhaService';
-import { Printer, User, Star } from 'lucide-react';
+import { Printer, User, Star, LogOut, KeyRound } from 'lucide-react';
+import { useAuth } from '../../contexts/AuthContext';
+
+declare global {
+  interface Window {
+    ReactNativeWebView?: {
+      postMessage: (message: string) => void;
+    };
+  }
+}
 
 const Totem: React.FC = () => {
   const [loading, setLoading] = useState(false);
+  const [isLogoutModalOpen, setIsLogoutModalOpen] = useState(false);
+  const [logoutPassword, setLogoutPassword] = useState('');
+  const [logoutError, setLogoutError] = useState('');
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
+  
+  const { user, signIn, signOut } = useAuth();
+
+  const handleLogout = async () => {
+    if (!logoutPassword) return;
+    setIsLoggingOut(true);
+    setLogoutError('');
+    
+    // Verifica a senha tentando autenticar o usuário atual novamente
+    if (user && user.email) {
+      const { error } = await signIn(user.email, logoutPassword);
+      if (error) {
+        setLogoutError('Senha incorreta.');
+        setIsLoggingOut(false);
+        return;
+      }
+    }
+    
+    await signOut();
+    setIsLoggingOut(false);
+  };
 
   const emitir = async (tipo: 'normal' | 'preferencial') => {
     try {
@@ -19,7 +53,16 @@ const Totem: React.FC = () => {
   };
 
   const imprimirSenha = (senha: Senha) => {
-    // Cria um iframe invisível para impressão térmica (58mm/80mm)
+    // Verifica se está rodando dentro do App Android Nativo (TotemApp WebView)
+    if (window.ReactNativeWebView) {
+      window.ReactNativeWebView.postMessage(JSON.stringify({
+        type: 'PRINT_TICKET',
+        senha: senha
+      }));
+      return; // Sai da função para não abrir o iframe
+    }
+
+    // Fallback: Modo navegador normal (Cria iframe invisível para impressão)
     const iframe = document.createElement('iframe');
     iframe.style.display = 'none';
     document.body.appendChild(iframe);
@@ -69,9 +112,18 @@ const Totem: React.FC = () => {
 
   return (
     <div className="dark flex flex-col min-h-screen bg-[#020617]">
-      <div className="text-center py-12 bg-[#020617] border-b border-white/5 shadow-sm z-10">
-        <h1 className="text-5xl md:text-6xl font-black text-white tracking-tight">Retire sua Senha</h1>
-        <p className="text-2xl md:text-3xl text-slate-400 mt-4">Toque na opção desejada para atendimento</p>
+      <div className="bg-[#020617] border-b border-white/5 shadow-sm z-10">
+        <div className="relative text-center py-12 max-w-7xl mx-auto w-full px-8">
+          <button 
+            onClick={() => setIsLogoutModalOpen(true)}
+            className="absolute top-1/2 -translate-y-1/2 right-8 p-4 text-slate-500 hover:text-red-400 transition-all opacity-30 hover:opacity-100 rounded-full hover:bg-white/5 focus:outline-none"
+            title="Sair do Totem"
+          >
+            <LogOut size={48} />
+          </button>
+          <h1 className="text-5xl md:text-6xl font-black text-white tracking-tight">Retire sua Senha</h1>
+          <p className="text-2xl md:text-3xl text-slate-400 mt-4">Toque na opção desejada para atendimento</p>
+        </div>
       </div>
 
       <div className="flex-1 flex flex-col md:flex-row gap-8 p-8 max-w-7xl mx-auto w-full">
@@ -96,6 +148,59 @@ const Totem: React.FC = () => {
           </div>
         </button>
       </div>
+
+      {/* Modal de Logoff */}
+      {isLogoutModalOpen && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-[#0f172a] border border-white/10 rounded-3xl p-10 max-w-lg w-full shadow-2xl animate-in fade-in zoom-in duration-200">
+            <div className="flex justify-center mb-6">
+              <div className="w-20 h-20 bg-red-500/20 rounded-full flex items-center justify-center border border-red-500/30">
+                <KeyRound size={40} className="text-red-500" />
+              </div>
+            </div>
+            
+            <h2 className="text-3xl font-bold text-white text-center mb-3">Sair do Totem</h2>
+            <p className="text-slate-400 text-center mb-8 text-lg">Digite a senha deste usuário para confirmar o logoff e fechar o modo totem.</p>
+            
+            <div className="space-y-6">
+              <div>
+                <input
+                  type="password"
+                  value={logoutPassword}
+                  onChange={(e) => setLogoutPassword(e.target.value)}
+                  placeholder="Senha de acesso"
+                  className="w-full bg-[#1e293b] border border-white/10 rounded-2xl px-6 py-4 text-white placeholder-slate-500 focus:outline-none focus:border-red-500 focus:ring-2 focus:ring-red-500/20 transition-all text-xl text-center tracking-widest font-mono"
+                  autoFocus
+                  onKeyDown={(e) => e.key === 'Enter' && handleLogout()}
+                />
+                {logoutError && (
+                  <p className="text-red-400 text-base mt-3 font-medium text-center bg-red-500/10 py-2 rounded-lg">{logoutError}</p>
+                )}
+              </div>
+              
+              <div className="flex gap-4 pt-4">
+                <button
+                  onClick={() => {
+                    setIsLogoutModalOpen(false);
+                    setLogoutPassword('');
+                    setLogoutError('');
+                  }}
+                  className="flex-1 px-4 py-4 bg-slate-800 hover:bg-slate-700 text-white rounded-2xl font-bold transition-colors text-lg"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={handleLogout}
+                  disabled={isLoggingOut || !logoutPassword}
+                  className="flex-1 px-4 py-4 bg-red-600 hover:bg-red-700 text-white rounded-2xl font-bold transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center text-lg"
+                >
+                  {isLoggingOut ? 'Saindo...' : 'Confirmar Saída'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
