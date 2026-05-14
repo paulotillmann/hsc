@@ -13,6 +13,7 @@ declare global {
 
 const Totem: React.FC = () => {
   const [loading, setLoading] = useState(false);
+  const [isPrinting, setIsPrinting] = useState(false);
   const [isLogoutModalOpen, setIsLogoutModalOpen] = useState(false);
   const [logoutPassword, setLogoutPassword] = useState('');
   const [logoutError, setLogoutError] = useState('');
@@ -40,13 +41,22 @@ const Totem: React.FC = () => {
   };
 
   const emitir = async (tipo: 'normal' | 'preferencial') => {
+    if (isPrinting) return;
     try {
       setLoading(true);
+      setIsPrinting(true);
       const senha = await senhaService.emitirSenha(tipo);
       imprimirSenha(senha);
+      
+      // Mantém a tela de carregamento pelo tempo aproximado da impressão
+      setTimeout(() => {
+        setIsPrinting(false);
+      }, 3500);
+
     } catch (error) {
       console.error('Erro ao emitir senha:', error);
       alert('Erro ao emitir senha. Tente novamente.');
+      setIsPrinting(false);
     } finally {
       setLoading(false);
     }
@@ -199,6 +209,21 @@ const Totem: React.FC = () => {
               </div>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Modal / Overlay de Impressão */}
+      {isPrinting && (
+        <div className="fixed inset-0 bg-[#020617]/95 backdrop-blur-md z-50 flex flex-col items-center justify-center p-8 animate-in fade-in duration-300">
+          <div className="w-32 h-32 bg-white/10 rounded-full flex items-center justify-center mb-8 border border-white/20">
+            <Printer size={64} className="text-white animate-bounce" />
+          </div>
+          <h2 className="text-4xl md:text-5xl font-black text-white text-center tracking-tight mb-6">
+            Imprimindo sua Senha...
+          </h2>
+          <p className="text-2xl text-slate-400 text-center animate-pulse">
+            Por favor, aguarde e retire o papel logo abaixo.
+          </p>
         </div>
       )}
     </div>

@@ -3,8 +3,10 @@ import { supabase } from '../../lib/supabase';
 import { senhaService, Senha, ConfiguracaoTV } from '../../services/senhaService';
 import { Play, CheckCircle2, MonitorPlay, Save, Users, RefreshCw, Volume2, ChevronLeft, ChevronRight, FileText } from 'lucide-react';
 import RelatorioChamadasModal from '../../components/recepcao/RelatorioChamadasModal';
+import { useAuth } from '../../contexts/AuthContext';
 
 const PainelAtendente: React.FC = () => {
+  const { user } = useAuth();
   const [fila, setFila] = useState<Senha[]>([]);
   const [historico, setHistorico] = useState<Senha[]>([]);
   const [totalCount, setTotalCount] = useState(0);
@@ -60,7 +62,7 @@ const PainelAtendente: React.FC = () => {
   const chamarProxima = async () => {
     try {
       setLoading(true);
-      const senha = await senhaService.chamarProxima(guiche);
+      const senha = await senhaService.chamarProxima(guiche, user?.id);
       if (!senha) {
         alert('Fila vazia!');
       }
@@ -272,7 +274,12 @@ const PainelAtendente: React.FC = () => {
           {/* PRÓXIMOS DA FILA */}
           <div className="bg-card rounded-2xl shadow-sm border border-border overflow-hidden">
             <div className="p-5 border-b border-border bg-muted/50 flex justify-between items-center">
-              <h3 className="font-bold text-foreground">Próximos da Fila</h3>
+              <h3 className="font-bold text-foreground flex items-center gap-2">
+                Próximos da Fila
+                <span className="bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 text-xs px-2 py-0.5 rounded-full font-bold">
+                  {fila.length}
+                </span>
+              </h3>
               <button onClick={carregarDados} className="text-muted-foreground hover:text-primary transition-colors">
                 <RefreshCw size={18} />
               </button>
