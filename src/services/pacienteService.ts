@@ -6,6 +6,18 @@ export interface Paciente {
   apartamento: string;
   data_internacao: string; // ISO 8601
   convenio: string;
+  // Novos campos do JSON do n8n
+  dt_nascimento: string;
+  medico: string;
+  categoria: string;
+  responsavel: string;
+  cpf_responsavel: string;
+  probabilidade_alta: string;
+  nr_prontuario: number | null;
+  dias_internado: number | null;
+  previsao_alta: string;
+  data_alta: string;
+  cd_setor_atendimento: number | null;
 }
 
 const API_URL = 'https://n8n.technocode.site/webhook/consultaAtendimentos';
@@ -46,14 +58,41 @@ export async function buscarPacientes(query?: string): Promise<Paciente[]> {
           dtInternacao = item.DT_ENTRADA.split('T')[0]; 
         }
 
+        let dtNascimento = '';
+        if (item.DT_NASCIMENTO) {
+          dtNascimento = item.DT_NASCIMENTO.split('T')[0];
+        }
+
+        let previsaoAlta = '';
+        if (item.DT_PREVISTO_ALTA) {
+          previsaoAlta = item.DT_PREVISTO_ALTA;
+        }
+
+        let dataAlta = '';
+        if (item.DT_ALTA_MEDICO) {
+          dataAlta = item.DT_ALTA_MEDICO;
+        }
+
         return {
-          id: item.CD_ATENDIMENTO?.toString() || item.ID?.toString() || String(index),
+          id: item.NR_ATENDIMENTO?.toString() || item.CD_ATENDIMENTO?.toString() || item.ID?.toString() || String(index),
           nome: item.NM_PESSOA_FISICA || 'Nome Indisponível',
           clinica: item.SETOR || '',
-          leito: item.CD_UNIDADE || '',
+          leito: item.CD_UNIDADE?.trim() || '',
           apartamento: '',
           data_internacao: dtInternacao,
           convenio: item.DS_CONVENIO || 'Não Informado',
+          // Novos campos
+          dt_nascimento: dtNascimento,
+          medico: item.NM_GUERRA || '',
+          categoria: item.DS_CATEGORIA || '',
+          responsavel: item.RESPONSAVEL || '',
+          cpf_responsavel: item.CPF_RESPONSAVEL || '',
+          probabilidade_alta: item.DS_PROBABILIDADE || '',
+          nr_prontuario: item.NR_PRONTUARIO ?? null,
+          dias_internado: item.QT_DIA_PERMANENCIA ?? null,
+          previsao_alta: previsaoAlta,
+          data_alta: dataAlta,
+          cd_setor_atendimento: item.CD_SETOR_ATENDIMENTO ?? null,
         };
       });
 

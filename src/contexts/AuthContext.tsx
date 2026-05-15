@@ -18,6 +18,7 @@ interface Profile {
   default_module_slug: string | null;
   roles: Role | null;
   is_blocked: boolean;
+  setor_usuarios?: string | null;
 }
 
 interface AuthContextType {

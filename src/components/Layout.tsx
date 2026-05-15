@@ -7,8 +7,7 @@ const Layout: React.FC = () => {
   const isWidePage = ['/dashboard', '/informes', '/holerites', '/configuracoes'].includes(location.pathname) || 
     location.pathname.startsWith('/notificacoes') || 
     location.pathname.startsWith('/recepcao') || 
-    location.pathname.startsWith('/taxa-ocupacao') ||
-    location.pathname.startsWith('/pacientes-internados');
+    location.pathname.startsWith('/taxa-ocupacao');
 
   return (
     <div className="flex h-screen w-full bg-background text-foreground transition-colors overflow-hidden">

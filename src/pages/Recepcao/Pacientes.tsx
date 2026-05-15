@@ -211,6 +211,8 @@ export default function Pacientes() {
                 </th>
                 <th scope="col" className="h-12 px-4 text-left align-middle font-medium text-muted-foreground">Leito</th>
                 <th scope="col" className="h-12 px-4 text-left align-middle font-medium text-muted-foreground">Convênio</th>
+                <th scope="col" className="h-12 px-4 text-left align-middle font-medium text-muted-foreground">Categoria</th>
+                <th scope="col" className="h-12 px-4 text-left align-middle font-medium text-muted-foreground">Médico</th>
                 <th scope="col" className="h-12 px-4 text-left align-middle font-medium text-muted-foreground">
                   <button 
                     onClick={() => handleSort('data_internacao')}
@@ -220,6 +222,9 @@ export default function Pacientes() {
                     {sortField === 'data_internacao' && (sortOrder === 'asc' ? <ArrowUp className="h-4 w-4" /> : <ArrowDown className="h-4 w-4" />)}
                   </button>
                 </th>
+                <th scope="col" className="h-12 px-4 text-center align-middle font-medium text-muted-foreground">Dias Int.</th>
+                <th scope="col" className="h-12 px-4 text-left align-middle font-medium text-muted-foreground">Prev. Alta</th>
+                <th scope="col" className="h-12 px-4 text-left align-middle font-medium text-muted-foreground">Responsável</th>
                 <th scope="col" className="h-12 px-4 text-center align-middle font-medium text-muted-foreground">Visitantes</th>
                 <th scope="col" className="h-12 px-4 text-center align-middle font-medium text-muted-foreground">Acompanhantes</th>
                 <th scope="col" className="h-12 px-4 text-center align-middle font-medium text-muted-foreground w-20">Ações</th>
@@ -228,7 +233,7 @@ export default function Pacientes() {
             <tbody className="divide-y divide-border">
               {loading ? (
                 <tr>
-                  <td colSpan={8} className="h-48 text-center">
+                  <td colSpan={13} className="h-48 text-center">
                     <div className="flex flex-col items-center justify-center gap-2">
                       <Loader2 className="h-8 w-8 animate-spin text-primary" />
                       <p className="text-muted-foreground font-medium">Carregando dados do Tasy...</p>
@@ -237,7 +242,7 @@ export default function Pacientes() {
                 </tr>
               ) : currentItems.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="h-32 text-center text-muted-foreground">
+                  <td colSpan={13} className="h-32 text-center text-muted-foreground">
                     Nenhum paciente encontrado.
                   </td>
                 </tr>
@@ -265,8 +270,25 @@ export default function Pacientes() {
                     <td className="p-4 align-middle text-muted-foreground">
                       {paciente.convenio}
                     </td>
+                    <td className="p-4 align-middle">
+                      <span className="text-xs text-muted-foreground">{paciente.categoria || '-'}</span>
+                    </td>
+                    <td className="p-4 align-middle">
+                      <span className="text-xs text-foreground">{paciente.medico || '-'}</span>
+                    </td>
                     <td className="p-4 align-middle font-medium">
                       {paciente.data_internacao ? new Date(paciente.data_internacao + 'T12:00:00Z').toLocaleDateString('pt-BR') : '-'}
+                    </td>
+                    <td className="p-4 align-middle text-center">
+                      <span className={`inline-flex items-center justify-center min-w-[2rem] px-2 py-0.5 rounded-full text-xs font-bold border ${(paciente.dias_internado ?? 0) > 5 ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/20' : 'bg-muted text-muted-foreground border-transparent'}`}>
+                        {paciente.dias_internado ?? 0}
+                      </span>
+                    </td>
+                    <td className="p-4 align-middle text-xs">
+                      {paciente.previsao_alta ? new Date(paciente.previsao_alta).toLocaleDateString('pt-BR') : '-'}
+                    </td>
+                    <td className="p-4 align-middle">
+                      <span className="text-xs text-muted-foreground uppercase">{paciente.responsavel || '-'}</span>
                     </td>
                     <td className="p-4 align-middle text-center">
                       <span className={`inline-flex items-center justify-center min-w-[2rem] px-2 py-0.5 rounded-full text-xs font-bold border ${visitasAbertas[paciente.nome]?.visitante > 0 ? 'bg-blue-500/15 text-blue-600 dark:text-blue-400 border-blue-500/20' : 'bg-muted text-muted-foreground border-transparent'}`}>

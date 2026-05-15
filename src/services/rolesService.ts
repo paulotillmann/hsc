@@ -95,16 +95,29 @@ export interface UserProfile {
   default_module_slug: string | null;
   roles: { name: string; slug: string } | null;
   is_blocked: boolean;
+  setor_usuarios: string | null;
 }
 
 export async function fetchUsers(): Promise<UserProfile[]> {
   const { data, error } = await supabase
     .from('profiles')
-    .select('id, full_name, email, cpf, role, role_id, avatar_url, created_at, default_module_slug, is_blocked, roles(name, slug)')
+    .select('id, full_name, email, cpf, role, role_id, avatar_url, created_at, default_module_slug, is_blocked, setor_usuarios, roles(name, slug)')
     .order('full_name', { ascending: true });
 
   if (error) throw new Error(error.message);
   return (data as unknown as UserProfile[]) ?? [];
+}
+
+export async function fetchPacientesSetores(): Promise<string[]> {
+  const { data, error } = await supabase
+    .from('pacientes_internados')
+    .select('ds_setor_atendimento')
+    .order('ds_setor_atendimento', { ascending: true });
+
+  if (error) throw new Error(error.message);
+  
+  const sectors = data.map(d => d.ds_setor_atendimento).filter(Boolean);
+  return Array.from(new Set(sectors));
 }
 
 export async function updateUserDefaultModule(
@@ -156,7 +169,7 @@ export async function updateUserBlockedStatus(
 
 export async function updateUserProfile(
   userId: string,
-  updates: Partial<Pick<UserProfile, 'full_name' | 'cpf' | 'role_id' | 'default_module_slug'>>
+  updates: Partial<Pick<UserProfile, 'full_name' | 'cpf' | 'role_id' | 'default_module_slug' | 'setor_usuarios'>>
 ): Promise<{ success: boolean; error?: string }> {
   const { data, error } = await supabase
     .from('profiles')

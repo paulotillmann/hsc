@@ -12,7 +12,7 @@ import {
 import {
   fetchRoles, createRole, updateRole, deleteRole,
   fetchUsers, updateUserRole, updateUserDefaultModule, updateUserBlockedStatus, updateUserProfile, UserProfile,
-  Sector, fetchAllSectors, fetchUserSectors, updateUserSectors
+  Sector, fetchAllSectors, fetchUserSectors, updateUserSectors, fetchPacientesSetores
 } from '../services/rolesService';
 import { Role } from '../types/permissions';
 import { fetchModulesWithRoles, ModuleWithRoles } from '../services/modulesService';
@@ -161,17 +161,19 @@ interface EditUserModalProps {
   roles: Role[];
   modules: ModuleWithRoles[];
   sectors: Sector[];
-  onSave: (updates: Partial<Pick<UserProfile, 'full_name' | 'cpf' | 'role_id' | 'default_module_slug'>>, sectorIds: string[]) => void;
+  pacientesSetores: string[];
+  onSave: (updates: Partial<Pick<UserProfile, 'full_name' | 'cpf' | 'role_id' | 'default_module_slug' | 'setor_usuarios'>>, sectorIds: string[]) => void;
   onClose: () => void;
   saving: boolean;
 }
 
-const EditUserModal: React.FC<EditUserModalProps> = ({ userProfile, roles, modules, sectors, onSave, onClose, saving }) => {
+const EditUserModal: React.FC<EditUserModalProps> = ({ userProfile, roles, modules, sectors, pacientesSetores, onSave, onClose, saving }) => {
   const [form, setForm] = useState({
     full_name: userProfile.full_name || '',
     cpf: userProfile.cpf || '',
     role_id: userProfile.role_id || '',
     default_module_slug: userProfile.default_module_slug || '',
+    setor_usuarios: userProfile.setor_usuarios || '',
   });
   const [selectedSectors, setSelectedSectors] = useState<string[]>([]);
   const [loadingSectors, setLoadingSectors] = useState(true);
@@ -197,6 +199,7 @@ const EditUserModal: React.FC<EditUserModalProps> = ({ userProfile, roles, modul
       cpf: form.cpf.trim() || null,
       role_id: form.role_id || null,
       default_module_slug: form.default_module_slug || null,
+      setor_usuarios: form.setor_usuarios || null,
     }, selectedSectors);
   };
 
@@ -259,6 +262,20 @@ const EditUserModal: React.FC<EditUserModalProps> = ({ userProfile, roles, modul
               <option value="">Padrão do sistema</option>
               {modules.map(m => (
                 <option key={m.id} value={m.slug}>{m.name}</option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider block mb-1">Setor do Usuário</label>
+            <select
+              value={form.setor_usuarios}
+              onChange={e => setForm(p => ({ ...p, setor_usuarios: e.target.value }))}
+              className="w-full bg-background border border-border rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+            >
+              <option value="">Sem setor definido</option>
+              {pacientesSetores.map(setor => (
+                <option key={setor} value={setor}>{setor}</option>
               ))}
             </select>
           </div>
@@ -458,6 +475,7 @@ const Configuracoes: React.FC = () => {
   const [updatingBlockStatus, setUpdatingBlockStatus] = useState<string | null>(null);
   const [allModules, setAllModules] = useState<ModuleWithRoles[]>([]);
   const [allSectors, setAllSectors] = useState<Sector[]>([]);
+  const [pacientesSetores, setPacientesSetores] = useState<string[]>([]);
   const [userPage, setUserPage] = useState(1);
   const [userEditModal, setUserEditModal] = useState<UserProfile | null>(null);
   const [userEditSaving, setUserEditSaving] = useState(false);
@@ -484,14 +502,16 @@ const Configuracoes: React.FC = () => {
   const loadUsers = useCallback(async () => {
     setUsersLoading(true);
     try {
-      const [usersData, modulesData, sectorsData] = await Promise.all([
+      const [usersData, modulesData, sectorsData, pacSetoresData] = await Promise.all([
         fetchUsers(),
         fetchModulesWithRoles(),
         fetchAllSectors(),
+        fetchPacientesSetores(),
       ]);
       setUsers(usersData);
       setAllModules(modulesData.filter(m => m.is_active));
       setAllSectors(sectorsData);
+      setPacientesSetores(pacSetoresData);
     } catch (e) { showToast('error', 'Erro ao carregar usuários.'); }
     setUsersLoading(false);
   }, [showToast]);
@@ -517,7 +537,7 @@ const Configuracoes: React.FC = () => {
     if (result.success) await loadUsers();
   };
 
-  const handleSaveUserEdit = async (updates: Partial<Pick<UserProfile, 'full_name' | 'cpf' | 'role_id' | 'default_module_slug'>>, sectorIds: string[]) => {
+  const handleSaveUserEdit = async (updates: Partial<Pick<UserProfile, 'full_name' | 'cpf' | 'role_id' | 'default_module_slug' | 'setor_usuarios'>>, sectorIds: string[]) => {
     if (!userEditModal) return;
     setUserEditSaving(true);
     const result = await updateUserProfile(userEditModal.id, updates);
@@ -990,6 +1010,7 @@ const Configuracoes: React.FC = () => {
             roles={roles}
             modules={allModules}
             sectors={allSectors}
+            pacientesSetores={pacientesSetores}
             onSave={handleSaveUserEdit}
             onClose={() => setUserEditModal(null)}
             saving={userEditSaving}

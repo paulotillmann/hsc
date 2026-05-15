@@ -3,11 +3,12 @@
 // Aguarda tanto o auth quanto o perfil antes de renderizar o conteúdo
 
 import React from 'react';
-import { Navigate, Outlet } from 'react-router-dom';
+import { Navigate, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 
 const PrivateRoute: React.FC = () => {
-  const { session, loading, profileLoaded } = useAuth();
+  const { session, loading, profileLoaded, profile } = useAuth();
+  const location = useLocation();
 
   // Mostra spinner enquanto verifica sessão OU enquanto perfil ainda não foi carregado
   if (loading || (session && !profileLoaded)) {
@@ -19,6 +20,10 @@ const PrivateRoute: React.FC = () => {
         </div>
       </div>
     );
+  }
+
+  if (session && profileLoaded && profile?.setor_usuarios && location.pathname !== '/pacientes-internados') {
+    return <Navigate to="/pacientes-internados" replace />;
   }
 
   return session ? <Outlet /> : <Navigate to="/" replace />;

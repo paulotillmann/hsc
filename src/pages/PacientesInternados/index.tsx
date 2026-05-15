@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react';
-import { BedDouble, Search, Loader2, RefreshCcw, Calendar, CheckCircle, XCircle, ChevronDown } from 'lucide-react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { BedDouble, Search, Loader2, RefreshCcw, Calendar, CheckCircle, XCircle, ChevronDown, LogOut } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import SyncModal from './SyncModal';
+import { useAuth } from '../../contexts/AuthContext';
 
 interface Paciente {
   id: string;
@@ -14,38 +15,116 @@ interface Paciente {
   previsao_alta: string | null;
   ativo: boolean;
   dt_entrada: string | null;
+  leito: string | null;
+  ultima_prescricao: string | null;
 }
+
+const SYNC_INTERVAL_MS = 5 * 60 * 1000; // 5 minutos
 
 export default function PacientesInternados() {
   const [pacientes, setPacientes] = useState<Paciente[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [setorTerm, setSetorTerm] = useState('');
-  
-  // Pagination (12 records per page)
-  const [currentPage, setCurrentPage] = useState(1);
-  const recordsPerPage = 12;
 
-  // Sync Modal
+
+
+  // Sync Modal (apenas para usuários sem setor)
   const [isSyncModalOpen, setIsSyncModalOpen] = useState(false);
 
-  useEffect(() => {
-    fetchPacientes();
-  }, []);
+  // Auto-sync state
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [lastSyncTime, setLastSyncTime] = useState<Date | null>(null);
+  const [syncError, setSyncError] = useState(false);
+  const syncIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const fetchPacientes = async () => {
+  const { profile, signOut } = useAuth();
+
+  const handleLogout = async () => {
+    await signOut();
+    window.location.href = '/';
+  };
+
+  const fetchPacientes = useCallback(async () => {
     setLoading(true);
-    const { data, error } = await supabase
+    let query = supabase
       .from('pacientes_internados')
-      .select('id, nr_atendimento, paciente, ds_setor_atendimento, cd_cid_principal, dias_internado, teve_evolucao_hoje, previsao_alta, ativo, dt_entrada')
-      .eq('ativo', true) // Mostrar por padrão apenas ativos
+      .select('id, nr_atendimento, paciente, ds_setor_atendimento, cd_cid_principal, dias_internado, teve_evolucao_hoje, previsao_alta, ativo, dt_entrada, leito, ultima_prescricao')
+      .eq('ativo', true)
       .order('paciente', { ascending: true });
+
+    if (profile?.setor_usuarios) {
+      query = query.eq('ds_setor_atendimento', profile.setor_usuarios);
+    }
+
+    const { data, error } = await query;
 
     if (!error && data) {
       setPacientes(data);
     }
     setLoading(false);
-  };
+  }, [profile?.setor_usuarios]);
+
+  // Sincronização automática em background (chama a Edge Function)
+  const runAutoSync = useCallback(async () => {
+    if (isSyncing) return; // Evita execuções simultâneas
+
+    setIsSyncing(true);
+    setSyncError(false);
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://drbzogwimvaziaydwqfk.supabase.co';
+
+      const response = await fetch(`${supabaseUrl}/functions/v1/trigger_n8n_sync_pacientes`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`,
+        },
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        setLastSyncTime(new Date());
+        // Recarrega os dados do banco após sync bem-sucedida
+        await fetchPacientes();
+      } else {
+        console.error('Erro na sincronização automática:', result.error);
+        setSyncError(true);
+      }
+    } catch (err) {
+      console.error('Erro na sincronização automática:', err);
+      setSyncError(true);
+    } finally {
+      setIsSyncing(false);
+    }
+  }, [isSyncing, fetchPacientes]);
+
+  // Carregamento inicial dos dados
+  useEffect(() => {
+    fetchPacientes();
+  }, [fetchPacientes]);
+
+  // Cron job: sincroniza a cada 5 minutos
+  useEffect(() => {
+    // Executa a primeira sincronização imediatamente
+    runAutoSync();
+
+    // Configura o intervalo
+    syncIntervalRef.current = setInterval(() => {
+      runAutoSync();
+    }, SYNC_INTERVAL_MS);
+
+    return () => {
+      if (syncIntervalRef.current) {
+        clearInterval(syncIntervalRef.current);
+      }
+    };
+  }, []);  // eslint-disable-line react-hooks/exhaustive-deps
 
   // Setores únicos para o dropdown
   const uniqueSetores = Array.from(
@@ -59,20 +138,17 @@ export default function PacientesInternados() {
     return matchName && matchSetor;
   });
 
-  // Paginação
-  const totalPages = Math.ceil(filteredPacientes.length / recordsPerPage);
-  const indexOfLastRecord = currentPage * recordsPerPage;
-  const indexOfFirstRecord = indexOfLastRecord - recordsPerPage;
-  const currentRecords = filteredPacientes.slice(indexOfFirstRecord, indexOfLastRecord);
+  // Todos os registros filtrados sendo exibidos (sem paginação)
+  const currentRecords = filteredPacientes;
 
-  // Reseta paginação ao pesquisar
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [searchTerm, setorTerm]);
+  // Formata horário da última sync
+  const formatSyncTime = (date: Date) => {
+    return date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+  };
 
   return (
     <div className="flex flex-1 flex-col gap-6 p-6 md:p-8 animate-in fade-in zoom-in duration-500">
-      
+
       {/* Header */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div className="flex flex-col gap-2">
@@ -80,55 +156,99 @@ export default function PacientesInternados() {
             <div className="p-2 bg-primary/10 rounded-xl">
               <BedDouble className="h-6 w-6 text-primary" />
             </div>
-            Pacientes Internados
+            Pacientes Internados {profile?.setor_usuarios ? `- ${profile.setor_usuarios}` : ''}
           </h1>
           <p className="text-muted-foreground">
             Acompanhamento de pacientes atualmente internados na instituição.
           </p>
         </div>
-        <div className="flex flex-col sm:flex-row gap-2">
-          <button
-            onClick={() => setIsSyncModalOpen(true)}
-            className="flex items-center gap-2 bg-blue-600 text-white hover:bg-blue-700 px-4 py-2 rounded-md font-medium transition-colors shadow-sm"
-          >
-            <RefreshCcw className="h-5 w-5" />
-            Sincronizar Pacientes
-          </button>
+        <div className="flex items-center gap-3">
+          {/* Indicador de Sincronização Automática */}
+          <div className="flex items-center gap-2 text-xs text-muted-foreground select-none">
+            {isSyncing ? (
+              <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800/40">
+                <Loader2 className="h-3 w-3 animate-spin text-blue-500" />
+                <span className="text-blue-600 dark:text-blue-400 font-medium">Sincronizando...</span>
+              </div>
+            ) : syncError ? (
+              <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800/40">
+                <span className="relative flex h-2 w-2">
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
+                </span>
+                <span className="text-red-600 dark:text-red-400 font-medium">Erro na sync</span>
+              </div>
+            ) : lastSyncTime ? (
+              <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800/40">
+                <span className="relative flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                </span>
+                <span className="text-emerald-600 dark:text-emerald-400 font-medium">
+                  Sync {formatSyncTime(lastSyncTime)}
+                </span>
+              </div>
+            ) : null}
+          </div>
+
+          {/* Botão Sincronizar - apenas para usuários SEM setor definido */}
+          {!profile?.setor_usuarios && (
+            <button
+              onClick={() => setIsSyncModalOpen(true)}
+              className="flex items-center gap-2 bg-blue-600 text-white hover:bg-blue-700 px-4 py-2 rounded-md font-medium transition-colors shadow-sm"
+            >
+              <RefreshCcw className="h-5 w-5" />
+              Sincronizar Pacientes
+            </button>
+          )}
+
+          {/* Botão Sair - apenas para usuários com setor definido */}
+          {profile?.setor_usuarios && (
+            <button
+              onClick={handleLogout}
+              className="flex items-center gap-2 bg-red-600/10 text-red-600 hover:bg-red-600/20 px-4 py-2 rounded-md font-medium transition-colors shadow-sm border border-red-600/20"
+              title="Sair do Sistema"
+            >
+              <LogOut className="h-5 w-5" />
+              Sair
+            </button>
+          )}
         </div>
       </div>
 
       <div className="bg-card border rounded-lg shadow-sm flex flex-col flex-1 overflow-hidden min-h-[500px]">
         {/* Toolbar & Filters */}
-        <div className="p-4 border-b flex flex-col md:flex-row gap-4 justify-between bg-muted/20">
-          <div className="flex flex-1 gap-4 max-w-2xl">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <input
-                type="text"
-                placeholder="Buscar por nome do paciente..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-9 pr-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm bg-background"
-              />
-            </div>
-            <div className="relative flex-1">
-              <BedDouble className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
-              <select
-                value={setorTerm}
-                onChange={(e) => setSetorTerm(e.target.value)}
-                className="w-full pl-9 pr-8 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm bg-background appearance-none cursor-pointer"
-              >
-                <option value="">Todos os Setores</option>
-                {uniqueSetores.map(setor => (
-                  <option key={setor} value={setor}>
-                    {setor}
-                  </option>
-                ))}
-              </select>
-              <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+        {!profile?.setor_usuarios && (
+          <div className="p-4 border-b flex flex-col md:flex-row gap-4 justify-between bg-muted/20">
+            <div className="flex flex-1 gap-4 max-w-2xl">
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <input
+                  type="text"
+                  placeholder="Buscar por nome do paciente..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-full pl-9 pr-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm bg-background"
+                />
+              </div>
+              <div className="relative flex-1">
+                <BedDouble className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+                <select
+                  value={setorTerm}
+                  onChange={(e) => setSetorTerm(e.target.value)}
+                  className="w-full pl-9 pr-8 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm bg-background appearance-none cursor-pointer"
+                >
+                  <option value="">Todos os Setores</option>
+                  {uniqueSetores.map(setor => (
+                    <option key={setor} value={setor}>
+                      {setor}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+              </div>
             </div>
           </div>
-        </div>
+        )}
 
         {/* Table */}
         <div className="flex-1 overflow-auto">
@@ -147,47 +267,76 @@ export default function PacientesInternados() {
                 <tr>
                   <th className="px-6 py-3 font-semibold">Atendimento</th>
                   <th className="px-6 py-3 font-semibold">Paciente</th>
-                  <th className="px-6 py-3 font-semibold">Setor</th>
+                  <th className="px-6 py-3 font-semibold text-center">Leito</th>
+                  {!profile?.setor_usuarios && <th className="px-6 py-3 font-semibold">Setor</th>}
                   <th className="px-6 py-3 font-semibold text-center">CID</th>
-                  <th className="px-6 py-3 font-semibold text-center">Data Entrada</th>
-                  <th className="px-6 py-3 font-semibold text-center">Dias Internado</th>
-                  <th className="px-6 py-3 font-semibold text-center">Prev. Alta</th>
-                  <th className="px-6 py-3 font-semibold text-center">Evolução Hoje</th>
+                  <th className="px-6 py-3 font-semibold">Data Entrada</th>
+                  <th className="px-6 py-3 font-semibold">Dias Int.</th>
+                  <th className="px-6 py-3 font-semibold">Prev. Alta</th>
+                  <th className="px-6 py-3 font-semibold text-center">Últ. Prescrição</th>
+                  <th className="px-6 py-3 font-semibold text-center">Evolução Médica</th>
                   <th className="px-6 py-3 font-semibold text-center">Status</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
                 {currentRecords.map((p) => (
                   <tr key={p.id} className="hover:bg-muted/30 transition-colors">
-                    <td className="px-6 py-4 font-mono text-muted-foreground">
+                    <td className="px-6 py-4 font-medium text-foreground">
                       {p.nr_atendimento}
                     </td>
                     <td className="px-6 py-4 font-medium text-foreground">
                       {p.paciente}
                     </td>
-                    <td className="px-6 py-4 text-muted-foreground">
-                      {p.ds_setor_atendimento || '-'}
+                    <td className="px-6 py-4 text-center">
+                      {p.leito ? (
+                        <span className="inline-flex items-center justify-center px-2.5 py-1 rounded text-sm font-bold bg-blue-600/20 text-white dark:bg-blue-500/20 font-mono tracking-wider shadow-sm min-w-[3rem]">
+                          {p.leito}
+                        </span>
+                      ) : (
+                        <span className="text-muted-foreground">-</span>
+                      )}
                     </td>
+                    {!profile?.setor_usuarios && (
+                      <td className="px-6 py-4 text-muted-foreground">
+                        {p.ds_setor_atendimento || '-'}
+                      </td>
+                    )}
                     <td className="px-6 py-4 text-center">
                       {p.cd_cid_principal ? (
-                        <span className="inline-flex items-center justify-center px-2.5 py-1 rounded text-sm font-bold bg-indigo-100 text-indigo-800 dark:bg-indigo-900/40 dark:text-indigo-300 font-mono tracking-wider border border-indigo-200 dark:border-indigo-800/50 shadow-sm min-w-[3rem]">
+                        <span className="inline-flex items-center justify-center px-2.5 py-1 rounded text-sm font-bold bg-blue-600/20 text-white dark:bg-blue-500/20 font-mono tracking-wider shadow-sm min-w-[3rem]">
                           {p.cd_cid_principal}
                         </span>
                       ) : (
                         <span className="text-muted-foreground">-</span>
                       )}
                     </td>
-                    <td className="px-6 py-4 text-center text-muted-foreground">
+                    <td className="px-6 py-4 font-medium text-foreground">
                       {p.dt_entrada ? new Date(p.dt_entrada).toLocaleDateString('pt-BR') : '-'}
                     </td>
-                    <td className="px-6 py-4 text-center">
-                      <div className="flex justify-center items-center gap-1.5 text-muted-foreground">
-                        <Calendar className="h-4 w-4" />
+                    <td className="px-6 py-4 font-medium text-foreground">
+                      <div className="flex items-center gap-1.5">
+                        <Calendar className="h-4 w-4 text-muted-foreground" />
                         <span>{p.dias_internado ?? 0}</span>
                       </div>
                     </td>
-                    <td className="px-6 py-4 text-center text-muted-foreground">
+                    <td className="px-6 py-4 font-medium text-foreground">
                       {p.previsao_alta ? new Date(p.previsao_alta).toLocaleDateString('pt-BR', { timeZone: 'UTC' }) : '-'}
+                    </td>
+                    <td className="px-6 py-4 text-center">
+                      {p.ultima_prescricao ? (
+                        <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-semibold border ${
+                          (() => {
+                            const diff = new Date().getTime() - new Date(p.ultima_prescricao).getTime();
+                            return diff >= 0 && diff <= 30 * 60 * 1000;
+                          })()
+                            ? 'bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-300 border-green-100 dark:border-green-800/30'
+                            : 'bg-blue-50 text-blue-700 dark:bg-blue-900/20 dark:text-blue-300 border-blue-100 dark:border-blue-800/30'
+                        }`}>
+                          {new Date(p.ultima_prescricao).toLocaleDateString('pt-BR')} {new Date(p.ultima_prescricao).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                        </span>
+                      ) : (
+                        <span className="text-muted-foreground">-</span>
+                      )}
                     </td>
                     <td className="px-6 py-4 text-center">
                       {p.teve_evolucao_hoje === 'S' ? (
@@ -203,11 +352,10 @@ export default function PacientesInternados() {
                       )}
                     </td>
                     <td className="px-6 py-4 text-center">
-                      <span className={`inline-flex px-3 py-1.5 text-sm font-semibold rounded-full ${
-                        p.ativo 
-                          ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400' 
+                      <span className={`inline-flex px-3 py-1.5 text-sm font-semibold rounded-full ${p.ativo
+                          ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400'
                           : 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400'
-                      }`}>
+                        }`}>
                         {p.ativo ? 'Internado' : 'Alta'}
                       </span>
                     </td>
@@ -218,45 +366,22 @@ export default function PacientesInternados() {
           )}
         </div>
 
-        {/* Pagination Footer */}
+        {/* Total de registros */}
         {!loading && filteredPacientes.length > 0 && (
           <div className="p-4 border-t bg-muted/20 flex flex-col md:flex-row items-center justify-between gap-4">
             <span className="text-sm text-muted-foreground">
-              Mostrando <span className="font-medium text-foreground">{indexOfFirstRecord + 1}</span> a{' '}
-              <span className="font-medium text-foreground">
-                {Math.min(indexOfLastRecord, filteredPacientes.length)}
-              </span>{' '}
-              de <span className="font-medium text-foreground">{filteredPacientes.length}</span> resultados
+              Total de <span className="font-medium text-foreground">{filteredPacientes.length}</span> resultados
             </span>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                disabled={currentPage === 1}
-                className="px-3 py-1.5 border rounded-md text-sm font-medium hover:bg-muted disabled:opacity-50 transition-colors"
-              >
-                Anterior
-              </button>
-              <div className="flex items-center gap-1 text-sm font-medium px-2">
-                Página {currentPage} de {totalPages}
-              </div>
-              <button
-                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                disabled={currentPage === totalPages}
-                className="px-3 py-1.5 border rounded-md text-sm font-medium hover:bg-muted disabled:opacity-50 transition-colors"
-              >
-                Próxima
-              </button>
-            </div>
           </div>
         )}
       </div>
 
-      <SyncModal 
-        isOpen={isSyncModalOpen} 
-        onClose={() => setIsSyncModalOpen(false)} 
-        onSuccess={fetchPacientes} 
+      <SyncModal
+        isOpen={isSyncModalOpen}
+        onClose={() => setIsSyncModalOpen(false)}
+        onSuccess={fetchPacientes}
       />
-      
+
     </div>
   );
 }

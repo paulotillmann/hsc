@@ -11,7 +11,7 @@ import EtiquetaVisita from './pages/Recepcao/EtiquetaVisita';
 import Totem from './pages/Senhas/Totem';
 import PainelTV from './pages/Senhas/PainelTV';
 import PainelAtendente from './pages/Senhas/PainelAtendente';
-
+import PacientesInternados from './pages/PacientesInternados';
 const App: React.FC = () => {
   // Configuração Global de Tema
   useEffect(() => {
@@ -38,6 +38,9 @@ const App: React.FC = () => {
             {/* Rotas de Senhas (Sem Layout) */}
             <Route path="/totem" element={<Totem />} />
             <Route path="/painel-tv" element={<PainelTV />} />
+
+            {/* Rota de Pacientes Internados (Sem Layout) */}
+            <Route path="/pacientes-internados" element={<PacientesInternados />} />
 
             <Route element={<Layout />}>
               {/* Perfil: rota pública para qualquer usuário autenticado */}
