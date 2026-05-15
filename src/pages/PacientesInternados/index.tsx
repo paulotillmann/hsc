@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { BedDouble, Search, Loader2, RefreshCcw, Calendar, CheckCircle, XCircle, ChevronDown, LogOut } from 'lucide-react';
+import { BedDouble, Search, Loader2, RefreshCcw, Calendar, CheckCircle, XCircle, ChevronDown, LogOut, Moon, Sun } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import SyncModal from './SyncModal';
 import { useAuth } from '../../contexts/AuthContext';
@@ -39,6 +39,24 @@ export default function PacientesInternados() {
   const syncIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const { profile, signOut } = useAuth();
+
+  // Theme state
+  const [isDarkMode, setIsDarkMode] = useState(() => {
+    return document.documentElement.classList.contains('dark');
+  });
+
+  const toggleTheme = () => {
+    const root = document.documentElement;
+    if (root.classList.contains('dark')) {
+      root.classList.remove('dark');
+      root.classList.add('light');
+      setIsDarkMode(false);
+    } else {
+      root.classList.add('dark');
+      root.classList.remove('light');
+      setIsDarkMode(true);
+    }
+  };
 
   const handleLogout = async () => {
     await signOut();
@@ -190,6 +208,15 @@ export default function PacientesInternados() {
             ) : null}
           </div>
 
+          {/* Theme Toggle */}
+          <button
+            onClick={toggleTheme}
+            className="p-2.5 rounded-md border bg-background hover:bg-muted text-foreground transition-colors shadow-sm flex items-center justify-center"
+            title="Alternar Tema"
+          >
+            {isDarkMode ? <Sun className="h-5 w-5 text-amber-500" /> : <Moon className="h-5 w-5 text-slate-600" />}
+          </button>
+
           {/* Botão Sincronizar - apenas para usuários SEM setor definido */}
           {!profile?.setor_usuarios && (
             <button
@@ -289,7 +316,7 @@ export default function PacientesInternados() {
                     </td>
                     <td className="px-6 py-4 text-center">
                       {p.leito ? (
-                        <span className="inline-flex items-center justify-center px-2.5 py-1 rounded text-sm font-bold bg-blue-600/20 text-white dark:bg-blue-500/20 font-mono tracking-wider shadow-sm min-w-[3rem]">
+                        <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-semibold bg-blue-50 text-blue-700 dark:bg-blue-900/20 dark:text-blue-300 border border-blue-100 dark:border-blue-800/30">
                           {p.leito}
                         </span>
                       ) : (
