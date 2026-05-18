@@ -187,7 +187,7 @@ export default function PacientesInternados() {
             </div>
             <div className="flex items-center gap-1.5 text-muted-foreground font-medium">
               <CheckCircle className="h-4 w-4 text-green-500 dark:text-green-400" />
-              <span>Ok, realizado</span>
+              <span>Realizado</span>
             </div>
           </div>
         </div>
