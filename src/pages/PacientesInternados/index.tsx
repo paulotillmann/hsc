@@ -179,6 +179,17 @@ export default function PacientesInternados() {
           <p className="text-muted-foreground">
             Acompanhamento de pacientes atualmente internados na instituição.
           </p>
+          <div className="flex flex-wrap items-center gap-4 mt-2 text-xs">
+            <span className="font-semibold uppercase tracking-wider text-muted-foreground/80">Legenda:</span>
+            <div className="flex items-center gap-1.5 text-muted-foreground font-medium">
+              <XCircle className="h-4 w-4 text-red-500 dark:text-red-400" />
+              <span>Não informado</span>
+            </div>
+            <div className="flex items-center gap-1.5 text-muted-foreground font-medium">
+              <CheckCircle className="h-4 w-4 text-green-500 dark:text-green-400" />
+              <span>Ok, realizado</span>
+            </div>
+          </div>
         </div>
         <div className="flex items-center gap-3">
           {/* Indicador de Sincronização Automática */}
@@ -299,9 +310,9 @@ export default function PacientesInternados() {
                   <th className="px-6 py-3 font-semibold text-center">CID</th>
                   <th className="px-6 py-3 font-semibold">Data Entrada</th>
                   <th className="px-6 py-3 font-semibold">Dias Int.</th>
-                  <th className="px-6 py-3 font-semibold">Prev. Alta</th>
+                  <th className="px-6 py-3 font-semibold text-center">Prev. Alta</th>
                   <th className="px-6 py-3 font-semibold text-center">Últ. Prescrição</th>
-                  <th className="px-6 py-3 font-semibold text-center">Evolução Médica</th>
+                  <th className="px-6 py-3 font-semibold text-center">EV. Médica</th>
                   <th className="px-6 py-3 font-semibold text-center">Status</th>
                 </tr>
               </thead>
@@ -320,12 +331,18 @@ export default function PacientesInternados() {
                           {p.leito}
                         </span>
                       ) : (
-                        <span className="text-muted-foreground">-</span>
+                        <div className="flex justify-center">
+                          <XCircle className="h-5 w-5 text-red-500 dark:text-red-400" title="Sem leito" />
+                        </div>
                       )}
                     </td>
                     {!profile?.setor_usuarios && (
                       <td className="px-6 py-4 text-muted-foreground">
-                        {p.ds_setor_atendimento || '-'}
+                        {p.ds_setor_atendimento || (
+                          <div className="flex justify-start">
+                            <XCircle className="h-5 w-5 text-red-500 dark:text-red-400" title="Sem setor" />
+                          </div>
+                        )}
                       </td>
                     )}
                     <td className="px-6 py-4 text-center">
@@ -334,11 +351,17 @@ export default function PacientesInternados() {
                           {p.cd_cid_principal}
                         </span>
                       ) : (
-                        <span className="text-muted-foreground">-</span>
+                        <div className="flex justify-center">
+                          <XCircle className="h-5 w-5 text-red-500 dark:text-red-400" title="Sem CID" />
+                        </div>
                       )}
                     </td>
                     <td className="px-6 py-4 font-medium text-foreground">
-                      {p.dt_entrada ? new Date(p.dt_entrada).toLocaleDateString('pt-BR') : '-'}
+                      {p.dt_entrada ? new Date(p.dt_entrada).toLocaleDateString('pt-BR') : (
+                        <div className="flex justify-start">
+                          <XCircle className="h-5 w-5 text-red-500 dark:text-red-400" title="Sem data de entrada" />
+                        </div>
+                      )}
                     </td>
                     <td className="px-6 py-4 font-medium text-foreground">
                       <div className="flex items-center gap-1.5">
@@ -346,42 +369,80 @@ export default function PacientesInternados() {
                         <span>{p.dias_internado ?? 0}</span>
                       </div>
                     </td>
-                    <td className="px-6 py-4 font-medium text-foreground">
-                      {p.previsao_alta ? new Date(p.previsao_alta).toLocaleDateString('pt-BR', { timeZone: 'UTC' }) : '-'}
+                    <td className="px-6 py-4 font-medium text-foreground text-center">
+                      {p.previsao_alta ? (() => {
+                        const hoje = new Date();
+                        hoje.setHours(0, 0, 0, 0);
+                        const hojeTime = hoje.getTime();
+
+                        // Parse da data de previsão (vem como string YYYY-MM-DD do banco)
+                        const [year, month, day] = p.previsao_alta.split('T')[0].split('-').map(Number);
+                        const previsao = new Date(year, month - 1, day);
+                        previsao.setHours(0, 0, 0, 0);
+                        const previsaoTime = previsao.getTime();
+
+                        // Previsão - 1 dia
+                        const previsaoMenos1 = new Date(previsaoTime);
+                        previsaoMenos1.setDate(previsaoMenos1.getDate() - 1);
+                        const previsaoMenos1Time = previsaoMenos1.getTime();
+
+                        // Determina a cor
+                        let colorClass = '';
+                        if (hojeTime > previsaoTime) {
+                          // Data atual MAIOR que previsão → VERMELHO
+                          colorClass = 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400 border border-red-200 dark:border-red-800/40';
+                        } else if (hojeTime === previsaoMenos1Time || hojeTime === previsaoTime) {
+                          // Data atual = previsão - 1 dia OU data atual = previsão → LARANJA
+                          colorClass = 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400 border border-orange-200 dark:border-orange-800/40';
+                        }
+
+                        const dataFormatada = previsao.toLocaleDateString('pt-BR');
+
+                        return colorClass ? (
+                          <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-semibold ${colorClass}`}>
+                            {dataFormatada}
+                          </span>
+                        ) : (
+                          <span>{dataFormatada}</span>
+                        );
+                      })() : (
+                        <div className="flex justify-center">
+                          <XCircle className="h-5 w-5 text-red-500 dark:text-red-400" title="Sem previsão" />
+                        </div>
+                      )}
                     </td>
                     <td className="px-6 py-4 text-center">
                       {p.ultima_prescricao ? (
-                        <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-semibold border ${
-                          (() => {
-                            const diff = new Date().getTime() - new Date(p.ultima_prescricao).getTime();
-                            return diff >= 0 && diff <= 30 * 60 * 1000;
-                          })()
-                            ? 'bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-300 border-green-100 dark:border-green-800/30'
-                            : 'bg-blue-50 text-blue-700 dark:bg-blue-900/20 dark:text-blue-300 border-blue-100 dark:border-blue-800/30'
-                        }`}>
+                        <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-semibold border ${(() => {
+                          const diff = new Date().getTime() - new Date(p.ultima_prescricao).getTime();
+                          return diff >= 0 && diff <= 30 * 60 * 1000;
+                        })()
+                          ? 'bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-300 border-green-100 dark:border-green-800/30'
+                          : 'bg-blue-50 text-blue-700 dark:bg-blue-900/20 dark:text-blue-300 border-blue-100 dark:border-blue-800/30'
+                          }`}>
                           {new Date(p.ultima_prescricao).toLocaleDateString('pt-BR')} {new Date(p.ultima_prescricao).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
                         </span>
                       ) : (
-                        <span className="text-muted-foreground">-</span>
+                        <div className="flex justify-center">
+                          <XCircle className="h-5 w-5 text-red-500 dark:text-red-400" title="Sem prescrição" />
+                        </div>
                       )}
                     </td>
                     <td className="px-6 py-4 text-center">
                       {p.teve_evolucao_hoje === 'S' ? (
-                        <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-semibold bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400">
-                          <CheckCircle className="h-4 w-4" />
-                          Sim
-                        </span>
+                        <div className="flex justify-center">
+                          <CheckCircle className="h-5 w-5 text-green-500 dark:text-green-400" title="Sim" />
+                        </div>
                       ) : (
-                        <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-semibold bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400">
-                          <XCircle className="h-4 w-4" />
-                          Não
-                        </span>
+                        <div className="flex justify-center">
+                          <XCircle className="h-5 w-5 text-red-500 dark:text-red-400" title="Não" />
+                        </div>
                       )}
                     </td>
                     <td className="px-6 py-4 text-center">
                       <span className={`inline-flex px-3 py-1.5 text-sm font-semibold rounded-full ${p.ativo
-                          ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400'
-                          : 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400'
+                        ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400'
+                        : 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400'
                         }`}>
                         {p.ativo ? 'Internado' : 'Alta'}
                       </span>
