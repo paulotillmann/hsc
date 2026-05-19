@@ -307,7 +307,6 @@ export default function PacientesInternados() {
                   <th className="px-6 py-3 font-semibold">Paciente</th>
                   <th className="px-6 py-3 font-semibold text-center">Leito</th>
                   {!profile?.setor_usuarios && <th className="px-6 py-3 font-semibold">Setor</th>}
-                  <th className="px-6 py-3 font-semibold text-center">CID</th>
                   <th className="px-6 py-3 font-semibold">Data Entrada</th>
                   <th className="px-6 py-3 font-semibold">Dias Int.</th>
                   <th className="px-6 py-3 font-semibold text-center">Prev. Alta</th>
@@ -345,17 +344,6 @@ export default function PacientesInternados() {
                         )}
                       </td>
                     )}
-                    <td className="px-6 py-4 text-center">
-                      {p.cd_cid_principal ? (
-                        <span className="inline-flex items-center justify-center px-2.5 py-1 rounded text-sm font-bold bg-blue-600/20 text-white dark:bg-blue-500/20 font-mono tracking-wider shadow-sm min-w-[3rem]">
-                          {p.cd_cid_principal}
-                        </span>
-                      ) : (
-                        <div className="flex justify-center">
-                          <XCircle className="h-5 w-5 text-red-500 dark:text-red-400" title="Sem CID" />
-                        </div>
-                      )}
-                    </td>
                     <td className="px-6 py-4 font-medium text-foreground">
                       {p.dt_entrada ? new Date(p.dt_entrada).toLocaleDateString('pt-BR') : (
                         <div className="flex justify-start">
@@ -392,8 +380,8 @@ export default function PacientesInternados() {
                           // Data atual MAIOR que previsão → VERMELHO
                           colorClass = 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400 border border-red-200 dark:border-red-800/40';
                         } else if (hojeTime === previsaoMenos1Time || hojeTime === previsaoTime) {
-                          // Data atual = previsão - 1 dia OU data atual = previsão → LARANJA
-                          colorClass = 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400 border border-orange-200 dark:border-orange-800/40';
+                          // Data atual = previsão - 1 dia OU data atual = previsão → VERDE
+                          colorClass = 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400 border border-green-200 dark:border-green-800/40';
                         }
 
                         const dataFormatada = previsao.toLocaleDateString('pt-BR');
