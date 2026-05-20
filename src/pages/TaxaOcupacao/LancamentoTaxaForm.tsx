@@ -117,22 +117,22 @@ const LancamentoTaxaForm: React.FC = () => {
       
     if (data && !error) {
       setLeitosReferencia(data);
-      // Inicializar estado dos detalhes apenas se não foi carregado de um master existente
+      // Inicializar estado dos detalhes apenas para os leitos do setor selecionado
       setLeitosDia(prev => {
-        const newState = { ...prev };
-        let mudou = false;
+        const newState: Record<string, LeitoDiaState> = {};
         data.forEach(leito => {
-          if (!newState[leito.id]) {
+          if (prev[leito.id]) {
+            newState[leito.id] = prev[leito.id];
+          } else {
             newState[leito.id] = {
               leito_id: leito.id,
               padrao: leito.padrao,
               qtd_leitos_dia: 0,
               qtd_leitos_sus: 0
             };
-            mudou = true;
           }
         });
-        return mudou ? newState : prev;
+        return newState;
       });
     }
   };
