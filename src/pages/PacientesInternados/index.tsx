@@ -193,11 +193,11 @@ export default function PacientesInternados() {
         </div>
 
         {/* Card de Quantidade de Pacientes */}
-        <div className="relative overflow-hidden w-full md:w-64 h-[84px] bg-[#f8fafc]/50 dark:bg-[#0d1527]/60 border border-slate-200 dark:border-slate-850/80 rounded-2xl p-4 flex flex-col justify-between shadow-sm backdrop-blur-sm self-stretch md:self-auto">
+        <div className="relative overflow-hidden w-full md:w-96 h-[92px] bg-slate-50/60 dark:bg-[#131d30]/60 border border-slate-200/40 dark:border-[#1e293b]/50 rounded-2xl p-4 px-6 flex flex-col justify-between shadow-sm backdrop-blur-sm self-stretch md:self-auto">
           <div className="text-slate-500 dark:text-slate-400 text-sm font-semibold tracking-wide">
             Pacientes Internados
           </div>
-          <div className="text-4xl font-bold text-sky-500 dark:text-sky-455 tracking-tight leading-none">
+          <div className="text-4xl font-bold text-sky-500 dark:text-sky-400 tracking-tight leading-none">
             {loading ? '...' : filteredPacientes.length}
           </div>
           <div className="absolute right-[-8px] bottom-[-16px] text-slate-400 dark:text-slate-800 opacity-20 dark:opacity-40 pointer-events-none">
