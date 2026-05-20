@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { BedDouble, Search, Loader2, RefreshCcw, Calendar, CheckCircle, XCircle, ChevronDown, LogOut, Moon, Sun } from 'lucide-react';
+import { BedDouble, Search, Loader2, RefreshCcw, Calendar, CheckCircle, XCircle, ChevronDown, LogOut, Moon, Sun, User } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import SyncModal from './SyncModal';
 import { useAuth } from '../../contexts/AuthContext';
@@ -191,6 +191,20 @@ export default function PacientesInternados() {
             </div>
           </div>
         </div>
+
+        {/* Card de Quantidade de Pacientes */}
+        <div className="relative overflow-hidden w-full md:w-64 h-[84px] bg-[#f8fafc]/50 dark:bg-[#0d1527]/60 border border-slate-200 dark:border-slate-850/80 rounded-2xl p-4 flex flex-col justify-between shadow-sm backdrop-blur-sm self-stretch md:self-auto">
+          <div className="text-slate-500 dark:text-slate-400 text-sm font-semibold tracking-wide">
+            Pacientes Internados
+          </div>
+          <div className="text-4xl font-bold text-sky-500 dark:text-sky-455 tracking-tight leading-none">
+            {loading ? '...' : filteredPacientes.length}
+          </div>
+          <div className="absolute right-[-8px] bottom-[-16px] text-slate-400 dark:text-slate-800 opacity-20 dark:opacity-40 pointer-events-none">
+            <User className="h-24 w-24 stroke-[1.2]" />
+          </div>
+        </div>
+
         <div className="flex items-center gap-3">
           {/* Indicador de Sincronização Automática */}
           <div className="flex items-center gap-2 text-xs text-muted-foreground select-none">
