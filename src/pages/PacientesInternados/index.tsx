@@ -345,7 +345,9 @@ export default function PacientesInternados() {
                       </td>
                     )}
                     <td className="px-6 py-4 font-medium text-foreground">
-                      {p.dt_entrada ? new Date(p.dt_entrada).toLocaleDateString('pt-BR') : (
+                      {p.dt_entrada ? (
+                        `${new Date(p.dt_entrada).toLocaleDateString('pt-BR')} ${new Date(p.dt_entrada).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`
+                      ) : (
                         <div className="flex justify-start">
                           <XCircle className="h-5 w-5 text-red-500 dark:text-red-400" title="Sem data de entrada" />
                         </div>
