@@ -248,7 +248,7 @@ export default function GestaoPendencias() {
     setSyncStatus('idle');
     setSyncTime(null);
 
-    const webhookUrl = import.meta.env.VITE_N8N_WEBHOOK_GESTAO_PENDENCIAS;
+    const webhookUrl = import.meta.env.VITE_N8N_WEBHOOK_GESTAO_PENDENCIAS || 'https://n8n-n8n.7woir1.easypanel.host/webhook/gestao_de_pendencias';
     
     if (!webhookUrl) {
       setTimeout(() => {
