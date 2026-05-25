@@ -8,7 +8,7 @@ export const webhookService = {
    * @param payload Data to be sent to the webhook
    */
   async triggerGestaoPendencias(payload: any = {}): Promise<boolean> {
-    const webhookUrl = import.meta.env.VITE_N8N_WEBHOOK_GESTAO_PENDENCIAS;
+    const webhookUrl = import.meta.env.VITE_N8N_WEBHOOK_GESTAO_PENDENCIAS || 'https://n8n-n8n.7woir1.easypanel.host/webhook/gestao_de_pendencias';
     
     if (!webhookUrl) {
       console.error('Webhook URL (VITE_N8N_WEBHOOK_GESTAO_PENDENCIAS) is not configured.');
