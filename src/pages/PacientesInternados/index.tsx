@@ -160,7 +160,7 @@ export default function PacientesInternados() {
   // Filtragem
   const filteredPacientes = pacientes.filter(p => {
     const matchName = p.paciente?.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchSetor = p.ds_setor_atendimento?.toLowerCase().includes(setorTerm.toLowerCase()) || setorTerm === '';
+    const matchSetor = p.ds_setor_atendimento === setorTerm || setorTerm === '';
     return matchName && matchSetor;
   });
 
@@ -212,13 +212,20 @@ export default function PacientesInternados() {
 
       {/* Header e Indicadores */}
       <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-6">
-        <div className="flex flex-col gap-2">
-          <h1 className="text-3xl font-bold tracking-tight text-foreground flex items-center gap-3">
-            <div className="p-2 bg-primary/10 rounded-xl">
-              <BedDouble className="h-6 w-6 text-primary" />
+        <div className="flex flex-col gap-2 w-full xl:w-auto">
+          <div className="flex items-center gap-4 flex-wrap justify-between md:justify-start">
+            {/* Logo da Santa Casa */}
+            <div className="flex items-center pr-4 md:border-r md:border-border h-10">
+              <img src="/LOGO_HSC_PRIMARY.png" alt="Santa Casa" className="h-10 w-auto dark:hidden object-contain" />
+              <img src="/LOGO_HSC_WHITE.png" alt="Santa Casa" className="h-10 w-auto hidden dark:block object-contain" />
             </div>
-            Pacientes Internados {profile?.setor_usuarios ? `- ${profile.setor_usuarios}` : ''}
-          </h1>
+            <h1 className="text-3xl font-bold tracking-tight text-foreground flex items-center gap-3">
+              <div className="p-2 bg-primary/10 rounded-xl">
+                <BedDouble className="h-6 w-6 text-primary" />
+              </div>
+              Pacientes Internados {profile?.setor_usuarios ? `- ${profile.setor_usuarios}` : ''}
+            </h1>
+          </div>
           <p className="text-muted-foreground">
             Acompanhamento de pacientes atualmente internados na instituição.
           </p>
@@ -384,7 +391,9 @@ export default function PacientesInternados() {
                       {p.paciente}
                     </td>
                     <td className="px-6 py-4 text-center">
-                      {p.leito ? (
+                      {!p.ativo ? (
+                        <span className="text-muted-foreground font-semibold">-</span>
+                      ) : p.leito ? (
                         <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-semibold bg-blue-50 text-blue-700 dark:bg-blue-900/20 dark:text-blue-300 border border-blue-100 dark:border-blue-800/30">
                           {p.leito}
                         </span>
