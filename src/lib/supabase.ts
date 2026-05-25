@@ -85,6 +85,32 @@ export type Database = {
           ano_referencia?: number;
         };
       };
+      pendencias_webhook_logs: {
+        Row: {
+          id: string;
+          date_from: string | null;
+          date_to: string | null;
+          payload: any;
+          status: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          date_from?: string | null;
+          date_to?: string | null;
+          payload: any;
+          status?: string;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          date_from?: string | null;
+          date_to?: string | null;
+          payload?: any;
+          status?: string;
+          created_at?: string;
+        };
+      };
     };
   };
 };
