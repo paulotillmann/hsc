@@ -32,3 +32,6 @@ dist-ssr
 INFORMES2026-pag.pdf
 output/
 public/informes/INFORME_*.pdf
+
+# Wrangler
+.wrangler/
