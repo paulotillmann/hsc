@@ -35,3 +35,7 @@ public/informes/INFORME_*.pdf
 
 # Wrangler
 .wrangler/
+
+# Temporary output files
+output_test.txt
+

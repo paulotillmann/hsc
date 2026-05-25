@@ -955,28 +955,57 @@ export default function GestaoPendencias() {
 
             {/* Paginação da Tabela */}
             {totalPages > 1 && (
-              <div className="p-4 border-t border-border bg-muted/20 flex justify-between items-center">
-                <span className="text-xs text-muted-foreground">
-                  Página <span className="font-semibold text-foreground">{currentPage}</span> de <span className="font-semibold text-foreground">{totalPages}</span> — total de <span className="font-semibold text-foreground">{filteredPendencias.length}</span> registros
+              <div className="p-3.5 border-t border-border/60 bg-muted/20 flex justify-between items-center">
+                <span className="text-xs text-muted-foreground font-medium">
+                  Página <span className="font-bold text-foreground">{currentPage}</span> de <span className="font-bold text-foreground">{totalPages}</span> <span className="px-1 text-muted-foreground/50">·</span> {filteredPendencias.length} registros
                 </span>
                 
                 <div className="flex items-center gap-1.5">
+                  {/* Botão Anterior */}
                   <button 
                     onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
                     disabled={currentPage === 1}
-                    className="w-8 h-8 flex items-center justify-center rounded border border-border bg-background hover:bg-muted text-muted-foreground disabled:opacity-50"
+                    className="w-7 h-7 flex items-center justify-center rounded bg-background border border-border/50 hover:bg-muted text-muted-foreground disabled:opacity-50 transition-colors"
                   >
                     <ChevronLeft className="h-4 w-4" />
                   </button>
                   
-                  <span className="text-xs font-semibold px-2">
-                    {currentPage} / {totalPages}
-                  </span>
+                  {/* Números das Páginas */}
+                  {(() => {
+                    const maxVisiblePages = 5;
+                    let startPage = Math.max(1, currentPage - Math.floor(maxVisiblePages / 2));
+                    let endPage = startPage + maxVisiblePages - 1;
 
+                    if (endPage > totalPages) {
+                      endPage = totalPages;
+                      startPage = Math.max(1, endPage - maxVisiblePages + 1);
+                    }
+
+                    const pages = [];
+                    for (let i = startPage; i <= endPage; i++) {
+                      pages.push(i);
+                    }
+
+                    return pages.map(page => (
+                      <button
+                        key={page}
+                        onClick={() => setCurrentPage(page)}
+                        className={`w-7 h-7 flex items-center justify-center rounded text-xs font-semibold transition-colors ${
+                          currentPage === page 
+                            ? 'bg-primary text-primary-foreground shadow-sm border border-primary/50' 
+                            : 'bg-background border border-border/50 text-muted-foreground hover:bg-muted'
+                        }`}
+                      >
+                        {page}
+                      </button>
+                    ));
+                  })()}
+
+                  {/* Botão Próximo */}
                   <button 
                     onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
                     disabled={currentPage === totalPages}
-                    className="w-8 h-8 flex items-center justify-center rounded border border-border bg-background hover:bg-muted text-muted-foreground disabled:opacity-50"
+                    className="w-7 h-7 flex items-center justify-center rounded bg-background border border-border/50 hover:bg-muted text-muted-foreground disabled:opacity-50 transition-colors"
                   >
                     <ChevronRight className="h-4 w-4" />
                   </button>
