@@ -211,6 +211,14 @@ const getSetorColorClass = (setor?: string) => {
   return 'bg-slate-500/10 border-slate-500/20 text-slate-600 dark:text-slate-400';
 };
 
+// ── Formata data de YYYY-MM-DD para DD/MM/YYYY ──
+const formatDateBR = (dateStr?: string) => {
+  if (!dateStr) return '-';
+  const parts = dateStr.split('-');
+  if (parts.length !== 3) return dateStr;
+  return `${parts[2]}/${parts[1]}/${parts[0]}`;
+};
+
 export default function GestaoPendencias() {
   const [dbData, setDbData] = useState<Pendencia[]>([]);
   const [loading, setLoading] = useState(true);
@@ -218,9 +226,9 @@ export default function GestaoPendencias() {
   const [syncStatus, setSyncStatus] = useState<'idle' | 'success' | 'error'>('idle');
   const [syncTime, setSyncTime] = useState<string | null>(null);
 
-  // ── Consulta por Período (Padrão Power BI: 2025-10-01 a 2026-04-15) ──
+  // ── Consulta por Período (Padrão Power BI: 2025-10-01 a hoje) ──
   const [dateFrom, setDateFrom] = useState('2025-10-01');
-  const [dateTo, setDateTo] = useState('2026-04-15');
+  const [dateTo, setDateTo] = useState(() => new Date().toISOString().split('T')[0]);
 
   // Filtros Adicionais
   const [searchTerm, setSearchTerm] = useState('');
@@ -234,13 +242,6 @@ export default function GestaoPendencias() {
   // Paginação da tabela
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
-
-  // Carrega e gera a massa de dados inicial
-  useEffect(() => {
-    // Carrega dados de simulação locais de alta fidelidade
-    setDbData(generatePowerBIPendencias());
-    setLoading(false);
-  }, []);
 
   // ── Integração com n8n via Webhook ──
   const handleSyncWithWebhook = async () => {
@@ -366,6 +367,15 @@ export default function GestaoPendencias() {
       setLoading(false);
     }
   };
+
+  // Sincronização automática de dados em tempo real no carregamento da página
+  useEffect(() => {
+    // Carrega dados de simulação locais de alta fidelidade como fallback inicial
+    setDbData(generatePowerBIPendencias());
+    
+    // Dispara a sincronização automática com o webhook do n8n
+    handleSyncWithWebhook();
+  }, []);
 
   // ── Exportação de Relatório PDF ──
   const exportarRelatorioPDF = async () => {
@@ -882,6 +892,7 @@ export default function GestaoPendencias() {
                 <thead>
                   <tr className="border-b border-border bg-muted/30 text-muted-foreground">
                     <th scope="col" className="h-11 px-4 py-2 text-left font-bold uppercase tracking-wider text-xs">Atendimento</th>
+                    <th scope="col" className="h-11 px-4 py-2 text-left font-bold uppercase tracking-wider text-xs">Data</th>
                     <th scope="col" className="h-11 px-4 py-2 text-left font-bold uppercase tracking-wider text-xs">Tipo de Pendência</th>
                     <th scope="col" className="h-11 px-4 py-2 text-left font-bold uppercase tracking-wider text-xs">Setor</th>
                     <th scope="col" className="h-11 px-4 py-2 text-left font-bold uppercase tracking-wider text-xs">Descrição</th>
@@ -891,7 +902,7 @@ export default function GestaoPendencias() {
                 <tbody className="divide-y divide-border">
                   {loading ? (
                     <tr>
-                      <td colSpan={5} className="h-44 text-center">
+                      <td colSpan={6} className="h-44 text-center">
                         <div className="flex flex-col items-center justify-center gap-2">
                           <div className="h-6 w-6 rounded-full border-2 border-primary border-t-transparent animate-spin" />
                           <span className="text-muted-foreground text-xs">Atualizando lista de pendências...</span>
@@ -900,7 +911,7 @@ export default function GestaoPendencias() {
                     </tr>
                   ) : filteredPendencias.length === 0 ? (
                     <tr>
-                      <td colSpan={5} className="h-44 text-center text-muted-foreground">
+                      <td colSpan={6} className="h-44 text-center text-muted-foreground">
                         Nenhuma pendência encontrada no intervalo selecionado.
                       </td>
                     </tr>
@@ -910,6 +921,11 @@ export default function GestaoPendencias() {
                         {/* Atendimento */}
                         <td className="px-4 py-3.5 font-semibold text-foreground font-mono text-xs whitespace-nowrap">
                           {item.atendimento}
+                        </td>
+                        
+                        {/* Data */}
+                        <td className="px-4 py-3.5 text-xs text-foreground/90 font-medium whitespace-nowrap">
+                          {formatDateBR(item.data_criacao)}
                         </td>
                         
                         {/* Tipo de Pendência */}
@@ -927,7 +943,7 @@ export default function GestaoPendencias() {
                         {/* Removido: Nome Paciente */}
                         
                         {/* Descrição */}
-                        <td className="px-4 py-3.5 text-xs text-muted-foreground max-w-xs truncate" title={item.descricao}>
+                        <td className="px-4 py-3.5 text-xs text-muted-foreground max-w-xs whitespace-normal break-words" title={item.descricao}>
                           {item.descricao}
                         </td>
 
