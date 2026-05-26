@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { NavLink, useNavigate, useLocation } from 'react-router-dom';
-import { LogOut, Sun, Moon, ChevronLeft, ChevronRight, ChevronDown } from 'lucide-react';
+import { LogOut, Sun, Moon, ChevronLeft, ChevronRight, ChevronDown, HeartPulse } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { usePermissions } from '../hooks/usePermissions';
 import DynamicIcon from './DynamicIcon';
@@ -18,6 +18,7 @@ const Sidebar: React.FC = () => {
     if (window.location.pathname.startsWith('/notificacoes')) return 'notificacoes';
     if (window.location.pathname.startsWith('/recepcao')) return 'recepcao';
     if (window.location.pathname.startsWith('/taxa-ocupacao')) return 'taxa-ocupacao';
+    if (window.location.pathname.startsWith('/pacientes-internados') || window.location.pathname.startsWith('/centro-cirurgico')) return 'assistencial';
     return null;
   });
 
@@ -30,6 +31,7 @@ const Sidebar: React.FC = () => {
     if (location.pathname.startsWith('/notificacoes')) setExpandedMenu('notificacoes');
     else if (location.pathname.startsWith('/recepcao')) setExpandedMenu('recepcao');
     else if (location.pathname.startsWith('/taxa-ocupacao')) setExpandedMenu('taxa-ocupacao');
+    else if (location.pathname.startsWith('/pacientes-internados') || location.pathname.startsWith('/centro-cirurgico')) setExpandedMenu('assistencial');
   }, [location.pathname, isCollapsed]);
 
   useEffect(() => {
@@ -100,8 +102,82 @@ const Sidebar: React.FC = () => {
 
       {/* ── Menu dinâmico gerado pelos módulos do perfil ── */}
       <nav className="flex-1 p-3 flex flex-col gap-2 overflow-x-hidden overflow-y-auto pt-8 scrollbar-hide">
+        {/* Categoria Assistencial (Agrupador) */}
+        {(() => {
+          const hasPacientesAccess = userModules.some(m => m.slug === 'pacientes-internados');
+          const hasCentroCirurgicoAccess = userModules.some(m => m.slug === 'centro-cirurgico');
+          const showAssistencial = hasPacientesAccess || hasCentroCirurgicoAccess;
+          const isAssistencialActive = location.pathname.startsWith('/pacientes-internados') || location.pathname.startsWith('/centro-cirurgico');
+
+          if (!showAssistencial) return null;
+
+          return (
+            <div className="flex flex-col">
+              {isCollapsed ? (
+                <NavLink
+                  to={hasPacientesAccess ? '/pacientes-internados' : '/centro-cirurgico'}
+                  title="Assistencial"
+                  className={navLinkClass(isAssistencialActive)}
+                >
+                  <HeartPulse className="h-5 w-5 flex-shrink-0" />
+                </NavLink>
+              ) : (
+                <button
+                  onClick={() => {
+                    setExpandedMenu(expandedMenu === 'assistencial' ? null : 'assistencial');
+                  }}
+                  className={`flex items-center rounded-md text-sm transition-all duration-200 justify-start gap-3 px-3 py-2 w-full ${
+                    isAssistencialActive
+                      ? 'bg-primary text-primary-foreground shadow-sm hover:shadow-md hover:shadow-primary/20 font-medium'
+                      : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                  }`}
+                >
+                  <HeartPulse className="h-5 w-5 flex-shrink-0" />
+                  <div className="flex flex-1 items-center justify-between">
+                    <span className="truncate">Assistencial</span>
+                    <ChevronRight className={`h-4 w-4 transition-transform ${expandedMenu === 'assistencial' ? 'rotate-90' : ''}`} />
+                  </div>
+                </button>
+              )}
+
+              {!isCollapsed && expandedMenu === 'assistencial' && (
+                <div className="flex flex-col ml-9 mt-1 gap-1 border-l-2 border-border pl-2 border-primary/20 animate-in fade-in duration-300">
+                  {hasPacientesAccess && (
+                    <NavLink
+                      to="/pacientes-internados"
+                      className={({ isActive }) => 
+                        `text-sm px-3 py-2 rounded-md transition-colors ${
+                          isActive 
+                            ? 'bg-primary/10 text-primary font-medium' 
+                            : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                        }`
+                      }
+                    >
+                       Pacientes Internados
+                    </NavLink>
+                  )}
+                  {hasCentroCirurgicoAccess && (
+                    <NavLink
+                      to="/centro-cirurgico"
+                      className={({ isActive }) => 
+                        `text-sm px-3 py-2 rounded-md transition-colors ${
+                          isActive 
+                            ? 'bg-primary/10 text-primary font-medium' 
+                            : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                        }`
+                      }
+                    >
+                       Centro Cirúrgico
+                    </NavLink>
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })()}
+
         {userModules
-          .filter(m => m.slug !== 'configuracoes') // Configurações fica na área inferior
+          .filter(m => m.slug !== 'configuracoes' && m.slug !== 'pacientes-internados' && m.slug !== 'centro-cirurgico') // Configurações fica na área inferior, e assistenciais ficam agrupados
           .map(module => {
             if (module.slug === 'notificacoes') {
               const isActiveLocal = location.pathname.startsWith('/notificacoes');

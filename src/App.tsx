@@ -31,7 +31,7 @@ const App: React.FC = () => {
 
           {/* Rotas protegidas — exigem sessão ativa */}
           <Route element={<PrivateRoute />}>
-            
+
             {/* Rota de Impressão (Sem Layout da aplicação) */}
             <Route path="/imprimir/etiqueta/:id" element={<EtiquetaVisita />} />
 
