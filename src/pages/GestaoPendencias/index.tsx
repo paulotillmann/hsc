@@ -703,7 +703,7 @@ export default function GestaoPendencias() {
 
           <button
             onClick={exportarRelatorioPDF}
-            className="w-full md:w-auto inline-flex items-center justify-center rounded-md text-sm font-semibold bg-white border border-border text-foreground hover:bg-muted h-10 px-4 transition-all shadow-sm"
+            className="w-full md:w-auto inline-flex items-center justify-center rounded-md text-sm font-semibold bg-card border border-border text-foreground hover:bg-muted h-10 px-4 transition-all shadow-sm"
           >
             <FileText className="mr-2 h-4 w-4" />
             Relatório

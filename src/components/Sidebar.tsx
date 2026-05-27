@@ -66,7 +66,7 @@ const Sidebar: React.FC = () => {
     } ${
       isActive
         ? 'bg-primary text-primary-foreground shadow-sm hover:shadow-md hover:shadow-primary/20 font-medium'
-        : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+        : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
     }`;
 
   return (
@@ -126,7 +126,7 @@ const Sidebar: React.FC = () => {
                       className={`flex items-center rounded-md text-sm transition-all duration-200 justify-start gap-3 px-3 py-2 w-full ${
                         isActiveLocal
                           ? 'bg-primary text-primary-foreground shadow-sm hover:shadow-md hover:shadow-primary/20 font-medium'
-                          : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                          : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
                       }`}
                     >
                       <DynamicIcon name={module.icon} className="h-5 w-5 flex-shrink-0" />
@@ -146,7 +146,7 @@ const Sidebar: React.FC = () => {
                           `text-sm px-3 py-2 rounded-md transition-colors ${
                             isActive 
                               ? 'bg-primary text-primary-foreground shadow-sm font-medium' 
-                              : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                              : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
                           }`
                         }
                       >
@@ -158,7 +158,7 @@ const Sidebar: React.FC = () => {
                           `text-sm px-3 py-2 rounded-md transition-colors ${
                             isActive 
                               ? 'bg-primary text-primary-foreground shadow-sm font-medium' 
-                              : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                              : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
                           }`
                         }
                       >
@@ -191,7 +191,7 @@ const Sidebar: React.FC = () => {
                       className={`flex items-center rounded-md text-sm transition-all duration-200 justify-start gap-3 px-3 py-2 w-full ${
                         isActiveLocal
                           ? 'bg-primary text-primary-foreground shadow-sm hover:shadow-md hover:shadow-primary/20 font-medium'
-                          : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                          : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
                       }`}
                     >
                       <DynamicIcon name={module.icon} className="h-5 w-5 flex-shrink-0" />
@@ -211,7 +211,7 @@ const Sidebar: React.FC = () => {
                           `text-sm px-3 py-2 rounded-md transition-colors ${
                             isActive 
                               ? 'bg-primary text-primary-foreground shadow-sm font-medium' 
-                              : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                              : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
                           }`
                         }
                       >
@@ -223,7 +223,7 @@ const Sidebar: React.FC = () => {
                           `text-sm px-3 py-2 rounded-md transition-colors ${
                             isActive 
                               ? 'bg-primary text-primary-foreground shadow-sm font-medium' 
-                              : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                              : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
                           }`
                         }
                       >
@@ -235,7 +235,7 @@ const Sidebar: React.FC = () => {
                           `text-sm px-3 py-2 rounded-md transition-colors ${
                             isActive 
                               ? 'bg-primary text-primary-foreground shadow-sm font-medium' 
-                              : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                              : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
                           }`
                         }
                       >
@@ -247,7 +247,7 @@ const Sidebar: React.FC = () => {
                           `text-sm px-3 py-2 rounded-md transition-colors ${
                             isActive 
                               ? 'bg-primary text-primary-foreground shadow-sm font-medium' 
-                              : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                              : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
                           }`
                         }
                       >
@@ -259,7 +259,7 @@ const Sidebar: React.FC = () => {
                           `text-sm px-3 py-2 rounded-md transition-colors ${
                             isActive 
                               ? 'bg-primary text-primary-foreground shadow-sm font-medium' 
-                              : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                              : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
                           }`
                         }
                       >
@@ -292,7 +292,7 @@ const Sidebar: React.FC = () => {
                       className={`flex items-center rounded-md text-sm transition-all duration-200 justify-start gap-3 px-3 py-2 w-full ${
                         isActiveLocal
                           ? 'bg-primary text-primary-foreground shadow-sm hover:shadow-md hover:shadow-primary/20 font-medium'
-                          : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                          : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
                       }`}
                     >
                       <DynamicIcon name={module.icon} className="h-5 w-5 flex-shrink-0" />
@@ -312,7 +312,7 @@ const Sidebar: React.FC = () => {
                           `text-sm px-3 py-2 rounded-md transition-colors ${
                             isActive 
                               ? 'bg-primary text-primary-foreground shadow-sm font-medium' 
-                              : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                              : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
                           }`
                         }
                       >
@@ -325,7 +325,7 @@ const Sidebar: React.FC = () => {
                           `text-sm px-3 py-2 rounded-md transition-colors ${
                             isActive 
                               ? 'bg-primary text-primary-foreground shadow-sm font-medium' 
-                              : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                              : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
                           }`
                         }
                       >
@@ -338,7 +338,7 @@ const Sidebar: React.FC = () => {
                           `text-sm px-3 py-2 rounded-md transition-colors ${
                             isActive 
                               ? 'bg-primary text-primary-foreground shadow-sm font-medium' 
-                              : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                              : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
                           }`
                         }
                       >
@@ -350,7 +350,7 @@ const Sidebar: React.FC = () => {
                           `text-sm px-3 py-2 rounded-md transition-colors ${
                             isActive 
                               ? 'bg-primary text-primary-foreground shadow-sm font-medium' 
-                              : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                              : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
                           }`
                         }
                       >
@@ -383,7 +383,7 @@ const Sidebar: React.FC = () => {
                       className={`flex items-center rounded-md text-sm transition-all duration-200 justify-start gap-3 px-3 py-2 w-full ${
                         isActiveLocal
                           ? 'bg-primary text-primary-foreground shadow-sm hover:shadow-md hover:shadow-primary/20 font-medium'
-                          : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                          : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
                       }`}
                     >
                       <DynamicIcon name="DollarSign" className="h-5 w-5 flex-shrink-0" />
@@ -403,7 +403,7 @@ const Sidebar: React.FC = () => {
                           `text-sm px-3 py-2 rounded-md transition-colors ${
                             isActive 
                               ? 'bg-primary text-primary-foreground shadow-sm font-medium' 
-                              : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                              : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
                           }`
                         }
                       >
@@ -442,7 +442,7 @@ const Sidebar: React.FC = () => {
               } ${
                 isActive 
                   ? 'bg-primary/10 text-primary font-medium' 
-                  : 'hover:bg-muted text-foreground'
+                  : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
               }`
             }
           >
@@ -477,9 +477,9 @@ const Sidebar: React.FC = () => {
         <button 
           onClick={toggleTheme}
           title={isDark ? 'Mudar para Modo Claro' : 'Mudar para Modo Escuro'}
-          className={`flex items-center rounded-md text-sm text-foreground hover:bg-muted transition-all duration-200 ${
+          className={`flex items-center rounded-md text-sm transition-all duration-200 ${
             isCollapsed ? 'justify-center p-3' : 'justify-start gap-3 px-3 py-2 text-left'
-          }`}
+          } text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white`}
         >
           {isDark ? <Sun className="h-5 w-5 flex-shrink-0" /> : <Moon className="h-5 w-5 flex-shrink-0" />}
           {!isCollapsed && <span className="truncate">{isDark ? 'Modo Claro' : 'Modo Escuro'}</span>}
@@ -488,7 +488,7 @@ const Sidebar: React.FC = () => {
         <button 
           onClick={handleLogout}
           title="Sair do Sistema"
-          className={`flex items-center rounded-md text-sm text-red-500 hover:bg-red-500/10 transition-all duration-200 mt-1 ${
+          className={`flex items-center rounded-md text-sm text-red-500 hover:bg-red-500/10 dark:hover:bg-red-500/20 transition-all duration-200 mt-1 ${
             isCollapsed ? 'justify-center p-3' : 'justify-start gap-3 px-3 py-2 text-left'
           }`}
         >
