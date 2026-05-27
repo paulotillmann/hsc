@@ -19,6 +19,7 @@ const Sidebar: React.FC = () => {
     if (window.location.pathname.startsWith('/recepcao')) return 'recepcao';
     if (window.location.pathname.startsWith('/taxa-ocupacao')) return 'taxa-ocupacao';
     if (window.location.pathname.startsWith('/pacientes-internados') || window.location.pathname.startsWith('/centro-cirurgico')) return 'assistencial';
+    if (window.location.pathname.startsWith('/gestao-pendencias')) return 'faturamento';
     return null;
   });
 
@@ -32,6 +33,7 @@ const Sidebar: React.FC = () => {
     else if (location.pathname.startsWith('/recepcao')) setExpandedMenu('recepcao');
     else if (location.pathname.startsWith('/taxa-ocupacao')) setExpandedMenu('taxa-ocupacao');
     else if (location.pathname.startsWith('/pacientes-internados') || location.pathname.startsWith('/centro-cirurgico')) setExpandedMenu('assistencial');
+    else if (location.pathname.startsWith('/gestao-pendencias')) setExpandedMenu('faturamento');
   }, [location.pathname, isCollapsed]);
 
   useEffect(() => {
@@ -429,6 +431,59 @@ const Sidebar: React.FC = () => {
                         }
                       >
                          Relatórios
+                      </NavLink>
+                    </div>
+                  )}
+                </div>
+              );
+            }
+
+            if (module.slug === 'gestao-pendencias') {
+              const isActiveLocal = location.pathname.startsWith('/gestao-pendencias');
+              return (
+                <div key={module.slug} className="flex flex-col">
+                  {isCollapsed ? (
+                    <NavLink
+                      to={`/${module.slug}`}
+                      title="Faturamento"
+                      className={navLinkClass(isActiveLocal)}
+                    >
+                      <DynamicIcon name="DollarSign" className="h-5 w-5 flex-shrink-0" />
+                    </NavLink>
+                  ) : (
+                    <button
+                      onClick={() => {
+                        setExpandedMenu(expandedMenu === 'faturamento' ? null : 'faturamento');
+                        if (!isActiveLocal) navigate('/gestao-pendencias');
+                      }}
+                      className={`flex items-center rounded-md text-sm transition-all duration-200 justify-start gap-3 px-3 py-2 w-full ${
+                        isActiveLocal
+                          ? 'bg-primary text-primary-foreground shadow-sm hover:shadow-md hover:shadow-primary/20 font-medium'
+                          : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                      }`}
+                    >
+                      <DynamicIcon name="DollarSign" className="h-5 w-5 flex-shrink-0" />
+                      <div className="flex flex-1 items-center justify-between">
+                        <span className="truncate">Faturamento</span>
+                        <ChevronRight className={`h-4 w-4 transition-transform ${expandedMenu === 'faturamento' ? 'rotate-90' : ''}`} />
+                      </div>
+                    </button>
+                  )}
+
+                  {!isCollapsed && expandedMenu === 'faturamento' && (
+                    <div className="flex flex-col ml-9 mt-1 gap-1 border-l-2 border-border pl-2 border-primary/20">
+                      <NavLink
+                        to="/gestao-pendencias"
+                        end
+                        className={({ isActive }) => 
+                          `text-sm px-3 py-2 rounded-md transition-colors ${
+                            isActive 
+                              ? 'bg-primary text-primary-foreground shadow-sm font-medium' 
+                              : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                          }`
+                        }
+                      >
+                         Gestão de Pendências
                       </NavLink>
                     </div>
                   )}

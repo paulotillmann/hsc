@@ -38,3 +38,7 @@ public/informes/INFORME_*.pdf
 .dev.vars*
 !.dev.vars.example
 !.env.example
+
+# Temporary output files
+output_test.txt
+
