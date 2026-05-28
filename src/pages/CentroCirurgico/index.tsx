@@ -570,23 +570,61 @@ export default function CentroCirurgico() {
         </div>
 
         {/* Botão Sincronizar e Modo de Exibição */}
-        <div className="flex items-center gap-3 flex-shrink-0 ml-auto xl:ml-0">
+        <div className="flex flex-col items-end gap-1.5 flex-shrink-0 ml-auto xl:ml-0">
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-1 border rounded-lg p-0.5 bg-muted/30">
+              <button
+                onClick={() => setViewMode('salas')}
+                className={`flex items-center gap-1 px-2.5 py-1 rounded-md text-[10px] font-semibold transition-all ${viewMode === 'salas'
+                  ? 'bg-background text-foreground shadow-sm'
+                  : 'text-muted-foreground hover:text-foreground'
+                  }`}
+              >
+                <LayoutGrid className="h-3 w-3" />
+                Painel
+              </button>
+              <button
+                onClick={() => setViewMode('tabela')}
+                className={`flex items-center gap-1 px-2.5 py-1 rounded-md text-[10px] font-semibold transition-all ${viewMode === 'tabela'
+                  ? 'bg-background text-foreground shadow-sm'
+                  : 'text-muted-foreground hover:text-foreground'
+                  }`}
+              >
+                <List className="h-3 w-3" />
+                Tabela
+              </button>
+            </div>
+
+            <button
+              onClick={toggleTheme}
+              title={isDark ? 'Mudar para Modo Claro' : 'Mudar para Modo Escuro'}
+              className="flex items-center justify-center gap-1.5 bg-muted hover:bg-muted/80 text-foreground border border-border px-3 py-1 rounded-md font-semibold transition-all shadow-sm text-xs h-[30px]"
+            >
+              {isDark ? (
+                <Sun className="h-3.5 w-3.5 text-amber-500 animate-in spin-in-12 duration-300" />
+              ) : (
+                <Moon className="h-3.5 w-3.5 text-slate-700 dark:text-slate-300" />
+              )}
+              {isDark ? 'Claro' : 'Escuro'}
+            </button>
+          </div>
+
           {(isSyncing || (syncMessage && syncMessage.type === 'error') || lastSyncTime) && (
-            <div className="flex items-center gap-2 select-none self-center">
+            <div className="flex items-center gap-2 select-none pr-1">
               {isSyncing ? (
-                <div className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800/40">
+                <div className="flex items-center gap-1.5">
                   <Loader2 className="h-3 w-3 animate-spin text-blue-500" />
                   <span className="text-blue-600 dark:text-blue-400 font-medium text-[10px]">Sincronizando...</span>
                 </div>
               ) : syncMessage && syncMessage.type === 'error' ? (
-                <div className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800/40">
+                <div className="flex items-center gap-1.5">
                   <span className="relative flex h-1.5 w-1.5">
                     <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-red-500"></span>
                   </span>
                   <span className="text-red-600 dark:text-red-400 font-medium text-[10px]">Erro</span>
                 </div>
               ) : lastSyncTime ? (
-                <div className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800/40">
+                <div className="flex items-center gap-1.5">
                   <span className="relative flex h-1.5 w-1.5">
                     <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
                     <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500"></span>
@@ -598,42 +636,6 @@ export default function CentroCirurgico() {
               ) : null}
             </div>
           )}
-
-          <div className="flex items-center gap-1 border rounded-lg p-0.5 bg-muted/30">
-            <button
-              onClick={() => setViewMode('salas')}
-              className={`flex items-center gap-1 px-2.5 py-1 rounded-md text-[10px] font-semibold transition-all ${viewMode === 'salas'
-                ? 'bg-background text-foreground shadow-sm'
-                : 'text-muted-foreground hover:text-foreground'
-                }`}
-            >
-              <LayoutGrid className="h-3 w-3" />
-              Painel
-            </button>
-            <button
-              onClick={() => setViewMode('tabela')}
-              className={`flex items-center gap-1 px-2.5 py-1 rounded-md text-[10px] font-semibold transition-all ${viewMode === 'tabela'
-                ? 'bg-background text-foreground shadow-sm'
-                : 'text-muted-foreground hover:text-foreground'
-                }`}
-            >
-              <List className="h-3 w-3" />
-              Tabela
-            </button>
-          </div>
-
-          <button
-            onClick={toggleTheme}
-            title={isDark ? 'Mudar para Modo Claro' : 'Mudar para Modo Escuro'}
-            className="flex items-center justify-center gap-1.5 bg-muted hover:bg-muted/80 text-foreground border border-border px-3 py-1 rounded-md font-semibold transition-all shadow-sm text-xs h-[30px]"
-          >
-            {isDark ? (
-              <Sun className="h-3.5 w-3.5 text-amber-500 animate-in spin-in-12 duration-300" />
-            ) : (
-              <Moon className="h-3.5 w-3.5 text-slate-700 dark:text-slate-300" />
-            )}
-            {isDark ? 'Claro' : 'Escuro'}
-          </button>
         </div>
       </div>
 
