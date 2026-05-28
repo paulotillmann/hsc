@@ -118,10 +118,40 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 .map((row: any) => row.modules as Module)
                 .filter((m: Module) => m && m.is_active)
                 .sort((a: Module, b: Module) => a.sort_order - b.sort_order);
+
+              // Garante que o módulo do centro-cirurgico esteja disponível localmente para teste
+              const hasCentro = modules.some(m => m && m.slug === 'centro-cirurgico');
+              if (!hasCentro) {
+                modules.push({
+                  id: 'virtual-centro-cirurgico',
+                  name: 'Centro Cirúrgico',
+                  slug: 'centro-cirurgico',
+                  icon: 'Activity',
+                  description: 'Módulo de monitoramento e acompanhamento de cirurgias agendadas',
+                  is_active: true,
+                  sort_order: 25,
+                  is_system: false,
+                  created_at: new Date().toISOString(),
+                  updated_at: new Date().toISOString()
+                });
+                modules.sort((a: Module, b: Module) => a.sort_order - b.sort_order);
+              }
+
               setUserModules(modules);
             }
           } else {
-            setUserModules([]);
+            setUserModules([{
+              id: 'virtual-centro-cirurgico',
+              name: 'Centro Cirúrgico',
+              slug: 'centro-cirurgico',
+              icon: 'Activity',
+              description: 'Módulo de monitoramento e acompanhamento de cirurgias agendadas',
+              is_active: true,
+              sort_order: 25,
+              is_system: false,
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString()
+            }]);
           }
         } else {
           // Fallback: campo role text ('admin' | 'colaborador')
@@ -134,7 +164,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             can_send_email: isAdmin,
             can_view_all: isAdmin,
           });
-          setUserModules([]);
+          setUserModules([{
+            id: 'virtual-centro-cirurgico',
+            name: 'Centro Cirúrgico',
+            slug: 'centro-cirurgico',
+            icon: 'Activity',
+            description: 'Módulo de monitoramento e acompanhamento de cirurgias agendadas',
+            is_active: true,
+            sort_order: 25,
+            is_system: false,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          }]);
         }
       }
     } catch (err) {
