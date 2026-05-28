@@ -171,7 +171,7 @@ const generatePowerBIPendencias = (): Pendencia[] => {
 
     const prioridade: 'Alta' | 'Média' | 'Baixa' = (i % 3 === 0) ? 'Alta' : (i % 3 === 1) ? 'Média' : 'Baixa';
     const status: 'Pendente' | 'Em Andamento' | 'Concluída' = (i % 5 < 3) ? 'Pendente' : (i % 5 === 3) ? 'Em Andamento' : 'Concluída';
-    const usuario_abertura = ['geovanna.rodrig', 'janaína.silva', 'luciana.santos'][i % 3];
+    const usuario_abertura = ['Geovanna Rodrigues', 'Janaína Silva', 'Luciana Santos'][i % 3];
 
     list.push({
       id: `pend-${i + 1}`,
@@ -217,6 +217,42 @@ const formatDateBR = (dateStr?: string) => {
   const parts = dateStr.split('-');
   if (parts.length !== 3) return dateStr;
   return `${parts[2]}/${parts[1]}/${parts[0]}`;
+};
+
+// ── Auxiliar para encurtar e rotular de forma inteligente os tipos de pendências no gráfico ──
+const getShortTipoLabel = (tipo: string): string => {
+  let label = tipo;
+  if (tipo.toLowerCase().startsWith('falta ')) {
+    label = tipo.substring(6); // remove 'Falta '
+  }
+  
+  if (label.toLowerCase().includes('assinatura digital')) return 'Assinatura';
+  if (label.toLowerCase().includes('evolução do paciente') || label.toLowerCase().includes('evolução clínica')) return 'Evolução';
+  if (label.toLowerCase().includes('preenchimento de aih')) return 'Guia AIH';
+  if (label.toLowerCase().includes('sumário/orientação')) return 'Sumário Alta';
+  if (label.toLowerCase().includes('inativação de evolução')) return 'Inativação';
+  if (label.toLowerCase().includes('adequação de evolução')) return 'Adequação';
+  
+  return label.length > 12 ? `${label.substring(0, 10)}...` : label;
+};
+
+// ── Auxiliar para capitalizar e formatar o usuário de abertura removendo pontos ──
+const formatUsuarioAbertura = (name?: string): string => {
+  if (!name || name.trim() === '') return 'Desconhecido';
+  
+  // Trata formatos com ponto (ex: luciana.santos)
+  if (name.includes('.')) {
+    return name
+      .split('.')
+      .map(part => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
+      .join(' ');
+  }
+  
+  // Trata nomes comuns capitalizando cada palavra
+  return name
+    .split(/\s+/)
+    .map(part => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
+    .join(' ');
 };
 
 export default function GestaoPendencias() {
@@ -364,7 +400,7 @@ export default function GestaoPendencias() {
             paciente: item.NM_PACIENTE || item.PACIENTE || item.paciente || 'Não informado na query',
             descricao: item.DS_COMPLEMENTO || item.descricao || 'Sem descrição cadastrada.',
             responsavel: item.NOME || item.responsavel || 'Não Atribuído',
-            usuario_abertura: item.NM_USUARIO || 'Desconhecido',
+            usuario_abertura: formatUsuarioAbertura(item.NM_USUARIO),
             prioridade: item.CLASSIFICACAO && item.CLASSIFICACAO > 5 ? 'Alta' : 'Média',
             status: item.status || 'Pendente',
             estagio: estagioValido,
@@ -410,7 +446,12 @@ export default function GestaoPendencias() {
 
       if (cachedData) {
         // Se já existe cache, restauramos os dados imediatamente e NÃO disparamos a sincronização automática
-        setDbData(JSON.parse(cachedData));
+        const parsed = JSON.parse(cachedData);
+        const formatted = parsed.map((item: any) => ({
+          ...item,
+          usuario_abertura: formatUsuarioAbertura(item.usuario_abertura)
+        }));
+        setDbData(formatted);
         setSyncTime(cachedTime);
         setIsDemoMode(cachedIsDemo === 'true');
         setSyncStatus((cachedStatus as any) || 'success');
@@ -941,6 +982,7 @@ export default function GestaoPendencias() {
                   <tr className="border-b border-border bg-muted/30 text-muted-foreground">
                     <th scope="col" className="h-11 px-4 py-2 text-left font-bold uppercase tracking-wider text-xs">Atendimento</th>
                     <th scope="col" className="h-11 px-4 py-2 text-left font-bold uppercase tracking-wider text-xs">Data</th>
+                    <th scope="col" className="h-11 px-4 py-2 text-left font-bold uppercase tracking-wider text-xs">Usuário Abertura</th>
                     <th scope="col" className="h-11 px-4 py-2 text-left font-bold uppercase tracking-wider text-xs">Tipo de Pendência</th>
                     <th scope="col" className="h-11 px-4 py-2 text-left font-bold uppercase tracking-wider text-xs">Setor</th>
                     <th scope="col" className="h-11 px-4 py-2 text-left font-bold uppercase tracking-wider text-xs">Descrição</th>
@@ -950,7 +992,7 @@ export default function GestaoPendencias() {
                 <tbody className="divide-y divide-border">
                   {loading ? (
                     <tr>
-                      <td colSpan={6} className="h-44 text-center">
+                      <td colSpan={7} className="h-44 text-center">
                         <div className="flex flex-col items-center justify-center gap-2">
                           <div className="h-6 w-6 rounded-full border-2 border-primary border-t-transparent animate-spin" />
                           <span className="text-muted-foreground text-xs">Atualizando lista de pendências...</span>
@@ -959,7 +1001,7 @@ export default function GestaoPendencias() {
                     </tr>
                   ) : filteredPendencias.length === 0 ? (
                     <tr>
-                      <td colSpan={6} className="h-44 text-center text-muted-foreground">
+                      <td colSpan={7} className="h-44 text-center text-muted-foreground">
                         Nenhuma pendência encontrada no intervalo selecionado.
                       </td>
                     </tr>
@@ -974,6 +1016,11 @@ export default function GestaoPendencias() {
                         {/* Data */}
                         <td className="px-4 py-3.5 text-xs text-foreground/90 font-medium whitespace-nowrap">
                           {formatDateBR(item.data_criacao)}
+                        </td>
+
+                        {/* Usuário Abertura */}
+                        <td className="px-4 py-3.5 text-xs text-foreground/80 font-medium whitespace-nowrap">
+                          {formatUsuarioAbertura(item.usuario_abertura)}
                         </td>
                         
                         {/* Tipo de Pendência */}
@@ -1178,9 +1225,10 @@ export default function GestaoPendencias() {
             {chartQtdPorTipo.slice(0, 6).map(item => (
               <div key={item.tipo} className="flex flex-col items-center group relative w-[14%]">
                 
-                {/* Tooltip Hover */}
-                <div className="absolute -top-10 scale-0 group-hover:scale-100 bg-slate-950 text-white text-[10px] font-mono font-bold px-2 py-1 rounded shadow-md z-15 transition-all text-center min-w-[60px] whitespace-nowrap">
-                  {item.count} itens
+                {/* Tooltip Hover Premium */}
+                <div className="absolute -top-16 scale-0 group-hover:scale-100 bg-slate-900 text-white text-[10px] p-2 rounded shadow-lg z-50 transition-all text-center w-max max-w-[180px] pointer-events-none border border-white/10 flex flex-col gap-0.5">
+                  <span className="font-semibold leading-normal whitespace-normal break-words">{item.tipo}</span>
+                  <span className="font-bold text-primary font-mono">{item.count} itens</span>
                 </div>
 
                 {/* Barra Vertical */}
@@ -1191,21 +1239,23 @@ export default function GestaoPendencias() {
                   className="w-full bg-primary hover:bg-primary/90 rounded-t-md cursor-pointer transition-colors shadow-sm"
                 />
 
-                {/* Rótulo Curto / Sigla */}
-                <span className="text-[9px] text-muted-foreground text-center truncate w-full mt-2 font-medium" title={item.tipo}>
-                  {item.tipo.substring(5, 14)}...
+                {/* Rótulo Curto / Sigla Inteligente com Quebra e Sem Truncar fixo */}
+                <span className="text-[9px] text-muted-foreground text-center leading-tight w-full mt-2 font-semibold whitespace-normal break-words" title={item.tipo}>
+                  {getShortTipoLabel(item.tipo)}
                 </span>
               </div>
             ))}
           </div>
 
-          {/* Legenda de Tipologias */}
-          <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 text-[10px] text-muted-foreground pt-1">
-            {chartQtdPorTipo.slice(0, 4).map((item, idx) => (
-              <div key={item.tipo} className="flex items-center gap-1.5 truncate">
-                <span className="h-2 w-2 rounded-full bg-primary flex-shrink-0" />
-                <span className="font-semibold text-foreground/80 font-mono">#{idx+1}:</span>
-                <span className="truncate" title={item.tipo}>{item.tipo}</span>
+          {/* Legenda de Tipologias sem Truncamento (Quebra de Linha Automática) */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2.5 text-[10px] text-muted-foreground pt-1">
+            {chartQtdPorTipo.slice(0, 6).map((item, idx) => (
+              <div key={item.tipo} className="flex items-start gap-1.5 min-w-0">
+                <span className="h-2 w-2 rounded-full bg-primary flex-shrink-0 mt-1" />
+                <span className="font-semibold text-foreground/85 font-mono flex-shrink-0">#{idx+1}:</span>
+                <span className="text-foreground/80 leading-normal whitespace-normal break-words" title={item.tipo}>
+                  {item.tipo}
+                </span>
               </div>
             ))}
           </div>
