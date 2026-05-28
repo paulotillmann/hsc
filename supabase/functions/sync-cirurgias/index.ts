@@ -18,6 +18,13 @@ interface N8NCirurgia {
   NM_ANESTESISTA: string | null;
   DS_CARATER: string | null;
   SALA: string | null;
+  EVENTO: string | null;
+  DT_REGISTRO: string | null;
+  CIRCULANTE: string | null;
+  ENFERMEIRO: string | null;
+  SETOR_ORIGEM: string | null;
+  PRECAUCAO: string | null;
+  ALERGIA: string | null;
 }
 
 // Interface representando a estrutura do banco Supabase (tabela cirurgias)
@@ -33,6 +40,39 @@ interface DBCirurgia {
   nm_anestesista: string | null;
   ds_carater: string | null;
   sala: string | null;
+  evento: string | null;
+  dt_registro: string | null;
+  circulante: string | null;
+  enfermeiro: string | null;
+  setor_origem: string | null;
+  precaucao: string | null;
+  alergia: string | null;
+}
+
+interface DBHistoricoEvento {
+  nr_cirurgia: number;
+  evento: string;
+  dt_registro: string;
+  dt_evento: string;
+}
+
+function mergeUniqueItems(existingStr: string | null, newStr: string | null): string | null {
+  const items = new Set<string>();
+  
+  const processStr = (str: string | null) => {
+    if (!str) return;
+    str.split(/[,;]+/).forEach(val => {
+      const trimmed = val.trim();
+      if (trimmed && trimmed.toLowerCase() !== 'null' && trimmed.toLowerCase() !== 'undefined') {
+        items.add(trimmed);
+      }
+    });
+  };
+
+  processStr(existingStr);
+  processStr(newStr);
+
+  return items.size > 0 ? Array.from(items).join(', ') : null;
 }
 
 const corsHeaders = {
@@ -73,33 +113,97 @@ Deno.serve(async (req: Request) => {
       throw new Error('A resposta do n8n não retornou um array válido de cirurgias.');
     }
 
-    // 2. Mapear os dados para o padrão de colunas do banco
-    const recordsToInsert: DBCirurgia[] = rawData
-      .filter((item: any) => item.NR_CIRURGIA !== undefined && item.NR_CIRURGIA !== null)
-      .map((item: N8NCirurgia) => {
-        return {
-          nr_atendimento: item.NR_ATENDIMENTO ? Number(item.NR_ATENDIMENTO) : null,
-          nm_paciente: item.NM_PACIENTE ? item.NM_PACIENTE.trim() : null,
-          ds_sexo: item.DS_SEXO ? item.DS_SEXO.trim() : null,
-          idade: item.IDADE ? Number(item.IDADE) : null,
-          nr_cirurgia: Number(item.NR_CIRURGIA),
-          medico: item.MEDICO ? item.MEDICO.trim() : null,
-          procedimento: item.PROCEDIMENTO ? item.PROCEDIMENTO.trim() : null,
-          dt_agenda: item.DT_AGENDA ? new Date(item.DT_AGENDA).toISOString() : null,
-          nm_anestesista: item.NM_ANESTESISTA ? item.NM_ANESTESISTA.trim() : null,
-          ds_carater: item.DS_CARATER ? item.DS_CARATER.trim() : null,
-          sala: item.SALA ? item.SALA.trim() : null,
-        };
-      });
+    // 2. Mapear e de-duplicar os dados para manter apenas o evento mais recente por nr_cirurgia
+    const uniqueRecordsMap = new Map<number, DBCirurgia>();
+    const uniqueHistoricoMap = new Map<string, DBHistoricoEvento>();
 
-    console.log(`[Sync Cirurgias] Mapeamento concluído. ${recordsToInsert.length} registros prontos para upsert.`);
+    for (const item of rawData) {
+      if (item.NR_CIRURGIA === undefined || item.NR_CIRURGIA === null) {
+        continue;
+      }
+
+      const nrCirurgia = Number(item.NR_CIRURGIA);
+      const mappedRecord: DBCirurgia = {
+        nr_atendimento: item.NR_ATENDIMENTO ? Number(item.NR_ATENDIMENTO) : null,
+        nm_paciente: item.NM_PACIENTE ? item.NM_PACIENTE.trim() : null,
+        ds_sexo: item.DS_SEXO ? item.DS_SEXO.trim() : null,
+        idade: item.IDADE ? Number(item.IDADE) : null,
+        nr_cirurgia: nrCirurgia,
+        medico: item.MEDICO ? item.MEDICO.trim() : null,
+        procedimento: item.PROCEDIMENTO ? item.PROCEDIMENTO.trim() : null,
+        dt_agenda: item.DT_AGENDA ? new Date(item.DT_AGENDA).toISOString() : null,
+        nm_anestesista: item.NM_ANESTESISTA ? item.NM_ANESTESISTA.trim() : null,
+        ds_carater: item.DS_CARATER ? item.DS_CARATER.trim() : null,
+        sala: item.SALA ? item.SALA.trim() : null,
+        evento: item.EVENTO ? item.EVENTO.trim() : null,
+        dt_registro: item.DT_REGISTRO ? new Date(item.DT_REGISTRO).toISOString() : null,
+        circulante: item.CIRCULANTE ? item.CIRCULANTE.trim() : null,
+        enfermeiro: item.ENFERMEIRO ? item.ENFERMEIRO.trim() : null,
+        setor_origem: item.SETOR_ORIGEM ? item.SETOR_ORIGEM.trim() : null,
+        precaucao: item.PRECAUCAO ? item.PRECAUCAO.trim() : null,
+        alergia: item.ALERGIA ? item.ALERGIA.trim() : null,
+      };
+
+      const existing = uniqueRecordsMap.get(nrCirurgia);
+      if (!existing) {
+        uniqueRecordsMap.set(nrCirurgia, mappedRecord);
+      } else {
+        // Acumula as alergias e precauções de ambos os registros para não perder dados de múltiplos eventos
+        const mergedAlergia = mergeUniqueItems(existing.alergia, mappedRecord.alergia);
+        const mergedPrecaucao = mergeUniqueItems(existing.precaucao, mappedRecord.precaucao);
+
+        const existingTime = existing.dt_registro ? new Date(existing.dt_registro).getTime() : 0;
+        const newTime = mappedRecord.dt_registro ? new Date(mappedRecord.dt_registro).getTime() : 0;
+
+        if (newTime >= existingTime) {
+          mappedRecord.alergia = mergedAlergia;
+          mappedRecord.precaucao = mergedPrecaucao;
+          uniqueRecordsMap.set(nrCirurgia, mappedRecord);
+        } else {
+          existing.alergia = mergedAlergia;
+          existing.precaucao = mergedPrecaucao;
+          uniqueRecordsMap.set(nrCirurgia, existing);
+        }
+      }
+
+      // Mapeamento para o histórico de eventos
+      if (item.EVENTO) {
+        const eventoStr = item.EVENTO.trim();
+        const dtStr = item.DT_REGISTRO ? new Date(item.DT_REGISTRO).toISOString() : new Date().toISOString();
+        const histKey = `${nrCirurgia}_${eventoStr}`;
+
+        const mappedHist: DBHistoricoEvento = {
+          nr_cirurgia: nrCirurgia,
+          evento: eventoStr,
+          dt_registro: dtStr,
+          dt_evento: dtStr
+        };
+
+        const existingHist = uniqueHistoricoMap.get(histKey);
+        if (!existingHist) {
+          uniqueHistoricoMap.set(histKey, mappedHist);
+        } else {
+          const existingTime = new Date(existingHist.dt_registro).getTime();
+          const newTime = new Date(dtStr).getTime();
+          if (newTime >= existingTime) {
+            uniqueHistoricoMap.set(histKey, mappedHist);
+          }
+        }
+      }
+    }
+
+    const recordsToInsert = Array.from(uniqueRecordsMap.values());
+    const historicoRecords = Array.from(uniqueHistoricoMap.values());
+
+    console.log(`[Sync Cirurgias] Mapeamento concluído. ${recordsToInsert.length} cirurgias prontas e ${historicoRecords.length} eventos históricos.`);
 
     if (recordsToInsert.length === 0) {
       return new Response(
         JSON.stringify({
           success: true,
           message: 'Nenhuma cirurgia válida encontrada para sincronizar.',
-          upserted: 0
+          upserted: 0,
+          historico_upserted: 0
         }),
         { status: 200, headers: corsHeaders }
       );
@@ -112,22 +216,58 @@ Deno.serve(async (req: Request) => {
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
-    // 4. Executar UPSERT com base em nr_cirurgia
+    // Mesclar alergias e precauções com os dados que já existem no banco de dados para evitar perda de histórico
+    const nrCirurgiasList = recordsToInsert.map(r => r.nr_cirurgia);
+    if (nrCirurgiasList.length > 0) {
+      console.log(`[Sync Cirurgias] Buscando registros atuais do banco de dados para mesclagem clínica...`);
+      const { data: dbRecords, error: dbSelectError } = await supabase
+        .from('cirurgias')
+        .select('nr_cirurgia, alergia, precaucao')
+        .in('nr_cirurgia', nrCirurgiasList);
+
+      if (dbSelectError) {
+        console.error('[Sync Cirurgias] Erro ao buscar registros prévios do banco para mesclar:', dbSelectError.message);
+      } else if (dbRecords) {
+        const dbRecordsMap = new Map(dbRecords.map(r => [r.nr_cirurgia, r as any]));
+        for (const record of recordsToInsert) {
+          const dbRec = dbRecordsMap.get(record.nr_cirurgia) as any;
+          if (dbRec) {
+            record.alergia = mergeUniqueItems(dbRec.alergia, record.alergia);
+            record.precaucao = mergeUniqueItems(dbRec.precaucao, record.precaucao);
+          }
+        }
+      }
+    }
+
+    // 4. Executar UPSERT com base em nr_cirurgia na tabela principal
     const { error: upsertError } = await supabase
       .from('cirurgias')
       .upsert(recordsToInsert, { onConflict: 'nr_cirurgia' });
 
     if (upsertError) {
-      throw new Error(`Erro ao realizar o UPSERT no Supabase: ${upsertError.message}`);
+      throw new Error(`Erro ao realizar o UPSERT no Supabase (cirurgias): ${upsertError.message}`);
     }
 
-    console.log(`[Sync Cirurgias] Sincronização realizada com sucesso! ${recordsToInsert.length} registros inseridos/atualizados.`);
+    // 5. Executar UPSERT dos eventos no histórico
+    if (historicoRecords.length > 0) {
+      console.log(`[Sync Cirurgias] Executando UPSERT de ${historicoRecords.length} eventos de histórico...`);
+      const { error: histError } = await supabase
+        .from('historico_eventos_cirurgia')
+        .upsert(historicoRecords, { onConflict: 'nr_cirurgia,evento' });
+
+      if (histError) {
+        throw new Error(`Erro ao realizar o UPSERT no Supabase (historico_eventos_cirurgia): ${histError.message}`);
+      }
+    }
+
+    console.log(`[Sync Cirurgias] Sincronização realizada com sucesso! ${recordsToInsert.length} registros e ${historicoRecords.length} históricos atualizados.`);
 
     return new Response(
       JSON.stringify({
         success: true,
         message: 'Sincronização de cirurgias concluída com sucesso.',
-        upserted: recordsToInsert.length
+        upserted: recordsToInsert.length,
+        historico_upserted: historicoRecords.length
       }),
       { status: 200, headers: corsHeaders }
     );

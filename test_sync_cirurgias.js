@@ -48,41 +48,54 @@ async function testSync() {
     }
 
     console.log(`Quantidade de registros recebidos: ${rawData.length}`);
-    const keys = new Set();
-    rawData.forEach(item => {
-      Object.keys(item).forEach(k => keys.add(k));
-    });
-    console.log("Todas as chaves presentes nos objetos retornados:", Array.from(keys));
-    
-    // Para cada chave, mostrar exemplos de valores não-nulos
-    console.log("\n--- Exemplos de valores para cada chave ---");
-    Array.from(keys).forEach(k => {
-      const sample = rawData.find(item => item[k] !== null && item[k] !== undefined);
-      console.log(`${k}:`, sample ? sample[k] : 'Apenas null/undefined');
-    });
-    console.log("-------------------------------------------\n");
 
-    // Mapeamento idêntico ao da Edge Function
-    const mapped = rawData
-      .filter(item => item.NR_CIRURGIA !== undefined && item.NR_CIRURGIA !== null)
-      .map(item => {
-        return {
-          nr_atendimento: item.NR_ATENDIMENTO ? Number(item.NR_ATENDIMENTO) : null,
-          nm_paciente: item.NM_PACIENTE ? item.NM_PACIENTE.trim() : null,
-          ds_sexo: item.DS_SEXO ? item.DS_SEXO.trim() : null,
-          idade: item.IDADE ? Number(item.IDADE) : null,
-          nr_cirurgia: Number(item.NR_CIRURGIA),
-          medico: item.MEDICO ? item.MEDICO.trim() : null,
-          procedimento: item.PROCEDIMENTO ? item.PROCEDIMENTO.trim() : null,
-          dt_agenda: item.DT_AGENDA ? new Date(item.DT_AGENDA).toISOString() : null,
-          nm_anestesista: item.NM_ANESTESISTA ? item.NM_ANESTESISTA.trim() : null,
-          ds_carater: item.DS_CARATER ? item.DS_CARATER.trim() : null,
-          sala: item.SALA ? item.SALA.trim() : null
-        };
-      });
+    // Mapeamento idêntico ao da Edge Function com de-duplicação por nr_cirurgia (mantendo o mais recente)
+    const uniqueRecordsMap = new Map();
+
+    for (const item of rawData) {
+      if (item.NR_CIRURGIA === undefined || item.NR_CIRURGIA === null) {
+        continue;
+      }
+
+      const nrCirurgia = Number(item.NR_CIRURGIA);
+      const mappedRecord = {
+        nr_atendimento: item.NR_ATENDIMENTO ? Number(item.NR_ATENDIMENTO) : null,
+        nm_paciente: item.NM_PACIENTE ? item.NM_PACIENTE.trim() : null,
+        ds_sexo: item.DS_SEXO ? item.DS_SEXO.trim() : null,
+        idade: item.IDADE ? Number(item.IDADE) : null,
+        nr_cirurgia: nrCirurgia,
+        medico: item.MEDICO ? item.MEDICO.trim() : null,
+        procedimento: item.PROCEDIMENTO ? item.PROCEDIMENTO.trim() : null,
+        dt_agenda: item.DT_AGENDA ? new Date(item.DT_AGENDA).toISOString() : null,
+        nm_anestesista: item.NM_ANESTESISTA ? item.NM_ANESTESISTA.trim() : null,
+        ds_carater: item.DS_CARATER ? item.DS_CARATER.trim() : null,
+        sala: item.SALA ? item.SALA.trim() : null,
+        evento: item.EVENTO ? item.EVENTO.trim() : null,
+        dt_registro: item.DT_REGISTRO ? new Date(item.DT_REGISTRO).toISOString() : null,
+        circulante: item.CIRCULANTE ? item.CIRCULANTE.trim() : null,
+        enfermeiro: item.ENFERMEIRO ? item.ENFERMEIRO.trim() : null,
+        setor_origem: item.SETOR_ORIGEM ? item.SETOR_ORIGEM.trim() : null,
+        precaucao: item.PRECAUCAO ? item.PRECAUCAO.trim() : null,
+        alergia: item.ALERGIA ? item.ALERGIA.trim() : null
+      };
+
+      const existing = uniqueRecordsMap.get(nrCirurgia);
+      if (!existing) {
+        uniqueRecordsMap.set(nrCirurgia, mappedRecord);
+      } else {
+        const existingTime = existing.dt_registro ? new Date(existing.dt_registro).getTime() : 0;
+        const newTime = mappedRecord.dt_registro ? new Date(mappedRecord.dt_registro).getTime() : 0;
+
+        if (newTime >= existingTime) {
+          uniqueRecordsMap.set(nrCirurgia, mappedRecord);
+        }
+      }
+    }
+
+    const mapped = Array.from(uniqueRecordsMap.values());
 
     console.log(`Mapeamento concluído com sucesso. ${mapped.length} registros prontos.`);
-    
+
     // Imprimir o primeiro registro como demonstração de dados estruturados
     if (mapped.length > 0) {
       console.log("\n--- Amostra do Primeiro Registro Mapeado ---");
