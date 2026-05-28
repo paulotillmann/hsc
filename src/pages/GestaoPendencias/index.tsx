@@ -171,7 +171,7 @@ const generatePowerBIPendencias = (): Pendencia[] => {
 
     const prioridade: 'Alta' | 'Média' | 'Baixa' = (i % 3 === 0) ? 'Alta' : (i % 3 === 1) ? 'Média' : 'Baixa';
     const status: 'Pendente' | 'Em Andamento' | 'Concluída' = (i % 5 < 3) ? 'Pendente' : (i % 5 === 3) ? 'Em Andamento' : 'Concluída';
-    const usuario_abertura = ['geovanna.rodrig', 'janaína.silva', 'luciana.santos'][i % 3];
+    const usuario_abertura = ['Geovanna Rodrigues', 'Janaína Silva', 'Luciana Santos'][i % 3];
 
     list.push({
       id: `pend-${i + 1}`,
@@ -211,6 +211,50 @@ const getSetorColorClass = (setor?: string) => {
   return 'bg-slate-500/10 border-slate-500/20 text-slate-600 dark:text-slate-400';
 };
 
+// ── Formata data de YYYY-MM-DD para DD/MM/YYYY ──
+const formatDateBR = (dateStr?: string) => {
+  if (!dateStr) return '-';
+  const parts = dateStr.split('-');
+  if (parts.length !== 3) return dateStr;
+  return `${parts[2]}/${parts[1]}/${parts[0]}`;
+};
+
+// ── Auxiliar para encurtar e rotular de forma inteligente os tipos de pendências no gráfico ──
+const getShortTipoLabel = (tipo: string): string => {
+  let label = tipo;
+  if (tipo.toLowerCase().startsWith('falta ')) {
+    label = tipo.substring(6); // remove 'Falta '
+  }
+  
+  if (label.toLowerCase().includes('assinatura digital')) return 'Assinatura';
+  if (label.toLowerCase().includes('evolução do paciente') || label.toLowerCase().includes('evolução clínica')) return 'Evolução';
+  if (label.toLowerCase().includes('preenchimento de aih')) return 'Guia AIH';
+  if (label.toLowerCase().includes('sumário/orientação')) return 'Sumário Alta';
+  if (label.toLowerCase().includes('inativação de evolução')) return 'Inativação';
+  if (label.toLowerCase().includes('adequação de evolução')) return 'Adequação';
+  
+  return label.length > 12 ? `${label.substring(0, 10)}...` : label;
+};
+
+// ── Auxiliar para capitalizar e formatar o usuário de abertura removendo pontos ──
+const formatUsuarioAbertura = (name?: string): string => {
+  if (!name || name.trim() === '') return 'Desconhecido';
+  
+  // Trata formatos com ponto (ex: luciana.santos)
+  if (name.includes('.')) {
+    return name
+      .split('.')
+      .map(part => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
+      .join(' ');
+  }
+  
+  // Trata nomes comuns capitalizando cada palavra
+  return name
+    .split(/\s+/)
+    .map(part => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
+    .join(' ');
+};
+
 export default function GestaoPendencias() {
   const [dbData, setDbData] = useState<Pendencia[]>([]);
   const [loading, setLoading] = useState(true);
@@ -218,9 +262,9 @@ export default function GestaoPendencias() {
   const [syncStatus, setSyncStatus] = useState<'idle' | 'success' | 'error'>('idle');
   const [syncTime, setSyncTime] = useState<string | null>(null);
 
-  // ── Consulta por Período (Padrão Power BI: 2025-10-01 a 2026-04-15) ──
+  // ── Consulta por Período (Padrão Power BI: 2025-10-01 a hoje) ──
   const [dateFrom, setDateFrom] = useState('2025-10-01');
-  const [dateTo, setDateTo] = useState('2026-04-15');
+  const [dateTo, setDateTo] = useState(() => new Date().toISOString().split('T')[0]);
 
   // Filtros Adicionais
   const [searchTerm, setSearchTerm] = useState('');
@@ -235,12 +279,22 @@ export default function GestaoPendencias() {
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
 
-  // Carrega e gera a massa de dados inicial
-  useEffect(() => {
-    // Carrega dados de simulação locais de alta fidelidade
-    setDbData(generatePowerBIPendencias());
-    setLoading(false);
-  }, []);
+  // ── Utilitários de Cache de Sessão (sessionStorage) ──
+  const saveToCache = (
+    data: Pendencia[],
+    time: string | null,
+    isDemo: boolean,
+    status: 'idle' | 'success' | 'error'
+  ) => {
+    try {
+      sessionStorage.setItem('hsc_gestao_pendencias_data', JSON.stringify(data));
+      if (time) sessionStorage.setItem('hsc_gestao_pendencias_sync_time', time);
+      sessionStorage.setItem('hsc_gestao_pendencias_is_demo', String(isDemo));
+      sessionStorage.setItem('hsc_gestao_pendencias_sync_status', status);
+    } catch (e) {
+      console.error('Erro ao salvar no cache do sessionStorage:', e);
+    }
+  };
 
   // ── Integração com n8n via Webhook ──
   const handleSyncWithWebhook = async () => {
@@ -252,9 +306,14 @@ export default function GestaoPendencias() {
     
     if (!webhookUrl) {
       setTimeout(() => {
+        const nowTime = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
         setSyncStatus('success');
-        setSyncTime(new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }));
+        setSyncTime(nowTime);
         setLoading(false);
+        // Salva simulação no cache se não há webhook configurado
+        const simData = generatePowerBIPendencias();
+        setDbData(simData);
+        saveToCache(simData, nowTime, true, 'success');
       }, 1000);
       return;
     }
@@ -308,6 +367,8 @@ export default function GestaoPendencias() {
         console.error('Exceção ao salvar log no Supabase:', err);
       }
 
+      const nowTime = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+
       if (list.length > 0) {
         const formatted: Pendencia[] = list.map((item, idx) => {
           // Extrair valor da chave complexa se existir, ou usar um default
@@ -339,7 +400,7 @@ export default function GestaoPendencias() {
             paciente: item.NM_PACIENTE || item.PACIENTE || item.paciente || 'Não informado na query',
             descricao: item.DS_COMPLEMENTO || item.descricao || 'Sem descrição cadastrada.',
             responsavel: item.NOME || item.responsavel || 'Não Atribuído',
-            usuario_abertura: item.NM_USUARIO || 'Desconhecido',
+            usuario_abertura: formatUsuarioAbertura(item.NM_USUARIO),
             prioridade: item.CLASSIFICACAO && item.CLASSIFICACAO > 5 ? 'Alta' : 'Média',
             status: item.status || 'Pendente',
             estagio: estagioValido,
@@ -351,21 +412,62 @@ export default function GestaoPendencias() {
         setDbData(formatted);
         setIsDemoMode(false);
         setSyncStatus('success');
-        setSyncTime(new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }));
+        setSyncTime(nowTime);
+        saveToCache(formatted, nowTime, false, 'success');
       } else {
+        const simData = generatePowerBIPendencias();
+        setDbData(simData);
         setIsDemoMode(true);
         setSyncStatus('success');
-        setSyncTime(new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }));
+        setSyncTime(nowTime);
+        saveToCache(simData, nowTime, true, 'success');
       }
     } catch (error: any) {
       console.error('Erro na chamada do webhook:', error);
+      const nowTime = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
       setSyncStatus('error');
-      setSyncTime(new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }));
+      setSyncTime(nowTime);
       setIsDemoMode(true);
+      const simData = generatePowerBIPendencias();
+      setDbData(simData);
+      saveToCache(simData, nowTime, true, 'error');
     } finally {
       setLoading(false);
     }
   };
+
+  // Carregamento inicial inteligente com cache em sessionStorage
+  useEffect(() => {
+    try {
+      const cachedData = sessionStorage.getItem('hsc_gestao_pendencias_data');
+      const cachedTime = sessionStorage.getItem('hsc_gestao_pendencias_sync_time');
+      const cachedIsDemo = sessionStorage.getItem('hsc_gestao_pendencias_is_demo');
+      const cachedStatus = sessionStorage.getItem('hsc_gestao_pendencias_sync_status');
+
+      if (cachedData) {
+        // Se já existe cache, restauramos os dados imediatamente e NÃO disparamos a sincronização automática
+        const parsed = JSON.parse(cachedData);
+        const formatted = parsed.map((item: any) => ({
+          ...item,
+          usuario_abertura: formatUsuarioAbertura(item.usuario_abertura)
+        }));
+        setDbData(formatted);
+        setSyncTime(cachedTime);
+        setIsDemoMode(cachedIsDemo === 'true');
+        setSyncStatus((cachedStatus as any) || 'success');
+        setLoading(false);
+      } else {
+        // Primeira vez carregando a página na sessão: carrega simulação como fallback e dispara o sync automático
+        setDbData(generatePowerBIPendencias());
+        handleSyncWithWebhook();
+      }
+    } catch (e) {
+      console.error('Erro ao ler do cache do sessionStorage:', e);
+      // Fallback em caso de erro na leitura do sessionStorage
+      setDbData(generatePowerBIPendencias());
+      handleSyncWithWebhook();
+    }
+  }, []);
 
   // ── Exportação de Relatório PDF ──
   const exportarRelatorioPDF = async () => {
@@ -693,7 +795,7 @@ export default function GestaoPendencias() {
 
           <button
             onClick={exportarRelatorioPDF}
-            className="w-full md:w-auto inline-flex items-center justify-center rounded-md text-sm font-semibold bg-white border border-border text-foreground hover:bg-muted h-10 px-4 transition-all shadow-sm"
+            className="w-full md:w-auto inline-flex items-center justify-center rounded-md text-sm font-semibold bg-card border border-border text-foreground hover:bg-muted h-10 px-4 transition-all shadow-sm"
           >
             <FileText className="mr-2 h-4 w-4" />
             Relatório
@@ -707,6 +809,84 @@ export default function GestaoPendencias() {
             <RefreshCw className={`mr-2 h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
             Atualizar
           </button>
+        </div>
+      </div>
+
+      {/* ── PAINEL DE FILTROS OPERACIONAIS (HORIZONTAL - TIPO CARD) ── */}
+      <div className="bg-card text-card-foreground p-5 rounded-xl border border-border/80 shadow-sm space-y-4">
+        <div className="border-b border-border/60 pb-2">
+          <h4 className="text-xs font-bold text-foreground uppercase tracking-widest flex items-center gap-2">
+            <Filter className="h-3.5 w-3.5 text-primary" />
+            Filtros Operacionais
+          </h4>
+        </div>
+        
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 items-end">
+          {/* Filtro Usuário Responsável */}
+          <div className="space-y-1.5">
+            <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider block">Usuário Responsável</label>
+            <select
+              className="w-full bg-background border border-input rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-primary h-9"
+              value={responsavelFilter}
+              onChange={(e) => { setResponsavelFilter(e.target.value); setCurrentPage(1); }}
+            >
+              <option value="">Todos</option>
+              {uniqueMedicos.map(nome => (
+                <option key={nome} value={nome}>{nome}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Filtro Usuário Abertura */}
+          <div className="space-y-1.5">
+            <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider block">Usuário Abertura</label>
+            <select
+              className="w-full bg-background border border-input rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-primary h-9"
+              value={usuarioAberturaFilter}
+              onChange={(e) => { setUsuarioAberturaFilter(e.target.value); setCurrentPage(1); }}
+            >
+              <option value="">Todos</option>
+              {uniqueUsuariosAbertura.map(nome => (
+                <option key={nome} value={nome}>{nome}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Filtro Setor Hospitalar */}
+          <div className="space-y-1.5">
+            <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider block">Setor Hospitalar</label>
+            <select
+              className="w-full bg-background border border-input rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-primary h-9"
+              value={setorFilter}
+              onChange={(e) => { setSetorFilter(e.target.value); setCurrentPage(1); }}
+            >
+              <option value="">Todos</option>
+              {uniqueSetores.map(setor => (
+                <option key={setor} value={setor}>{setor}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Filtro Estágio da Auditoria */}
+          <div className="space-y-1.5">
+            <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider block">Estágio da Auditoria</label>
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 h-9">
+              {ESTAGIOS.map(estagio => {
+                const isActive = activeEstagios.includes(estagio);
+                return (
+                  <label key={estagio} className="flex items-center gap-1.5 text-xs text-foreground/80 cursor-pointer hover:text-foreground whitespace-nowrap">
+                    <input
+                      type="checkbox"
+                      checked={isActive}
+                      onChange={() => toggleEstagioFilter(estagio)}
+                      className="rounded border-input text-primary focus:ring-primary h-3.5 w-3.5 bg-background cursor-pointer"
+                    />
+                    <span>{estagio}</span>
+                  </label>
+                );
+              })}
+            </div>
+          </div>
         </div>
       </div>
 
@@ -774,92 +954,11 @@ export default function GestaoPendencias() {
         </div>
       </div>
 
-      {/* ── SEÇÃO CENTRAL: FILTROS E TABELA PRINCIPAL ── */}
+      {/* ── SEÇÃO CENTRAL: TABELA PRINCIPAL ── */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
         
-        {/* COLUNA ESQUERDA: SIDEBAR DE FILTROS DO POWER BI */}
-        <div className="lg:col-span-3 space-y-4">
-          <div className="bg-card rounded-xl border border-border shadow-sm p-5 space-y-5">
-            <h4 className="text-xs font-bold text-foreground uppercase tracking-widest border-b border-border pb-2">Filtros Operacionais</h4>
-            
-            {/* Filtro Usuário Responsável */}
-            <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider block">Usuário Responsável</label>
-              <select
-                className="w-full bg-background border border-input rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
-                value={responsavelFilter}
-                onChange={(e) => { setResponsavelFilter(e.target.value); setCurrentPage(1); }}
-              >
-                <option value="">Todos</option>
-                {uniqueMedicos.map(nome => (
-                  <option key={nome} value={nome}>{nome}</option>
-                ))}
-              </select>
-            </div>
-
-            {/* Filtro Usuário que Abriu (Auditor) */}
-            <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider block">Usuário Abertura</label>
-              <select
-                className="w-full bg-background border border-input rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
-                value={usuarioAberturaFilter}
-                onChange={(e) => { setUsuarioAberturaFilter(e.target.value); setCurrentPage(1); }}
-              >
-                <option value="">Todos</option>
-                {uniqueUsuariosAbertura.map(nome => (
-                  <option key={nome} value={nome}>{nome}</option>
-                ))}
-              </select>
-            </div>
-
-            {/* Filtro Setor */}
-            <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider block">Setor Hospitalar</label>
-              <select
-                className="w-full bg-background border border-input rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
-                value={setorFilter}
-                onChange={(e) => { setSetorFilter(e.target.value); setCurrentPage(1); }}
-              >
-                <option value="">Todos</option>
-                {uniqueSetores.map(setor => (
-                  <option key={setor} value={setor}>{setor}</option>
-                ))}
-              </select>
-            </div>
-
-            {/* Filtro Estágio (Checkboxes do Power BI) */}
-            <div className="space-y-2">
-              <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider block">Estágio da Auditoria</label>
-              <div className="space-y-2 pt-1">
-                {ESTAGIOS.map(estagio => {
-                  const isActive = activeEstagios.includes(estagio);
-                  return (
-                    <label key={estagio} className="flex items-center gap-2.5 text-sm text-foreground/80 cursor-pointer hover:text-foreground">
-                      <input
-                        type="checkbox"
-                        checked={isActive}
-                        onChange={() => toggleEstagioFilter(estagio)}
-                        className="rounded border-input text-primary focus:ring-primary h-4 w-4 bg-background"
-                      />
-                      <span>{estagio}</span>
-                    </label>
-                  );
-                })}
-              </div>
-            </div>
-          </div>
-
-          {/* INDICADOR DE MODO SIMULADO */}
-          <div className="p-4 bg-muted/40 border border-border/80 rounded-xl text-center space-y-1">
-            <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">Conexão Ativa</span>
-            <p className="text-xs font-medium text-foreground/75">
-              {isDemoMode ? 'Visualizando Dados de Auditoria Local' : 'Sincronizado com n8n'}
-            </p>
-          </div>
-        </div>
-
-        {/* COLUNA DIREITA: BUSCA TEXTUAL E TABELA DE PENDÊNCIAS */}
-        <div className="lg:col-span-9 space-y-4">
+        {/* COLUNA ÚNICA: BUSCA TEXTUAL E TABELA DE PENDÊNCIAS (OCUPA A TELA TODA) */}
+        <div className="lg:col-span-12 space-y-4">
           <div className="bg-card text-card-foreground rounded-xl border border-border shadow-sm overflow-hidden">
             
             {/* Barra de Busca Livre */}
@@ -882,6 +981,8 @@ export default function GestaoPendencias() {
                 <thead>
                   <tr className="border-b border-border bg-muted/30 text-muted-foreground">
                     <th scope="col" className="h-11 px-4 py-2 text-left font-bold uppercase tracking-wider text-xs">Atendimento</th>
+                    <th scope="col" className="h-11 px-4 py-2 text-left font-bold uppercase tracking-wider text-xs">Data</th>
+                    <th scope="col" className="h-11 px-4 py-2 text-left font-bold uppercase tracking-wider text-xs">Usuário Abertura</th>
                     <th scope="col" className="h-11 px-4 py-2 text-left font-bold uppercase tracking-wider text-xs">Tipo de Pendência</th>
                     <th scope="col" className="h-11 px-4 py-2 text-left font-bold uppercase tracking-wider text-xs">Setor</th>
                     <th scope="col" className="h-11 px-4 py-2 text-left font-bold uppercase tracking-wider text-xs">Descrição</th>
@@ -891,7 +992,7 @@ export default function GestaoPendencias() {
                 <tbody className="divide-y divide-border">
                   {loading ? (
                     <tr>
-                      <td colSpan={5} className="h-44 text-center">
+                      <td colSpan={7} className="h-44 text-center">
                         <div className="flex flex-col items-center justify-center gap-2">
                           <div className="h-6 w-6 rounded-full border-2 border-primary border-t-transparent animate-spin" />
                           <span className="text-muted-foreground text-xs">Atualizando lista de pendências...</span>
@@ -900,7 +1001,7 @@ export default function GestaoPendencias() {
                     </tr>
                   ) : filteredPendencias.length === 0 ? (
                     <tr>
-                      <td colSpan={5} className="h-44 text-center text-muted-foreground">
+                      <td colSpan={7} className="h-44 text-center text-muted-foreground">
                         Nenhuma pendência encontrada no intervalo selecionado.
                       </td>
                     </tr>
@@ -910,6 +1011,16 @@ export default function GestaoPendencias() {
                         {/* Atendimento */}
                         <td className="px-4 py-3.5 font-semibold text-foreground font-mono text-xs whitespace-nowrap">
                           {item.atendimento}
+                        </td>
+                        
+                        {/* Data */}
+                        <td className="px-4 py-3.5 text-xs text-foreground/90 font-medium whitespace-nowrap">
+                          {formatDateBR(item.data_criacao)}
+                        </td>
+
+                        {/* Usuário Abertura */}
+                        <td className="px-4 py-3.5 text-xs text-foreground/80 font-medium whitespace-nowrap">
+                          {formatUsuarioAbertura(item.usuario_abertura)}
                         </td>
                         
                         {/* Tipo de Pendência */}
@@ -927,7 +1038,7 @@ export default function GestaoPendencias() {
                         {/* Removido: Nome Paciente */}
                         
                         {/* Descrição */}
-                        <td className="px-4 py-3.5 text-xs text-muted-foreground max-w-xs truncate" title={item.descricao}>
+                        <td className="px-4 py-3.5 text-xs text-muted-foreground max-w-xs whitespace-normal break-words" title={item.descricao}>
                           {item.descricao}
                         </td>
 
@@ -1114,9 +1225,10 @@ export default function GestaoPendencias() {
             {chartQtdPorTipo.slice(0, 6).map(item => (
               <div key={item.tipo} className="flex flex-col items-center group relative w-[14%]">
                 
-                {/* Tooltip Hover */}
-                <div className="absolute -top-10 scale-0 group-hover:scale-100 bg-slate-950 text-white text-[10px] font-mono font-bold px-2 py-1 rounded shadow-md z-15 transition-all text-center min-w-[60px] whitespace-nowrap">
-                  {item.count} itens
+                {/* Tooltip Hover Premium */}
+                <div className="absolute -top-16 scale-0 group-hover:scale-100 bg-slate-900 text-white text-[10px] p-2 rounded shadow-lg z-50 transition-all text-center w-max max-w-[180px] pointer-events-none border border-white/10 flex flex-col gap-0.5">
+                  <span className="font-semibold leading-normal whitespace-normal break-words">{item.tipo}</span>
+                  <span className="font-bold text-primary font-mono">{item.count} itens</span>
                 </div>
 
                 {/* Barra Vertical */}
@@ -1127,21 +1239,23 @@ export default function GestaoPendencias() {
                   className="w-full bg-primary hover:bg-primary/90 rounded-t-md cursor-pointer transition-colors shadow-sm"
                 />
 
-                {/* Rótulo Curto / Sigla */}
-                <span className="text-[9px] text-muted-foreground text-center truncate w-full mt-2 font-medium" title={item.tipo}>
-                  {item.tipo.substring(5, 14)}...
+                {/* Rótulo Curto / Sigla Inteligente com Quebra e Sem Truncar fixo */}
+                <span className="text-[9px] text-muted-foreground text-center leading-tight w-full mt-2 font-semibold whitespace-normal break-words" title={item.tipo}>
+                  {getShortTipoLabel(item.tipo)}
                 </span>
               </div>
             ))}
           </div>
 
-          {/* Legenda de Tipologias */}
-          <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 text-[10px] text-muted-foreground pt-1">
-            {chartQtdPorTipo.slice(0, 4).map((item, idx) => (
-              <div key={item.tipo} className="flex items-center gap-1.5 truncate">
-                <span className="h-2 w-2 rounded-full bg-primary flex-shrink-0" />
-                <span className="font-semibold text-foreground/80 font-mono">#{idx+1}:</span>
-                <span className="truncate" title={item.tipo}>{item.tipo}</span>
+          {/* Legenda de Tipologias sem Truncamento (Quebra de Linha Automática) */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2.5 text-[10px] text-muted-foreground pt-1">
+            {chartQtdPorTipo.slice(0, 6).map((item, idx) => (
+              <div key={item.tipo} className="flex items-start gap-1.5 min-w-0">
+                <span className="h-2 w-2 rounded-full bg-primary flex-shrink-0 mt-1" />
+                <span className="font-semibold text-foreground/85 font-mono flex-shrink-0">#{idx+1}:</span>
+                <span className="text-foreground/80 leading-normal whitespace-normal break-words" title={item.tipo}>
+                  {item.tipo}
+                </span>
               </div>
             ))}
           </div>
