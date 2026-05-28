@@ -502,7 +502,7 @@ export default function CentroCirurgico() {
     return date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
   };
 
-    // Cálculo de linhas e colunas para o grid adaptativo na TV (sem rolagem)
+  // Cálculo de linhas e colunas para o grid adaptativo na TV (sem rolagem)
   const totalCards = SALAS_PAINEL.length;
   let cols = 4;
   let rows = 2;
@@ -527,14 +527,12 @@ export default function CentroCirurgico() {
   }
 
   return (
-    <div className={`flex flex-col w-full bg-background text-foreground transition-colors animate-in fade-in zoom-in duration-500 ${
-      viewMode === 'salas' ? 'h-screen overflow-hidden p-4 gap-3' : 'min-h-screen p-6 md:p-8 gap-6'
-    }`}>
+    <div className={`flex flex-col w-full bg-background text-foreground transition-colors animate-in fade-in zoom-in duration-500 ${viewMode === 'salas' ? 'h-screen overflow-hidden p-4 gap-3' : 'min-h-screen p-6 md:p-8 gap-6'
+      }`}>
 
       {/* Header e Controles */}
-      <div className={`flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4 flex-shrink-0 ${
-        viewMode === 'salas' ? 'pb-2 border-b' : 'pb-0'
-      }`}>
+      <div className={`flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4 flex-shrink-0 ${viewMode === 'salas' ? 'pb-2 border-b' : 'pb-0'
+        }`}>
         <div className="flex flex-col gap-1 w-full xl:w-auto">
           <div className="flex items-center gap-3 flex-wrap justify-between md:justify-start">
             <h1 className={`${viewMode === 'salas' ? 'text-xl' : 'text-3xl'} font-bold tracking-tight text-foreground flex items-center gap-2`}>
@@ -545,13 +543,22 @@ export default function CentroCirurgico() {
             </h1>
             {/* Badges de Indicadores compactos (Apenas em modo salas) */}
             {viewMode === 'salas' && (
-              <div className="flex items-center gap-2 text-[11px] font-medium text-muted-foreground ml-2">
-                <span className="px-2 py-0.5 rounded bg-muted border">
-                  Cirurgias Hoje: <strong className="text-foreground">{totalCirurgias}</strong> ({totalEletivas} El / <span className="text-red-500 font-bold">{totalUrgencias} Urg</span>)
-                </span>
-                <span className="px-2 py-0.5 rounded bg-muted border">
-                  Salas Ocupadas: <strong className="text-foreground">{salasAtivas} / {SALAS_PAINEL.length}</strong>
-                </span>
+              <div className="flex items-center gap-2.5 ml-2 text-[11px]">
+                <div className="flex items-center gap-2 px-3 py-1 rounded-lg bg-card border border-border shadow-sm">
+                  <span className="w-1.5 h-1.5 rounded-full bg-primary" />
+                  <span className="text-muted-foreground font-medium">Cirurgias Hoje:</span>
+                  <span className="font-bold text-foreground text-xs">{totalCirurgias}</span>
+                  <span className="text-muted-foreground/40 font-light">|</span>
+                  <span className="text-emerald-600 dark:text-emerald-400 font-bold">{totalEletivas} Eletivas</span>
+                  <span className="text-muted-foreground/30 font-light">•</span>
+                  <span className="text-red-600 dark:text-red-400 font-bold">{totalUrgencias} Urgências</span>
+                </div>
+
+                <div className="flex items-center gap-2 px-3 py-1 rounded-lg bg-card border border-border shadow-sm">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                  <span className="text-muted-foreground font-medium">Salas Ocupadas:</span>
+                  <span className="font-bold text-foreground text-xs">{salasAtivas} de {SALAS_PAINEL.length}</span>
+                </div>
               </div>
             )}
           </div>
@@ -700,7 +707,7 @@ export default function CentroCirurgico() {
       ) : viewMode === 'salas' ? (
         /* PAINEL EM FORMATO DE CARDS DE SALAS ADAPTATIVO PARA TV */
         <div className="flex-1 min-h-0 w-full flex flex-col">
-          <div 
+          <div
             className="grid gap-3 w-full flex-1 min-h-0"
             style={{
               gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`,
@@ -787,57 +794,60 @@ export default function CentroCirurgico() {
                   <div className="p-3 flex-1 flex flex-col min-h-0 overflow-y-auto scrollbar-hide gap-2">
                     {ocupada ? (
                       <>
-                        {/* Status Atual / Evento */}
-                        <div className="flex items-center gap-1.5 flex-wrap flex-shrink-0">
-                          <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border ${statusInfo?.color} whitespace-nowrap`} title={principal.evento || 'Status'}>
-                            <span className={`w-1 h-1 rounded-full ${statusInfo?.dot}`} />
-                            {statusInfo?.label}
-                          </span>
-                        </div>
-
                         {/* Alergias e Precauções */}
                         {(principal.alergia || principal.precaucao) && (
                           <div className="flex flex-col gap-1 p-1.5 rounded bg-muted/20 border border-border/30 animate-in fade-in duration-200 flex-shrink-0">
                             {principal.alergia && (
-                              <div className="flex items-start gap-1 text-[9px]">
-                                <span className="font-extrabold text-red-600 dark:text-red-400 uppercase tracking-wider flex items-center gap-0.5 mt-0.5">
-                                  <AlertCircle className="h-3 w-3" /> Alergias:
-                                </span>
-                                <div className="flex flex-wrap gap-0.5 flex-1">
-                                  {principal.alergia.split(',').map((a, i) => {
-                                    const trimmed = a.trim();
-                                    if (!trimmed) return null;
-                                    return (
-                                      <span key={i} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-50 text-red-950 border border-red-200 dark:bg-red-100 dark:text-red-950 dark:border-red-300 leading-none">
-                                        <span className="w-1 h-1 rounded-full bg-red-600 dark:bg-red-700" />
-                                        {trimmed}
-                                      </span>
-                                    );
-                                  })}
-                                </div>
+                              <div className="flex flex-wrap gap-1 items-center">
+                                <span className="text-[10px] font-extrabold text-red-600 dark:text-red-400 uppercase tracking-wider mr-1">Alergia:</span>
+                                {principal.alergia.split(',').map((a, i) => {
+                                  const trimmed = a.trim();
+                                  if (!trimmed) return null;
+                                  return (
+                                    <span key={`alergia-${i}`} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-50 text-red-955 border border-red-200 dark:bg-red-500/10 dark:text-red-400 dark:border-red-500/20 leading-none">
+                                      <span className="w-1 h-1 rounded-full bg-red-600 dark:bg-red-400" />
+                                      {trimmed}
+                                    </span>
+                                  );
+                                })}
                               </div>
                             )}
                             {principal.precaucao && (
-                              <div className="flex items-start gap-1 text-[9px]">
-                                <span className="font-extrabold text-amber-700 dark:text-amber-500 uppercase tracking-wider flex items-center gap-0.5 mt-0.5">
-                                  <AlertTriangle className="h-3 w-3" /> Prec:
-                                </span>
-                                <div className="flex flex-wrap gap-0.5 flex-1">
-                                  {principal.precaucao.split(',').map((p, i) => {
-                                    const trimmed = p.trim();
-                                    if (!trimmed) return null;
-                                    return (
-                                      <span key={i} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-950 border border-amber-200 dark:bg-amber-100 dark:text-amber-950 dark:border-amber-300 leading-none">
-                                        <span className="w-1 h-1 rounded-full bg-amber-500 dark:bg-amber-600" />
-                                        {trimmed}
-                                      </span>
-                                    );
-                                  })}
-                                </div>
+                              <div className="flex flex-wrap gap-1">
+                                {principal.precaucao.split(',').map((p, i) => {
+                                  const trimmed = p.trim();
+                                  if (!trimmed) return null;
+                                  return (
+                                    <span key={`precaucao-${i}`} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-955 border border-amber-200 dark:bg-amber-500/10 dark:text-amber-400 dark:border-amber-500/20 leading-none">
+                                      <span className="w-1 h-1 rounded-full bg-amber-500 dark:bg-amber-400" />
+                                      {trimmed}
+                                    </span>
+                                  );
+                                })}
                               </div>
                             )}
                           </div>
                         )}
+
+                        {/* Status Atual / Evento com Duração */}
+                        <div className="flex items-center justify-between w-full gap-1.5 flex-wrap flex-shrink-0">
+                          <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[12px] font-bold border ${statusInfo?.color} whitespace-nowrap`} title={principal.evento || 'Status'}>
+                            <span className={`w-1.5 h-1.5 rounded-full ${statusInfo?.dot}`} />
+                            {statusInfo?.label}
+                          </span>
+                          {isCirurgiaAtiva(principal.evento) && (
+                            <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[12px] font-semibold border text-muted-foreground whitespace-nowrap shadow-sm ${isUrgente
+                              ? 'border-red-500/20 bg-red-500/10 dark:border-red-500/20 dark:bg-red-500/10'
+                              : 'border-blue-500/20 bg-blue-500/10 dark:border-blue-500/20 dark:bg-blue-500/10'
+                              }`}>
+                              <span className={`w-1.5 h-1.5 rounded-full ${isUrgente
+                                ? 'bg-red-500 dark:bg-red-400'
+                                : 'bg-blue-500 dark:bg-blue-400'
+                                }`} />
+                              <span>Duração: <strong className="font-extrabold text-foreground">{getDuracaoCirurgia(principal, now)}</strong></span>
+                            </span>
+                          )}
+                        </div>
 
                         {/* Procedimento */}
                         <div className="flex flex-col gap-0.5 flex-shrink-0">
@@ -885,16 +895,10 @@ export default function CentroCirurgico() {
                           )}
                         </div>
 
-                        {/* Tempo de Duração e Progresso */}
+                        {/* Progresso da Cirurgia */}
                         <div className="flex flex-col gap-1 pt-1.5 border-t border-dashed border-border/40 flex-shrink-0">
                           <div className="flex justify-between items-center text-[9px] font-bold text-muted-foreground">
-                            <span className="flex items-center gap-0.5 text-foreground">
-                              <span>Duração:</span>
-                              <span className="flex items-center gap-0.5 text-muted-foreground">
-                                <Clock className="h-3 w-3" />
-                                {getDuracaoCirurgia(principal, now)}
-                              </span>
-                            </span>
+                            <span>Progresso da Cirurgia</span>
                             <span className="text-foreground">{statusInfo?.percent}%</span>
                           </div>
 
@@ -996,37 +1000,33 @@ export default function CentroCirurgico() {
                               </span>
                             )}
                             {(c.alergia || c.precaucao) && (
-                              <div className="flex flex-col gap-1 mt-1.5">
+                              <div className="flex items-center gap-1.5 flex-wrap mt-1.5">
                                 {c.alergia && (
-                                  <div className="flex items-center gap-1.5 flex-wrap">
-                                    <span className="text-[9px] font-extrabold text-red-500 dark:text-red-400 uppercase tracking-wide">Alergias:</span>
+                                  <>
+                                    <span className="text-[11px] font-extrabold text-red-600 dark:text-red-400 uppercase tracking-wider mr-1">Alergia:</span>
                                     {c.alergia.split(',').map((a, i) => {
                                       const trimmed = a.trim();
                                       if (!trimmed) return null;
                                       return (
-                                        <span key={i} className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-red-50 text-red-950 border border-red-200 dark:bg-red-100 dark:text-red-950 dark:border-red-300">
-                                          <span className="w-1.5 h-1.5 rounded-full bg-red-600 dark:bg-red-700" />
+                                        <span key={`alergia-${i}`} className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-red-50 text-red-955 border border-red-200 dark:bg-red-500/10 dark:text-red-400 dark:border-red-500/20">
+                                          <span className="w-1.5 h-1.5 rounded-full bg-red-600 dark:bg-red-400" />
                                           {trimmed}
                                         </span>
                                       );
                                     })}
-                                  </div>
+                                  </>
                                 )}
-                                {c.precaucao && (
-                                  <div className="flex items-center gap-1.5 flex-wrap">
-                                    <span className="text-[9px] font-extrabold text-amber-600 dark:text-amber-500 uppercase tracking-wide">Precauções:</span>
-                                    {c.precaucao.split(',').map((p, i) => {
-                                      const trimmed = p.trim();
-                                      if (!trimmed) return null;
-                                      return (
-                                        <span key={i} className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-amber-50 text-amber-950 border border-amber-200 dark:bg-amber-100 dark:text-amber-950 dark:border-amber-300">
-                                          <span className="w-1.5 h-1.5 rounded-full bg-amber-500 dark:bg-amber-600" />
-                                          {trimmed}
-                                        </span>
-                                      );
-                                    })}
-                                  </div>
-                                )}
+                                {c.precaucao &&
+                                  c.precaucao.split(',').map((p, i) => {
+                                    const trimmed = p.trim();
+                                    if (!trimmed) return null;
+                                    return (
+                                      <span key={`precaucao-${i}`} className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-amber-50 text-amber-955 border border-amber-200 dark:bg-amber-500/10 dark:text-amber-400 dark:border-amber-500/20">
+                                        <span className="w-1.5 h-1.5 rounded-full bg-amber-500 dark:bg-amber-400" />
+                                        {trimmed}
+                                      </span>
+                                    );
+                                  })}
                               </div>
                             )}
                           </div>
