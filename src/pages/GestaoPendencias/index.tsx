@@ -243,6 +243,23 @@ export default function GestaoPendencias() {
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
 
+  // ── Utilitários de Cache de Sessão (sessionStorage) ──
+  const saveToCache = (
+    data: Pendencia[],
+    time: string | null,
+    isDemo: boolean,
+    status: 'idle' | 'success' | 'error'
+  ) => {
+    try {
+      sessionStorage.setItem('hsc_gestao_pendencias_data', JSON.stringify(data));
+      if (time) sessionStorage.setItem('hsc_gestao_pendencias_sync_time', time);
+      sessionStorage.setItem('hsc_gestao_pendencias_is_demo', String(isDemo));
+      sessionStorage.setItem('hsc_gestao_pendencias_sync_status', status);
+    } catch (e) {
+      console.error('Erro ao salvar no cache do sessionStorage:', e);
+    }
+  };
+
   // ── Integração com n8n via Webhook ──
   const handleSyncWithWebhook = async () => {
     setLoading(true);
@@ -253,9 +270,14 @@ export default function GestaoPendencias() {
     
     if (!webhookUrl) {
       setTimeout(() => {
+        const nowTime = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
         setSyncStatus('success');
-        setSyncTime(new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }));
+        setSyncTime(nowTime);
         setLoading(false);
+        // Salva simulação no cache se não há webhook configurado
+        const simData = generatePowerBIPendencias();
+        setDbData(simData);
+        saveToCache(simData, nowTime, true, 'success');
       }, 1000);
       return;
     }
@@ -309,6 +331,8 @@ export default function GestaoPendencias() {
         console.error('Exceção ao salvar log no Supabase:', err);
       }
 
+      const nowTime = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+
       if (list.length > 0) {
         const formatted: Pendencia[] = list.map((item, idx) => {
           // Extrair valor da chave complexa se existir, ou usar um default
@@ -352,29 +376,56 @@ export default function GestaoPendencias() {
         setDbData(formatted);
         setIsDemoMode(false);
         setSyncStatus('success');
-        setSyncTime(new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }));
+        setSyncTime(nowTime);
+        saveToCache(formatted, nowTime, false, 'success');
       } else {
+        const simData = generatePowerBIPendencias();
+        setDbData(simData);
         setIsDemoMode(true);
         setSyncStatus('success');
-        setSyncTime(new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }));
+        setSyncTime(nowTime);
+        saveToCache(simData, nowTime, true, 'success');
       }
     } catch (error: any) {
       console.error('Erro na chamada do webhook:', error);
+      const nowTime = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
       setSyncStatus('error');
-      setSyncTime(new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }));
+      setSyncTime(nowTime);
       setIsDemoMode(true);
+      const simData = generatePowerBIPendencias();
+      setDbData(simData);
+      saveToCache(simData, nowTime, true, 'error');
     } finally {
       setLoading(false);
     }
   };
 
-  // Sincronização automática de dados em tempo real no carregamento da página
+  // Carregamento inicial inteligente com cache em sessionStorage
   useEffect(() => {
-    // Carrega dados de simulação locais de alta fidelidade como fallback inicial
-    setDbData(generatePowerBIPendencias());
-    
-    // Dispara a sincronização automática com o webhook do n8n
-    handleSyncWithWebhook();
+    try {
+      const cachedData = sessionStorage.getItem('hsc_gestao_pendencias_data');
+      const cachedTime = sessionStorage.getItem('hsc_gestao_pendencias_sync_time');
+      const cachedIsDemo = sessionStorage.getItem('hsc_gestao_pendencias_is_demo');
+      const cachedStatus = sessionStorage.getItem('hsc_gestao_pendencias_sync_status');
+
+      if (cachedData) {
+        // Se já existe cache, restauramos os dados imediatamente e NÃO disparamos a sincronização automática
+        setDbData(JSON.parse(cachedData));
+        setSyncTime(cachedTime);
+        setIsDemoMode(cachedIsDemo === 'true');
+        setSyncStatus((cachedStatus as any) || 'success');
+        setLoading(false);
+      } else {
+        // Primeira vez carregando a página na sessão: carrega simulação como fallback e dispara o sync automático
+        setDbData(generatePowerBIPendencias());
+        handleSyncWithWebhook();
+      }
+    } catch (e) {
+      console.error('Erro ao ler do cache do sessionStorage:', e);
+      // Fallback em caso de erro na leitura do sessionStorage
+      setDbData(generatePowerBIPendencias());
+      handleSyncWithWebhook();
+    }
   }, []);
 
   // ── Exportação de Relatório PDF ──
@@ -720,6 +771,84 @@ export default function GestaoPendencias() {
         </div>
       </div>
 
+      {/* ── PAINEL DE FILTROS OPERACIONAIS (HORIZONTAL - TIPO CARD) ── */}
+      <div className="bg-card text-card-foreground p-5 rounded-xl border border-border/80 shadow-sm space-y-4">
+        <div className="border-b border-border/60 pb-2">
+          <h4 className="text-xs font-bold text-foreground uppercase tracking-widest flex items-center gap-2">
+            <Filter className="h-3.5 w-3.5 text-primary" />
+            Filtros Operacionais
+          </h4>
+        </div>
+        
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 items-end">
+          {/* Filtro Usuário Responsável */}
+          <div className="space-y-1.5">
+            <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider block">Usuário Responsável</label>
+            <select
+              className="w-full bg-background border border-input rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-primary h-9"
+              value={responsavelFilter}
+              onChange={(e) => { setResponsavelFilter(e.target.value); setCurrentPage(1); }}
+            >
+              <option value="">Todos</option>
+              {uniqueMedicos.map(nome => (
+                <option key={nome} value={nome}>{nome}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Filtro Usuário Abertura */}
+          <div className="space-y-1.5">
+            <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider block">Usuário Abertura</label>
+            <select
+              className="w-full bg-background border border-input rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-primary h-9"
+              value={usuarioAberturaFilter}
+              onChange={(e) => { setUsuarioAberturaFilter(e.target.value); setCurrentPage(1); }}
+            >
+              <option value="">Todos</option>
+              {uniqueUsuariosAbertura.map(nome => (
+                <option key={nome} value={nome}>{nome}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Filtro Setor Hospitalar */}
+          <div className="space-y-1.5">
+            <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider block">Setor Hospitalar</label>
+            <select
+              className="w-full bg-background border border-input rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-primary h-9"
+              value={setorFilter}
+              onChange={(e) => { setSetorFilter(e.target.value); setCurrentPage(1); }}
+            >
+              <option value="">Todos</option>
+              {uniqueSetores.map(setor => (
+                <option key={setor} value={setor}>{setor}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Filtro Estágio da Auditoria */}
+          <div className="space-y-1.5">
+            <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider block">Estágio da Auditoria</label>
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 h-9">
+              {ESTAGIOS.map(estagio => {
+                const isActive = activeEstagios.includes(estagio);
+                return (
+                  <label key={estagio} className="flex items-center gap-1.5 text-xs text-foreground/80 cursor-pointer hover:text-foreground whitespace-nowrap">
+                    <input
+                      type="checkbox"
+                      checked={isActive}
+                      onChange={() => toggleEstagioFilter(estagio)}
+                      className="rounded border-input text-primary focus:ring-primary h-3.5 w-3.5 bg-background cursor-pointer"
+                    />
+                    <span>{estagio}</span>
+                  </label>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      </div>
+
       {/* ── SEÇÃO SUPERIOR: KPIS & DATA DA PENDÊNCIA (CONVERGÊNCIA POWER BI) ── */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-stretch">
         
@@ -784,92 +913,11 @@ export default function GestaoPendencias() {
         </div>
       </div>
 
-      {/* ── SEÇÃO CENTRAL: FILTROS E TABELA PRINCIPAL ── */}
+      {/* ── SEÇÃO CENTRAL: TABELA PRINCIPAL ── */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
         
-        {/* COLUNA ESQUERDA: SIDEBAR DE FILTROS DO POWER BI */}
-        <div className="lg:col-span-3 space-y-4">
-          <div className="bg-card rounded-xl border border-border shadow-sm p-5 space-y-5">
-            <h4 className="text-xs font-bold text-foreground uppercase tracking-widest border-b border-border pb-2">Filtros Operacionais</h4>
-            
-            {/* Filtro Usuário Responsável */}
-            <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider block">Usuário Responsável</label>
-              <select
-                className="w-full bg-background border border-input rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
-                value={responsavelFilter}
-                onChange={(e) => { setResponsavelFilter(e.target.value); setCurrentPage(1); }}
-              >
-                <option value="">Todos</option>
-                {uniqueMedicos.map(nome => (
-                  <option key={nome} value={nome}>{nome}</option>
-                ))}
-              </select>
-            </div>
-
-            {/* Filtro Usuário que Abriu (Auditor) */}
-            <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider block">Usuário Abertura</label>
-              <select
-                className="w-full bg-background border border-input rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
-                value={usuarioAberturaFilter}
-                onChange={(e) => { setUsuarioAberturaFilter(e.target.value); setCurrentPage(1); }}
-              >
-                <option value="">Todos</option>
-                {uniqueUsuariosAbertura.map(nome => (
-                  <option key={nome} value={nome}>{nome}</option>
-                ))}
-              </select>
-            </div>
-
-            {/* Filtro Setor */}
-            <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider block">Setor Hospitalar</label>
-              <select
-                className="w-full bg-background border border-input rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
-                value={setorFilter}
-                onChange={(e) => { setSetorFilter(e.target.value); setCurrentPage(1); }}
-              >
-                <option value="">Todos</option>
-                {uniqueSetores.map(setor => (
-                  <option key={setor} value={setor}>{setor}</option>
-                ))}
-              </select>
-            </div>
-
-            {/* Filtro Estágio (Checkboxes do Power BI) */}
-            <div className="space-y-2">
-              <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider block">Estágio da Auditoria</label>
-              <div className="space-y-2 pt-1">
-                {ESTAGIOS.map(estagio => {
-                  const isActive = activeEstagios.includes(estagio);
-                  return (
-                    <label key={estagio} className="flex items-center gap-2.5 text-sm text-foreground/80 cursor-pointer hover:text-foreground">
-                      <input
-                        type="checkbox"
-                        checked={isActive}
-                        onChange={() => toggleEstagioFilter(estagio)}
-                        className="rounded border-input text-primary focus:ring-primary h-4 w-4 bg-background"
-                      />
-                      <span>{estagio}</span>
-                    </label>
-                  );
-                })}
-              </div>
-            </div>
-          </div>
-
-          {/* INDICADOR DE MODO SIMULADO */}
-          <div className="p-4 bg-muted/40 border border-border/80 rounded-xl text-center space-y-1">
-            <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">Conexão Ativa</span>
-            <p className="text-xs font-medium text-foreground/75">
-              {isDemoMode ? 'Visualizando Dados de Auditoria Local' : 'Sincronizado com n8n'}
-            </p>
-          </div>
-        </div>
-
-        {/* COLUNA DIREITA: BUSCA TEXTUAL E TABELA DE PENDÊNCIAS */}
-        <div className="lg:col-span-9 space-y-4">
+        {/* COLUNA ÚNICA: BUSCA TEXTUAL E TABELA DE PENDÊNCIAS (OCUPA A TELA TODA) */}
+        <div className="lg:col-span-12 space-y-4">
           <div className="bg-card text-card-foreground rounded-xl border border-border shadow-sm overflow-hidden">
             
             {/* Barra de Busca Livre */}

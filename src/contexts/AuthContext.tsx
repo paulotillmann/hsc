@@ -240,6 +240,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setPermissions(null);
     setUserModules([]);
     setProfileLoaded(false);
+
+    // Limpa o cache de pendências e outros caches de sessão por segurança
+    try {
+      sessionStorage.removeItem('hsc_gestao_pendencias_data');
+      sessionStorage.removeItem('hsc_gestao_pendencias_sync_time');
+      sessionStorage.removeItem('hsc_gestao_pendencias_is_demo');
+      sessionStorage.removeItem('hsc_gestao_pendencias_sync_status');
+    } catch (e) {
+      console.error('Erro ao limpar cache na saída:', e);
+    }
   };
 
   const resetPassword = async (email: string): Promise<{ error: string | null }> => {

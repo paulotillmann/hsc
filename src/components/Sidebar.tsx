@@ -61,22 +61,19 @@ const Sidebar: React.FC = () => {
   };
 
   const navLinkClass = (isActive: boolean) =>
-    `flex items-center rounded-md text-sm transition-all duration-200 ${
-      isCollapsed ? 'justify-center p-3' : 'justify-start gap-3 px-3 py-2'
-    } ${
-      isActive
-        ? 'bg-primary text-primary-foreground shadow-sm hover:shadow-md hover:shadow-primary/20 font-medium'
-        : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
+    `flex items-center rounded-md text-sm transition-all duration-200 ${isCollapsed ? 'justify-center p-3' : 'justify-start gap-3 px-3 py-2'
+    } ${isActive
+      ? 'bg-primary text-primary-foreground shadow-sm hover:shadow-md hover:shadow-primary/20 font-medium'
+      : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
     }`;
 
   return (
-    <aside 
-      className={`border-r bg-card flex flex-col transition-all duration-300 ease-in-out h-screen sticky top-0 relative ${
-        isCollapsed ? 'w-20' : 'w-64'
-      }`}
+    <aside
+      className={`border-r bg-card flex flex-col transition-all duration-300 ease-in-out h-screen sticky top-0 relative ${isCollapsed ? 'w-20' : 'w-64'
+        }`}
     >
       {/* Botão flutuante de colapso */}
-      <button 
+      <button
         onClick={toggleMenu}
         title={isCollapsed ? 'Expandir Menu' : 'Reduzir Menu'}
         className="absolute -right-3 top-[74px] z-50 flex items-center justify-center h-7 w-7 bg-card border border-border text-muted-foreground hover:text-foreground rounded-md shadow hover:bg-muted transition-colors"
@@ -86,16 +83,16 @@ const Sidebar: React.FC = () => {
 
       <div className="h-[88px] flex items-center justify-center p-4 border-b border-border">
         {isCollapsed ? (
-          <img 
-            src={isDark ? "/LOGO_HSC_WHITE.png" : "/LOGO_HSC_PRIMARY.png"} 
-            alt="Logo HSC Mini" 
-            className="h-10 w-10 object-cover object-left transition-all duration-300 pointer-events-none" 
+          <img
+            src={isDark ? "/LOGO_HSC_WHITE.png" : "/LOGO_HSC_PRIMARY.png"}
+            alt="Logo HSC Mini"
+            className="h-10 w-10 object-cover object-left transition-all duration-300 pointer-events-none"
           />
         ) : (
-          <img 
-            src={isDark ? "/LOGO_HSC_WHITE.png" : "/LOGO_HSC_PRIMARY.png"} 
-            alt="Logo HSC" 
-            className="h-10 w-auto object-contain transition-all duration-300 pointer-events-none" 
+          <img
+            src={isDark ? "/LOGO_HSC_WHITE.png" : "/LOGO_HSC_PRIMARY.png"}
+            alt="Logo HSC"
+            className="h-10 w-auto object-contain transition-all duration-300 pointer-events-none"
           />
         )}
       </div>
@@ -123,11 +120,10 @@ const Sidebar: React.FC = () => {
                         setExpandedMenu(expandedMenu === 'notificacoes' ? null : 'notificacoes');
                         if (!isActiveLocal) navigate('/notificacoes');
                       }}
-                      className={`flex items-center rounded-md text-sm transition-all duration-200 justify-start gap-3 px-3 py-2 w-full ${
-                        isActiveLocal
+                      className={`flex items-center rounded-md text-sm transition-all duration-200 justify-start gap-3 px-3 py-2 w-full ${isActiveLocal
                           ? 'bg-primary text-primary-foreground shadow-sm hover:shadow-md hover:shadow-primary/20 font-medium'
                           : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
-                      }`}
+                        }`}
                     >
                       <DynamicIcon name={module.icon} className="h-5 w-5 flex-shrink-0" />
                       <div className="flex flex-1 items-center justify-between">
@@ -142,27 +138,25 @@ const Sidebar: React.FC = () => {
                       <NavLink
                         to="/notificacoes"
                         end
-                        className={({ isActive }) => 
-                          `text-sm px-3 py-2 rounded-md transition-colors ${
-                            isActive 
-                              ? 'bg-primary text-primary-foreground shadow-sm font-medium' 
-                              : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
+                        className={({ isActive }) =>
+                          `text-sm px-3 py-2 rounded-md transition-colors ${isActive
+                            ? 'bg-primary text-primary-foreground shadow-sm font-medium'
+                            : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
                           }`
                         }
                       >
-                         Cadastros
+                        Cadastros
                       </NavLink>
                       <NavLink
                         to="/notificacoes/graficos"
-                        className={({ isActive }) => 
-                          `text-sm px-3 py-2 rounded-md transition-colors ${
-                            isActive 
-                              ? 'bg-primary text-primary-foreground shadow-sm font-medium' 
-                              : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
+                        className={({ isActive }) =>
+                          `text-sm px-3 py-2 rounded-md transition-colors ${isActive
+                            ? 'bg-primary text-primary-foreground shadow-sm font-medium'
+                            : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
                           }`
                         }
                       >
-                         Gráficos
+                        Gráficos
                       </NavLink>
                     </div>
                   )}
@@ -188,11 +182,10 @@ const Sidebar: React.FC = () => {
                         setExpandedMenu(expandedMenu === 'recepcao' ? null : 'recepcao');
                         if (!isActiveLocal) navigate('/recepcao');
                       }}
-                      className={`flex items-center rounded-md text-sm transition-all duration-200 justify-start gap-3 px-3 py-2 w-full ${
-                        isActiveLocal
+                      className={`flex items-center rounded-md text-sm transition-all duration-200 justify-start gap-3 px-3 py-2 w-full ${isActiveLocal
                           ? 'bg-primary text-primary-foreground shadow-sm hover:shadow-md hover:shadow-primary/20 font-medium'
                           : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
-                      }`}
+                        }`}
                     >
                       <DynamicIcon name={module.icon} className="h-5 w-5 flex-shrink-0" />
                       <div className="flex flex-1 items-center justify-between">
@@ -207,63 +200,58 @@ const Sidebar: React.FC = () => {
                       <NavLink
                         to="/recepcao"
                         end
-                        className={({ isActive }) => 
-                          `text-sm px-3 py-2 rounded-md transition-colors ${
-                            isActive 
-                              ? 'bg-primary text-primary-foreground shadow-sm font-medium' 
-                              : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
+                        className={({ isActive }) =>
+                          `text-sm px-3 py-2 rounded-md transition-colors ${isActive
+                            ? 'bg-primary text-primary-foreground shadow-sm font-medium'
+                            : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
                           }`
                         }
                       >
-                         Visão Geral
+                        Visão Geral
                       </NavLink>
                       <NavLink
                         to="/recepcao/visitantes"
-                        className={({ isActive }) => 
-                          `text-sm px-3 py-2 rounded-md transition-colors ${
-                            isActive 
-                              ? 'bg-primary text-primary-foreground shadow-sm font-medium' 
-                              : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
+                        className={({ isActive }) =>
+                          `text-sm px-3 py-2 rounded-md transition-colors ${isActive
+                            ? 'bg-primary text-primary-foreground shadow-sm font-medium'
+                            : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
                           }`
                         }
                       >
-                         Visitantes
+                        Visitantes
                       </NavLink>
                       <NavLink
                         to="/recepcao/terceiros"
-                        className={({ isActive }) => 
-                          `text-sm px-3 py-2 rounded-md transition-colors ${
-                            isActive 
-                              ? 'bg-primary text-primary-foreground shadow-sm font-medium' 
-                              : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
+                        className={({ isActive }) =>
+                          `text-sm px-3 py-2 rounded-md transition-colors ${isActive
+                            ? 'bg-primary text-primary-foreground shadow-sm font-medium'
+                            : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
                           }`
                         }
                       >
-                         Terceiros
+                        Terceiros
                       </NavLink>
                       <NavLink
                         to="/recepcao/pacientes"
-                        className={({ isActive }) => 
-                          `text-sm px-3 py-2 rounded-md transition-colors ${
-                            isActive 
-                              ? 'bg-primary text-primary-foreground shadow-sm font-medium' 
-                              : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
+                        className={({ isActive }) =>
+                          `text-sm px-3 py-2 rounded-md transition-colors ${isActive
+                            ? 'bg-primary text-primary-foreground shadow-sm font-medium'
+                            : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
                           }`
                         }
                       >
-                         Pacientes
+                        Pacientes
                       </NavLink>
                       <NavLink
                         to="/senhas-atendente"
-                        className={({ isActive }) => 
-                          `text-sm px-3 py-2 rounded-md transition-colors ${
-                            isActive 
-                              ? 'bg-primary text-primary-foreground shadow-sm font-medium' 
-                              : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
+                        className={({ isActive }) =>
+                          `text-sm px-3 py-2 rounded-md transition-colors ${isActive
+                            ? 'bg-primary text-primary-foreground shadow-sm font-medium'
+                            : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
                           }`
                         }
                       >
-                         Painel de Senhas
+                        Painel de Senhas
                       </NavLink>
                     </div>
                   )}
@@ -289,11 +277,10 @@ const Sidebar: React.FC = () => {
                         setExpandedMenu(expandedMenu === 'taxa-ocupacao' ? null : 'taxa-ocupacao');
                         if (!isActiveLocal) navigate('/taxa-ocupacao');
                       }}
-                      className={`flex items-center rounded-md text-sm transition-all duration-200 justify-start gap-3 px-3 py-2 w-full ${
-                        isActiveLocal
+                      className={`flex items-center rounded-md text-sm transition-all duration-200 justify-start gap-3 px-3 py-2 w-full ${isActiveLocal
                           ? 'bg-primary text-primary-foreground shadow-sm hover:shadow-md hover:shadow-primary/20 font-medium'
                           : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
-                      }`}
+                        }`}
                     >
                       <DynamicIcon name={module.icon} className="h-5 w-5 flex-shrink-0" />
                       <div className="flex flex-1 items-center justify-between">
@@ -308,53 +295,49 @@ const Sidebar: React.FC = () => {
                       <NavLink
                         to="/taxa-ocupacao"
                         end
-                        className={({ isActive }) => 
-                          `text-sm px-3 py-2 rounded-md transition-colors ${
-                            isActive 
-                              ? 'bg-primary text-primary-foreground shadow-sm font-medium' 
-                              : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
+                        className={({ isActive }) =>
+                          `text-sm px-3 py-2 rounded-md transition-colors ${isActive
+                            ? 'bg-primary text-primary-foreground shadow-sm font-medium'
+                            : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
                           }`
                         }
                       >
-                         Visão Geral
+                        Visão Geral
                       </NavLink>
                       {isAdmin && (
-                      <NavLink
-                        to="/taxa-ocupacao/cadastro-setor-leitos"
-                        className={({ isActive }) => 
-                          `text-sm px-3 py-2 rounded-md transition-colors ${
-                            isActive 
-                              ? 'bg-primary text-primary-foreground shadow-sm font-medium' 
+                        <NavLink
+                          to="/taxa-ocupacao/cadastro-setor-leitos"
+                          className={({ isActive }) =>
+                            `text-sm px-3 py-2 rounded-md transition-colors ${isActive
+                              ? 'bg-primary text-primary-foreground shadow-sm font-medium'
                               : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
-                          }`
-                        }
-                      >
-                         Cadastro Setor e Leitos
-                      </NavLink>
+                            }`
+                          }
+                        >
+                          Cadastro Setor e Leitos
+                        </NavLink>
                       )}
                       <NavLink
                         to="/taxa-ocupacao/lancamento-taxas"
-                        className={({ isActive }) => 
-                          `text-sm px-3 py-2 rounded-md transition-colors ${
-                            isActive 
-                              ? 'bg-primary text-primary-foreground shadow-sm font-medium' 
-                              : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
+                        className={({ isActive }) =>
+                          `text-sm px-3 py-2 rounded-md transition-colors ${isActive
+                            ? 'bg-primary text-primary-foreground shadow-sm font-medium'
+                            : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
                           }`
                         }
                       >
-                         Lançamento de Taxas
+                        Lançamento de Taxas
                       </NavLink>
                       <NavLink
                         to="/taxa-ocupacao/relatorios"
-                        className={({ isActive }) => 
-                          `text-sm px-3 py-2 rounded-md transition-colors ${
-                            isActive 
-                              ? 'bg-primary text-primary-foreground shadow-sm font-medium' 
-                              : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
+                        className={({ isActive }) =>
+                          `text-sm px-3 py-2 rounded-md transition-colors ${isActive
+                            ? 'bg-primary text-primary-foreground shadow-sm font-medium'
+                            : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
                           }`
                         }
                       >
-                         Relatórios
+                        Relatórios
                       </NavLink>
                     </div>
                   )}
@@ -380,11 +363,10 @@ const Sidebar: React.FC = () => {
                         setExpandedMenu(expandedMenu === 'faturamento' ? null : 'faturamento');
                         if (!isActiveLocal) navigate('/gestao-pendencias');
                       }}
-                      className={`flex items-center rounded-md text-sm transition-all duration-200 justify-start gap-3 px-3 py-2 w-full ${
-                        isActiveLocal
+                      className={`flex items-center rounded-md text-sm transition-all duration-200 justify-start gap-3 px-3 py-2 w-full ${isActiveLocal
                           ? 'bg-primary text-primary-foreground shadow-sm hover:shadow-md hover:shadow-primary/20 font-medium'
                           : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
-                      }`}
+                        }`}
                     >
                       <DynamicIcon name="DollarSign" className="h-5 w-5 flex-shrink-0" />
                       <div className="flex flex-1 items-center justify-between">
@@ -399,15 +381,14 @@ const Sidebar: React.FC = () => {
                       <NavLink
                         to="/gestao-pendencias"
                         end
-                        className={({ isActive }) => 
-                          `text-sm px-3 py-2 rounded-md transition-colors ${
-                            isActive 
-                              ? 'bg-primary text-primary-foreground shadow-sm font-medium' 
-                              : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
+                        className={({ isActive }) =>
+                          `text-sm px-3 py-2 rounded-md transition-colors ${isActive
+                            ? 'bg-primary text-primary-foreground shadow-sm font-medium'
+                            : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
                           }`
                         }
                       >
-                         Gestão de Pendências
+                        Gestão de Pendências
                       </NavLink>
                     </div>
                   )}
@@ -433,16 +414,14 @@ const Sidebar: React.FC = () => {
       <div className="p-3 border-t border-border flex flex-col gap-2 overflow-x-hidden">
         {/* Info do usuário logado */}
         {profile && (
-          <NavLink 
+          <NavLink
             to="/perfil"
             title="Meu Perfil"
-            className={({ isActive }) => 
-              `flex items-center rounded-md transition-all duration-200 mb-1 ${
-                isCollapsed ? 'justify-center p-2' : 'justify-start gap-3 px-3 py-2'
-              } ${
-                isActive 
-                  ? 'bg-primary/10 text-primary font-medium' 
-                  : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
+            className={({ isActive }) =>
+              `flex items-center rounded-md transition-all duration-200 mb-1 ${isCollapsed ? 'justify-center p-2' : 'justify-start gap-3 px-3 py-2'
+              } ${isActive
+                ? 'bg-primary/10 text-primary font-medium'
+                : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
               }`
             }
           >
@@ -474,23 +453,21 @@ const Sidebar: React.FC = () => {
           </NavLink>
         )}
 
-        <button 
+        <button
           onClick={toggleTheme}
           title={isDark ? 'Mudar para Modo Claro' : 'Mudar para Modo Escuro'}
-          className={`flex items-center rounded-md text-sm transition-all duration-200 ${
-            isCollapsed ? 'justify-center p-3' : 'justify-start gap-3 px-3 py-2 text-left'
-          } text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white`}
+          className={`flex items-center rounded-md text-sm transition-all duration-200 ${isCollapsed ? 'justify-center p-3' : 'justify-start gap-3 px-3 py-2 text-left'
+            } text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white`}
         >
           {isDark ? <Sun className="h-5 w-5 flex-shrink-0" /> : <Moon className="h-5 w-5 flex-shrink-0" />}
           {!isCollapsed && <span className="truncate">{isDark ? 'Modo Claro' : 'Modo Escuro'}</span>}
         </button>
 
-        <button 
+        <button
           onClick={handleLogout}
           title="Sair do Sistema"
-          className={`flex items-center rounded-md text-sm text-red-500 hover:bg-red-500/10 dark:hover:bg-red-500/20 transition-all duration-200 mt-1 ${
-            isCollapsed ? 'justify-center p-3' : 'justify-start gap-3 px-3 py-2 text-left'
-          }`}
+          className={`flex items-center rounded-md text-sm text-red-500 hover:bg-red-500/10 dark:hover:bg-red-500/20 transition-all duration-200 mt-1 ${isCollapsed ? 'justify-center p-3' : 'justify-start gap-3 px-3 py-2 text-left'
+            }`}
         >
           <LogOut className="h-5 w-5 flex-shrink-0" />
           {!isCollapsed && <span className="truncate">Sair</span>}
