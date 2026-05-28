@@ -234,6 +234,17 @@ const getStatusPorEvento = (evento: string | null) => {
   }
 };
 
+// Helper para abreviar o nome do paciente para iniciais
+const formatNomeIniciais = (nome: string | null): string => {
+  if (!nome) return '';
+  return nome
+    .trim()
+    .split(/\s+/)
+    .filter(p => p.length > 0 && !/^(de|da|do|dos|das|e)$/i.test(p))
+    .map(p => p.charAt(0).toUpperCase())
+    .join(' ');
+};
+
 const SYNC_INTERVAL_MS = 3 * 60 * 1000; // 3 minutos
 
 export default function CentroCirurgico() {
@@ -735,16 +746,16 @@ export default function CentroCirurgico() {
                         {/* Centro: Paciente */}
                         <div className="flex-1 min-w-0 flex flex-col gap-0.5">
                           <h4 className="font-bold text-xs md:text-sm text-foreground uppercase whitespace-normal break-words leading-tight truncate" title={principal.nm_paciente || ''}>
-                            {principal.nm_paciente}
+                            {formatNomeIniciais(principal.nm_paciente)}
                           </h4>
                           <p className="text-[10px] text-muted-foreground">
                             {principal.idade ? `${principal.idade}a` : 'N/I'} • {principal.ds_sexo || 'Sexo N/I'}
-                            {principal.setor_origem && (
-                              <span className="ml-1 text-[10px]">
-                                • Org: <strong className="font-semibold text-foreground/80">{principal.setor_origem}</strong>
-                              </span>
-                            )}
                           </p>
+                          {principal.setor_origem && (
+                            <p className="text-[10px] text-muted-foreground">
+                              Origem: <strong className="font-semibold text-foreground/80">{principal.setor_origem}</strong>
+                            </p>
+                          )}
                         </div>
                       </div>
 
@@ -975,7 +986,7 @@ export default function CentroCirurgico() {
                         {/* Paciente */}
                         <td className="px-6 py-4 font-medium text-foreground min-w-[180px]">
                           <div className="flex flex-col gap-1">
-                            <span className="font-semibold text-foreground text-sm">{c.nm_paciente}</span>
+                            <span className="font-semibold text-foreground text-sm" title={c.nm_paciente || ''}>{formatNomeIniciais(c.nm_paciente)}</span>
                             <span className="text-xs text-muted-foreground mt-0.5">
                               {c.idade ? `${c.idade} anos` : 'Idade N/I'} • {c.ds_sexo || 'Sexo N/I'}
                             </span>
