@@ -38,122 +38,10 @@ export interface AuditLog {
 const LOCAL_STORAGE_DENUNCIAS_KEY = 'hsc_denuncias';
 const LOCAL_STORAGE_LOGS_KEY = 'hsc_audit_logs';
 
-// Dados Mockados para fallback caso o banco não esteja criado
-const DEFAULT_DENUNCIAS: Denuncia[] = [
-  {
-    id: '1',
-    protocolo: 'HSC-2026-AXK82',
-    categoria: 'assedio-moral',
-    categoriaLabel: 'Assédio Moral / Abuso de Poder',
-    descricao: 'O gestor do setor de recepção tem se dirigido à equipe de forma desrespeitosa e agressiva de forma sistemática, gritando na frente de pacientes e ameaçando demissões sem justificativa viável.',
-    dataSubmetida: '2026-05-24T10:15:00Z',
-    dataOcorrencia: '2026-05-23',
-    localOcorrencia: 'Recepção Central',
-    anonimo: true,
-    status: 'Pendente',
-    prioridade: 'Alta',
-    timeline: [
-      {
-        data: '2026-05-24T10:15:00Z',
-        titulo: 'Denúncia Registrada',
-        descricao: 'O relato foi recebido de forma 100% anônima pelo canal ético.',
-        usuario: 'Sistema'
-      }
-    ],
-    anexos: []
-  },
-  {
-    id: '2',
-    protocolo: 'HSC-2026-PLW19',
-    categoria: 'fraude-corrupcao',
-    categoriaLabel: 'Fraude / Desvio / Corrupção / Roubo',
-    descricao: 'Constatamos divergência recorrente no inventário físico de medicamentos controlados de alto custo na farmácia satélite do bloco cirúrgico durante a passagem de plantão nos últimos três finais de semana.',
-    dataSubmetida: '2026-05-22T21:40:00Z',
-    dataOcorrencia: '2026-05-17',
-    localOcorrencia: 'Farmácia Bloco Cirúrgico',
-    anonimo: true,
-    status: 'Em Investigação',
-    prioridade: 'Crítica',
-    timeline: [
-      {
-        data: '2026-05-22T21:40:00Z',
-        titulo: 'Denúncia Registrada',
-        descricao: 'O relato foi recebido de forma 100% anônima pelo canal ético.',
-        usuario: 'Sistema'
-      },
-      {
-        data: '2026-05-23T08:30:00Z',
-        titulo: 'Triagem Inicial Concluída',
-        descricao: 'Prioridade definida como Crítica pelo comitê ético devido ao teor da ocorrência.',
-        usuario: 'Auditoria Interna'
-      },
-      {
-        data: '2026-05-23T09:00:00Z',
-        titulo: 'Status alterado para Em Investigação',
-        descricao: 'Iniciada a auditoria dos prontuários e registros eletrônicos de dispensação de medicamentos del bloco cirúrgico.',
-        usuario: 'Comitê de Ética'
-      }
-    ],
-    anexos: ['divergencias_farmacia_SAT.xlsx', 'foto_estoque_lacres.jpg']
-  },
-  {
-    id: '3',
-    protocolo: 'HSC-2026-MTR54',
-    categoria: 'seguranca-paciente',
-    categoriaLabel: 'Segurança do Paciente',
-    descricao: 'Omissão grave de protocolo de segurança na administração de medicação injetável no leito 12 da UTI Adulta. O erro gerou intercorrência grave no paciente, que precisou ser revertida às pressas, e os envolvidos tentaram ocultar a ficha de ocorrência clínica.',
-    dataSubmetida: '2026-05-20T14:30:00Z',
-    dataOcorrencia: '2026-05-19',
-    localOcorrencia: 'UTI Adulta - Leito 12',
-    anonimo: false,
-    nomeRelator: 'Clara Silveira Mendonça',
-    emailRelator: 'clara.mendonca@hsc.com.br',
-    telefoneRelator: '(34) 98822-1144',
-    cargoRelator: 'Enfermeira Assistencial',
-    status: 'Concluído',
-    prioridade: 'Crítica',
-    timeline: [
-      {
-        data: '2026-05-20T14:30:00Z',
-        titulo: 'Denúncia Registrada',
-        descricao: 'Relato confidencial registrado pela colaboradora enfermeira.',
-        usuario: 'Sistema'
-      },
-      {
-        data: '2026-05-21T10:00:00Z',
-        titulo: 'Status alterado para Em Investigação',
-        descricao: 'Convocação do supervisor do setor para apresentação do livro de registros clínicos.',
-        usuario: 'Diretoria Clínica'
-      },
-      {
-        data: '2026-05-25T09:15:00Z',
-        titulo: 'Status alterado para Concluído',
-        descricao: 'Processo administrativo aberto para aplicação de medidas disciplinares. Protocolo de segurança da UTI reforçado com a equipe.',
-        usuario: 'Comitê de Ética'
-      }
-    ],
-    anexos: ['prontuario_leito12_ocultado.pdf']
-  }
-];
+// Dados Mockados para fallback caso o banco não esteja criado (Inicializado vazio para produção)
+const DEFAULT_DENUNCIAS: Denuncia[] = [];
 
-const DEFAULT_LOGS: AuditLog[] = [
-  {
-    id: 'L1',
-    data: '2026-05-25T14:55:00Z',
-    protocolo: 'HSC-2026-AXK82',
-    acao: 'Visualização completa dos detalhes da denúncia',
-    usuario: 'Comitê de Ética',
-    origem: '[IP BLINDADO POR SEGURANÇA]'
-  },
-  {
-    id: 'L2',
-    data: '2026-05-25T14:30:00Z',
-    protocolo: 'HSC-2026-PLW19',
-    acao: 'Visualização completa dos detalhes da denúncia',
-    usuario: 'Compliance HSC',
-    origem: '[IP BLINDADO POR SEGURANÇA]'
-  }
-];
+const DEFAULT_LOGS: AuditLog[] = [];
 
 // Métodos de Fallback para LocalStorage
 const getLocalDenuncias = (): Denuncia[] => {
@@ -162,7 +50,14 @@ const getLocalDenuncias = (): Denuncia[] => {
     localStorage.setItem(LOCAL_STORAGE_DENUNCIAS_KEY, JSON.stringify(DEFAULT_DENUNCIAS));
     return DEFAULT_DENUNCIAS;
   }
-  return JSON.parse(saved);
+  // Limpa denúncias antigas do mock
+  const parsed = JSON.parse(saved);
+  const filtered = parsed.filter((d: any) => d.id !== '1' && d.id !== '2' && d.id !== '3');
+  if (filtered.length !== parsed.length) {
+    localStorage.setItem(LOCAL_STORAGE_DENUNCIAS_KEY, JSON.stringify(filtered));
+    return filtered;
+  }
+  return parsed;
 };
 
 const saveLocalDenuncias = (denuncias: Denuncia[]) => {
@@ -175,7 +70,14 @@ const getLocalLogs = (): AuditLog[] => {
     localStorage.setItem(LOCAL_STORAGE_LOGS_KEY, JSON.stringify(DEFAULT_LOGS));
     return DEFAULT_LOGS;
   }
-  return JSON.parse(saved);
+  // Limpa logs antigos do mock
+  const parsed = JSON.parse(saved);
+  const filtered = parsed.filter((l: any) => l.id !== 'L1' && l.id !== 'L2');
+  if (filtered.length !== parsed.length) {
+    localStorage.setItem(LOCAL_STORAGE_LOGS_KEY, JSON.stringify(filtered));
+    return filtered;
+  }
+  return parsed;
 };
 
 const saveLocalLogs = (logs: AuditLog[]) => {
