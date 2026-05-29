@@ -12,6 +12,9 @@ import Totem from './pages/Senhas/Totem';
 import PainelTV from './pages/Senhas/PainelTV';
 import PainelAtendente from './pages/Senhas/PainelAtendente';
 import PacientesInternados from './pages/PacientesInternados';
+import EscutaLanding from './pages/EscutaSantaCasa/EscutaLanding';
+import NovaDenuncia from './pages/EscutaSantaCasa/NovaDenuncia';
+
 const App: React.FC = () => {
   // Configuração Global de Tema
   useEffect(() => {
@@ -28,6 +31,10 @@ const App: React.FC = () => {
           {/* Rota pública: Login */}
           <Route path="/" element={<Login />} />
           <Route path="/update-password" element={<UpdatePassword />} />
+
+          {/* Canal de Escuta Público e Formulário (Totalmente Públicos - Sem Login) */}
+          <Route path="/escuta-santa-casa" element={<EscutaLanding />} />
+          <Route path="/escuta-santa-casa/nova-denuncia" element={<NovaDenuncia />} />
 
           {/* Rotas protegidas — exigem sessão ativa */}
           <Route element={<PrivateRoute />}>

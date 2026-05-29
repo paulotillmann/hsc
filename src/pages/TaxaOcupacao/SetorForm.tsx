@@ -181,7 +181,7 @@ export default function SetorForm() {
   };
 
   const handleSaveLeito = async () => {
-    if (!currentLeito.nome_leito || currentLeito.qtd_leitos === '' || currentLeito.qtd_leitos_sus === '') {
+    if (!currentLeito.nome_leito || currentLeito.qtd_leitos === undefined || currentLeito.qtd_leitos === null || String(currentLeito.qtd_leitos) === '' || currentLeito.qtd_leitos_sus === undefined || currentLeito.qtd_leitos_sus === null || String(currentLeito.qtd_leitos_sus) === '') {
       alert("Por favor, preencha todos os campos obrigatórios do leito.");
       return;
     }
