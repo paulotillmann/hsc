@@ -122,9 +122,9 @@ const getDefaultModules = (isAdmin: boolean): Module[] => {
         updated_at: new Date().toISOString(),
       },
       {
-        id: 'm-escuta',
+        id: 'm-gestao-escuta',
         name: 'Gestão Escuta Santa Casa',
-        slug: 'escuta-santa-casa',
+        slug: 'gestao-escuta-santa-casa',
         icon: 'ShieldAlert',
         is_active: true,
         sort_order: 80,

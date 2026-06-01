@@ -5,14 +5,14 @@
 INSERT INTO public.modules (name, slug, icon, description, is_active, sort_order, is_system)
 SELECT 
   'Gestão Escuta Santa Casa', 
-  'escuta-santa-casa', 
+  'gestao-escuta-santa-casa', 
   'ShieldAlert', 
   'Canal de ética confidencial para relatar desvios de conduta, fraudes ou violações das políticas internas', 
   true, 
   80, 
   false
 WHERE NOT EXISTS (
-  SELECT 1 FROM public.modules WHERE slug = 'escuta-santa-casa'
+  SELECT 1 FROM public.modules WHERE slug = 'gestao-escuta-santa-casa'
 );
 
 -- 2. Atribuir o módulo para todas as roles existentes por padrão (para facilitar a transição)
@@ -22,5 +22,6 @@ INSERT INTO public.role_module_permissions (role_id, module_id)
 SELECT r.id, m.id 
 FROM public.roles r
 CROSS JOIN public.modules m
-WHERE m.slug = 'escuta-santa-casa'
+WHERE m.slug = 'gestao-escuta-santa-casa'
 ON CONFLICT DO NOTHING;
+
