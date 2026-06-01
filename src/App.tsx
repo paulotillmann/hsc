@@ -12,9 +12,9 @@ import Totem from './pages/Senhas/Totem';
 import PainelTV from './pages/Senhas/PainelTV';
 import PainelAtendente from './pages/Senhas/PainelAtendente';
 import PacientesInternados from './pages/PacientesInternados';
+import CentroCirurgico from './pages/CentroCirurgico';
 import EscutaLanding from './pages/EscutaSantaCasa/EscutaLanding';
 import NovaDenuncia from './pages/EscutaSantaCasa/NovaDenuncia';
-
 const App: React.FC = () => {
   // Configuração Global de Tema
   useEffect(() => {
@@ -38,7 +38,7 @@ const App: React.FC = () => {
 
           {/* Rotas protegidas — exigem sessão ativa */}
           <Route element={<PrivateRoute />}>
-            
+
             {/* Rota de Impressão (Sem Layout da aplicação) */}
             <Route path="/imprimir/etiqueta/:id" element={<EtiquetaVisita />} />
 
@@ -48,6 +48,9 @@ const App: React.FC = () => {
 
             {/* Rota de Pacientes Internados (Sem Layout) */}
             <Route path="/pacientes-internados" element={<PacientesInternados />} />
+
+            {/* Rota de Centro Cirúrgico (Sem Layout) */}
+            <Route path="/centro-cirurgico" element={<CentroCirurgico />} />
 
             <Route element={<Layout />}>
               {/* Perfil: rota pública para qualquer usuário autenticado */}

@@ -17,6 +17,8 @@
   --font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif;
 }
 
+@variant dark (&:where(.dark, .dark *));
+
 @layer base {
   :root {
     /* Paleta customizada (Fundo cinza conforme anexo) */

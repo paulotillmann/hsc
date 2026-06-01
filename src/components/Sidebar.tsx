@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { NavLink, useNavigate, useLocation } from 'react-router-dom';
-import { LogOut, Sun, Moon, ChevronLeft, ChevronRight, ChevronDown } from 'lucide-react';
+import { LogOut, Sun, Moon, ChevronLeft, ChevronRight, ChevronDown, HeartPulse } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { usePermissions } from '../hooks/usePermissions';
 import DynamicIcon from './DynamicIcon';
@@ -18,6 +18,8 @@ const Sidebar: React.FC = () => {
     if (window.location.pathname.startsWith('/notificacoes')) return 'notificacoes';
     if (window.location.pathname.startsWith('/recepcao')) return 'recepcao';
     if (window.location.pathname.startsWith('/taxa-ocupacao')) return 'taxa-ocupacao';
+    if (window.location.pathname.startsWith('/pacientes-internados') || window.location.pathname.startsWith('/centro-cirurgico')) return 'assistencial';
+    if (window.location.pathname.startsWith('/gestao-pendencias')) return 'faturamento';
     if (window.location.pathname.startsWith('/escuta-santa-casa')) return 'escuta-santa-casa';
     return null;
   });
@@ -31,6 +33,8 @@ const Sidebar: React.FC = () => {
     if (location.pathname.startsWith('/notificacoes')) setExpandedMenu('notificacoes');
     else if (location.pathname.startsWith('/recepcao')) setExpandedMenu('recepcao');
     else if (location.pathname.startsWith('/taxa-ocupacao')) setExpandedMenu('taxa-ocupacao');
+    else if (location.pathname.startsWith('/pacientes-internados') || location.pathname.startsWith('/centro-cirurgico')) setExpandedMenu('assistencial');
+    else if (location.pathname.startsWith('/gestao-pendencias')) setExpandedMenu('faturamento');
     else if (location.pathname.startsWith('/escuta-santa-casa')) setExpandedMenu('escuta-santa-casa');
   }, [location.pathname, isCollapsed]);
 
@@ -61,22 +65,19 @@ const Sidebar: React.FC = () => {
   };
 
   const navLinkClass = (isActive: boolean) =>
-    `flex items-center rounded-md text-sm transition-all duration-200 ${
-      isCollapsed ? 'justify-center p-3' : 'justify-start gap-3 px-3 py-2'
-    } ${
-      isActive
-        ? 'bg-primary text-primary-foreground shadow-sm hover:shadow-md hover:shadow-primary/20 font-medium'
-        : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+    `flex items-center rounded-md text-sm transition-all duration-200 ${isCollapsed ? 'justify-center p-3' : 'justify-start gap-3 px-3 py-2'
+    } ${isActive
+      ? 'bg-primary text-primary-foreground shadow-sm hover:shadow-md hover:shadow-primary/20 font-medium'
+      : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
     }`;
 
   return (
-    <aside 
-      className={`border-r bg-card flex flex-col transition-all duration-300 ease-in-out h-screen sticky top-0 relative ${
-        isCollapsed ? 'w-20' : 'w-64'
-      }`}
+    <aside
+      className={`border-r bg-card flex flex-col transition-all duration-300 ease-in-out h-screen sticky top-0 relative ${isCollapsed ? 'w-20' : 'w-64'
+        }`}
     >
       {/* Botão flutuante de colapso */}
-      <button 
+      <button
         onClick={toggleMenu}
         title={isCollapsed ? 'Expandir Menu' : 'Reduzir Menu'}
         className="absolute -right-3 top-[74px] z-50 flex items-center justify-center h-7 w-7 bg-card border border-border text-muted-foreground hover:text-foreground rounded-md shadow hover:bg-muted transition-colors"
@@ -86,24 +87,98 @@ const Sidebar: React.FC = () => {
 
       <div className="h-[88px] flex items-center justify-center p-4 border-b border-border">
         {isCollapsed ? (
-          <img 
-            src={isDark ? "/LOGO_HSC_WHITE.png" : "/LOGO_HSC_PRIMARY.png"} 
-            alt="Logo HSC Mini" 
-            className="h-10 w-10 object-cover object-left transition-all duration-300 pointer-events-none" 
+          <img
+            src={isDark ? "/LOGO_HSC_WHITE.png" : "/LOGO_HSC_PRIMARY.png"}
+            alt="Logo HSC Mini"
+            className="h-10 w-10 object-cover object-left transition-all duration-300 pointer-events-none"
           />
         ) : (
-          <img 
-            src={isDark ? "/LOGO_HSC_WHITE.png" : "/LOGO_HSC_PRIMARY.png"} 
-            alt="Logo HSC" 
-            className="h-10 w-auto object-contain transition-all duration-300 pointer-events-none" 
+          <img
+            src={isDark ? "/LOGO_HSC_WHITE.png" : "/LOGO_HSC_PRIMARY.png"}
+            alt="Logo HSC"
+            className="h-10 w-auto object-contain transition-all duration-300 pointer-events-none"
           />
         )}
       </div>
 
       {/* ── Menu dinâmico gerado pelos módulos do perfil ── */}
       <nav className="flex-1 p-3 flex flex-col gap-2 overflow-x-hidden overflow-y-auto pt-8 scrollbar-hide">
+        {/* Categoria Assistencial (Agrupador) */}
+        {(() => {
+          const hasPacientesAccess = userModules.some(m => m.slug === 'pacientes-internados');
+          const hasCentroCirurgicoAccess = userModules.some(m => m.slug === 'centro-cirurgico');
+          const showAssistencial = hasPacientesAccess || hasCentroCirurgicoAccess;
+          const isAssistencialActive = location.pathname.startsWith('/pacientes-internados') || location.pathname.startsWith('/centro-cirurgico');
+
+          if (!showAssistencial) return null;
+
+          return (
+            <div className="flex flex-col">
+              {isCollapsed ? (
+                <NavLink
+                  to={hasPacientesAccess ? '/pacientes-internados' : '/centro-cirurgico'}
+                  title="Assistencial"
+                  className={navLinkClass(isAssistencialActive)}
+                >
+                  <HeartPulse className="h-5 w-5 flex-shrink-0" />
+                </NavLink>
+              ) : (
+                <button
+                  onClick={() => {
+                    setExpandedMenu(expandedMenu === 'assistencial' ? null : 'assistencial');
+                  }}
+                  className={`flex items-center rounded-md text-sm transition-all duration-200 justify-start gap-3 px-3 py-2 w-full ${
+                    isAssistencialActive
+                      ? 'bg-primary text-primary-foreground shadow-sm hover:shadow-md hover:shadow-primary/20 font-medium'
+                      : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                  }`}
+                >
+                  <HeartPulse className="h-5 w-5 flex-shrink-0" />
+                  <div className="flex flex-1 items-center justify-between">
+                    <span className="truncate">Assistencial</span>
+                    <ChevronRight className={`h-4 w-4 transition-transform ${expandedMenu === 'assistencial' ? 'rotate-90' : ''}`} />
+                  </div>
+                </button>
+              )}
+
+              {!isCollapsed && expandedMenu === 'assistencial' && (
+                <div className="flex flex-col ml-9 mt-1 gap-1 border-l-2 border-border pl-2 border-primary/20 animate-in fade-in duration-300">
+                  {hasPacientesAccess && (
+                    <NavLink
+                      to="/pacientes-internados"
+                      className={({ isActive }) => 
+                        `text-sm px-3 py-2 rounded-md transition-colors ${
+                          isActive 
+                            ? 'bg-primary/10 text-primary font-medium' 
+                            : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                        }`
+                      }
+                    >
+                       Pacientes Internados
+                    </NavLink>
+                  )}
+                  {hasCentroCirurgicoAccess && (
+                    <NavLink
+                      to="/centro-cirurgico"
+                      className={({ isActive }) => 
+                        `text-sm px-3 py-2 rounded-md transition-colors ${
+                          isActive 
+                            ? 'bg-primary/10 text-primary font-medium' 
+                            : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                        }`
+                      }
+                    >
+                       Centro Cirúrgico
+                    </NavLink>
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })()}
+
         {userModules
-          .filter(m => m.slug !== 'configuracoes') // Configurações fica na área inferior
+          .filter(m => m.slug !== 'configuracoes' && m.slug !== 'pacientes-internados' && m.slug !== 'centro-cirurgico') // Configurações fica na área inferior, e assistenciais ficam agrupados
           .map(module => {
             if (module.slug === 'notificacoes') {
               const isActiveLocal = location.pathname.startsWith('/notificacoes');
@@ -123,11 +198,10 @@ const Sidebar: React.FC = () => {
                         setExpandedMenu(expandedMenu === 'notificacoes' ? null : 'notificacoes');
                         if (!isActiveLocal) navigate('/notificacoes');
                       }}
-                      className={`flex items-center rounded-md text-sm transition-all duration-200 justify-start gap-3 px-3 py-2 w-full ${
-                        isActiveLocal
+                      className={`flex items-center rounded-md text-sm transition-all duration-200 justify-start gap-3 px-3 py-2 w-full ${isActiveLocal
                           ? 'bg-primary text-primary-foreground shadow-sm hover:shadow-md hover:shadow-primary/20 font-medium'
-                          : 'text-muted-foreground hover:bg-muted hover:text-foreground'
-                      }`}
+                          : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
+                        }`}
                     >
                       <DynamicIcon name={module.icon} className="h-5 w-5 flex-shrink-0" />
                       <div className="flex flex-1 items-center justify-between">
@@ -142,27 +216,25 @@ const Sidebar: React.FC = () => {
                       <NavLink
                         to="/notificacoes"
                         end
-                        className={({ isActive }) => 
-                          `text-sm px-3 py-2 rounded-md transition-colors ${
-                            isActive 
-                              ? 'bg-primary text-primary-foreground shadow-sm font-medium' 
-                              : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                        className={({ isActive }) =>
+                          `text-sm px-3 py-2 rounded-md transition-colors ${isActive
+                            ? 'bg-primary text-primary-foreground shadow-sm font-medium'
+                            : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
                           }`
                         }
                       >
-                         Cadastros
+                        Cadastros
                       </NavLink>
                       <NavLink
                         to="/notificacoes/graficos"
-                        className={({ isActive }) => 
-                          `text-sm px-3 py-2 rounded-md transition-colors ${
-                            isActive 
-                              ? 'bg-primary text-primary-foreground shadow-sm font-medium' 
-                              : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                        className={({ isActive }) =>
+                          `text-sm px-3 py-2 rounded-md transition-colors ${isActive
+                            ? 'bg-primary text-primary-foreground shadow-sm font-medium'
+                            : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
                           }`
                         }
                       >
-                         Gráficos
+                        Gráficos
                       </NavLink>
                     </div>
                   )}
@@ -188,11 +260,10 @@ const Sidebar: React.FC = () => {
                         setExpandedMenu(expandedMenu === 'recepcao' ? null : 'recepcao');
                         if (!isActiveLocal) navigate('/recepcao');
                       }}
-                      className={`flex items-center rounded-md text-sm transition-all duration-200 justify-start gap-3 px-3 py-2 w-full ${
-                        isActiveLocal
+                      className={`flex items-center rounded-md text-sm transition-all duration-200 justify-start gap-3 px-3 py-2 w-full ${isActiveLocal
                           ? 'bg-primary text-primary-foreground shadow-sm hover:shadow-md hover:shadow-primary/20 font-medium'
-                          : 'text-muted-foreground hover:bg-muted hover:text-foreground'
-                      }`}
+                          : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
+                        }`}
                     >
                       <DynamicIcon name={module.icon} className="h-5 w-5 flex-shrink-0" />
                       <div className="flex flex-1 items-center justify-between">
@@ -207,63 +278,58 @@ const Sidebar: React.FC = () => {
                       <NavLink
                         to="/recepcao"
                         end
-                        className={({ isActive }) => 
-                          `text-sm px-3 py-2 rounded-md transition-colors ${
-                            isActive 
-                              ? 'bg-primary text-primary-foreground shadow-sm font-medium' 
-                              : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                        className={({ isActive }) =>
+                          `text-sm px-3 py-2 rounded-md transition-colors ${isActive
+                            ? 'bg-primary text-primary-foreground shadow-sm font-medium'
+                            : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
                           }`
                         }
                       >
-                         Visão Geral
+                        Visão Geral
                       </NavLink>
                       <NavLink
                         to="/recepcao/visitantes"
-                        className={({ isActive }) => 
-                          `text-sm px-3 py-2 rounded-md transition-colors ${
-                            isActive 
-                              ? 'bg-primary text-primary-foreground shadow-sm font-medium' 
-                              : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                        className={({ isActive }) =>
+                          `text-sm px-3 py-2 rounded-md transition-colors ${isActive
+                            ? 'bg-primary text-primary-foreground shadow-sm font-medium'
+                            : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
                           }`
                         }
                       >
-                         Visitantes
+                        Visitantes
                       </NavLink>
                       <NavLink
                         to="/recepcao/terceiros"
-                        className={({ isActive }) => 
-                          `text-sm px-3 py-2 rounded-md transition-colors ${
-                            isActive 
-                              ? 'bg-primary text-primary-foreground shadow-sm font-medium' 
-                              : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                        className={({ isActive }) =>
+                          `text-sm px-3 py-2 rounded-md transition-colors ${isActive
+                            ? 'bg-primary text-primary-foreground shadow-sm font-medium'
+                            : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
                           }`
                         }
                       >
-                         Terceiros
+                        Terceiros
                       </NavLink>
                       <NavLink
                         to="/recepcao/pacientes"
-                        className={({ isActive }) => 
-                          `text-sm px-3 py-2 rounded-md transition-colors ${
-                            isActive 
-                              ? 'bg-primary text-primary-foreground shadow-sm font-medium' 
-                              : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                        className={({ isActive }) =>
+                          `text-sm px-3 py-2 rounded-md transition-colors ${isActive
+                            ? 'bg-primary text-primary-foreground shadow-sm font-medium'
+                            : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
                           }`
                         }
                       >
-                         Pacientes
+                        Pacientes
                       </NavLink>
                       <NavLink
                         to="/senhas-atendente"
-                        className={({ isActive }) => 
-                          `text-sm px-3 py-2 rounded-md transition-colors ${
-                            isActive 
-                              ? 'bg-primary text-primary-foreground shadow-sm font-medium' 
-                              : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                        className={({ isActive }) =>
+                          `text-sm px-3 py-2 rounded-md transition-colors ${isActive
+                            ? 'bg-primary text-primary-foreground shadow-sm font-medium'
+                            : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
                           }`
                         }
                       >
-                         Painel de Senhas
+                        Painel de Senhas
                       </NavLink>
                     </div>
                   )}
@@ -289,11 +355,10 @@ const Sidebar: React.FC = () => {
                         setExpandedMenu(expandedMenu === 'taxa-ocupacao' ? null : 'taxa-ocupacao');
                         if (!isActiveLocal) navigate('/taxa-ocupacao');
                       }}
-                      className={`flex items-center rounded-md text-sm transition-all duration-200 justify-start gap-3 px-3 py-2 w-full ${
-                        isActiveLocal
+                      className={`flex items-center rounded-md text-sm transition-all duration-200 justify-start gap-3 px-3 py-2 w-full ${isActiveLocal
                           ? 'bg-primary text-primary-foreground shadow-sm hover:shadow-md hover:shadow-primary/20 font-medium'
-                          : 'text-muted-foreground hover:bg-muted hover:text-foreground'
-                      }`}
+                          : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
+                        }`}
                     >
                       <DynamicIcon name={module.icon} className="h-5 w-5 flex-shrink-0" />
                       <div className="flex flex-1 items-center justify-between">
@@ -308,53 +373,100 @@ const Sidebar: React.FC = () => {
                       <NavLink
                         to="/taxa-ocupacao"
                         end
-                        className={({ isActive }) => 
-                          `text-sm px-3 py-2 rounded-md transition-colors ${
-                            isActive 
-                              ? 'bg-primary text-primary-foreground shadow-sm font-medium' 
-                              : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                        className={({ isActive }) =>
+                          `text-sm px-3 py-2 rounded-md transition-colors ${isActive
+                            ? 'bg-primary text-primary-foreground shadow-sm font-medium'
+                            : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
                           }`
                         }
                       >
-                         Visão Geral
+                        Visão Geral
                       </NavLink>
                       {isAdmin && (
-                      <NavLink
-                        to="/taxa-ocupacao/cadastro-setor-leitos"
-                        className={({ isActive }) => 
-                          `text-sm px-3 py-2 rounded-md transition-colors ${
-                            isActive 
-                              ? 'bg-primary text-primary-foreground shadow-sm font-medium' 
-                              : 'text-muted-foreground hover:bg-muted hover:text-foreground'
-                          }`
-                        }
-                      >
-                         Cadastro Setor e Leitos
-                      </NavLink>
+                        <NavLink
+                          to="/taxa-ocupacao/cadastro-setor-leitos"
+                          className={({ isActive }) =>
+                            `text-sm px-3 py-2 rounded-md transition-colors ${isActive
+                              ? 'bg-primary text-primary-foreground shadow-sm font-medium'
+                              : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
+                            }`
+                          }
+                        >
+                          Cadastro Setor e Leitos
+                        </NavLink>
                       )}
                       <NavLink
                         to="/taxa-ocupacao/lancamento-taxas"
-                        className={({ isActive }) => 
-                          `text-sm px-3 py-2 rounded-md transition-colors ${
-                            isActive 
-                              ? 'bg-primary text-primary-foreground shadow-sm font-medium' 
-                              : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                        className={({ isActive }) =>
+                          `text-sm px-3 py-2 rounded-md transition-colors ${isActive
+                            ? 'bg-primary text-primary-foreground shadow-sm font-medium'
+                            : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
                           }`
                         }
                       >
-                         Lançamento de Taxas
+                        Lançamento de Taxas
                       </NavLink>
                       <NavLink
                         to="/taxa-ocupacao/relatorios"
-                        className={({ isActive }) => 
-                          `text-sm px-3 py-2 rounded-md transition-colors ${
-                            isActive 
-                              ? 'bg-primary text-primary-foreground shadow-sm font-medium' 
-                              : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                        className={({ isActive }) =>
+                          `text-sm px-3 py-2 rounded-md transition-colors ${isActive
+                            ? 'bg-primary text-primary-foreground shadow-sm font-medium'
+                            : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
                           }`
                         }
                       >
-                         Relatórios
+                        Relatórios
+                      </NavLink>
+                    </div>
+                  )}
+                </div>
+              );
+            }
+
+            if (module.slug === 'gestao-pendencias') {
+              const isActiveLocal = location.pathname.startsWith('/gestao-pendencias');
+              return (
+                <div key={module.slug} className="flex flex-col">
+                  {isCollapsed ? (
+                    <NavLink
+                      to={`/${module.slug}`}
+                      title="Faturamento"
+                      className={navLinkClass(isActiveLocal)}
+                    >
+                      <DynamicIcon name="DollarSign" className="h-5 w-5 flex-shrink-0" />
+                    </NavLink>
+                  ) : (
+                    <button
+                      onClick={() => {
+                        setExpandedMenu(expandedMenu === 'faturamento' ? null : 'faturamento');
+                        if (!isActiveLocal) navigate('/gestao-pendencias');
+                      }}
+                      className={`flex items-center rounded-md text-sm transition-all duration-200 justify-start gap-3 px-3 py-2 w-full ${isActiveLocal
+                          ? 'bg-primary text-primary-foreground shadow-sm hover:shadow-md hover:shadow-primary/20 font-medium'
+                          : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
+                        }`}
+                    >
+                      <DynamicIcon name="DollarSign" className="h-5 w-5 flex-shrink-0" />
+                      <div className="flex flex-1 items-center justify-between">
+                        <span className="truncate">Faturamento</span>
+                        <ChevronRight className={`h-4 w-4 transition-transform ${expandedMenu === 'faturamento' ? 'rotate-90' : ''}`} />
+                      </div>
+                    </button>
+                  )}
+
+                  {!isCollapsed && expandedMenu === 'faturamento' && (
+                    <div className="flex flex-col ml-9 mt-1 gap-1 border-l-2 border-border pl-2 border-primary/20">
+                      <NavLink
+                        to="/gestao-pendencias"
+                        end
+                        className={({ isActive }) =>
+                          `text-sm px-3 py-2 rounded-md transition-colors ${isActive
+                            ? 'bg-primary text-primary-foreground shadow-sm font-medium'
+                            : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
+                          }`
+                        }
+                      >
+                        Gestão de Pendências
                       </NavLink>
                     </div>
                   )}
@@ -442,16 +554,14 @@ const Sidebar: React.FC = () => {
       <div className="p-3 border-t border-border flex flex-col gap-2 overflow-x-hidden">
         {/* Info do usuário logado */}
         {profile && (
-          <NavLink 
+          <NavLink
             to="/perfil"
             title="Meu Perfil"
-            className={({ isActive }) => 
-              `flex items-center rounded-md transition-all duration-200 mb-1 ${
-                isCollapsed ? 'justify-center p-2' : 'justify-start gap-3 px-3 py-2'
-              } ${
-                isActive 
-                  ? 'bg-primary/10 text-primary font-medium' 
-                  : 'hover:bg-muted text-foreground'
+            className={({ isActive }) =>
+              `flex items-center rounded-md transition-all duration-200 mb-1 ${isCollapsed ? 'justify-center p-2' : 'justify-start gap-3 px-3 py-2'
+              } ${isActive
+                ? 'bg-primary/10 text-primary font-medium'
+                : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
               }`
             }
           >
@@ -483,23 +593,21 @@ const Sidebar: React.FC = () => {
           </NavLink>
         )}
 
-        <button 
+        <button
           onClick={toggleTheme}
           title={isDark ? 'Mudar para Modo Claro' : 'Mudar para Modo Escuro'}
-          className={`flex items-center rounded-md text-sm text-foreground hover:bg-muted transition-all duration-200 ${
-            isCollapsed ? 'justify-center p-3' : 'justify-start gap-3 px-3 py-2 text-left'
-          }`}
+          className={`flex items-center rounded-md text-sm transition-all duration-200 ${isCollapsed ? 'justify-center p-3' : 'justify-start gap-3 px-3 py-2 text-left'
+            } text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white`}
         >
           {isDark ? <Sun className="h-5 w-5 flex-shrink-0" /> : <Moon className="h-5 w-5 flex-shrink-0" />}
           {!isCollapsed && <span className="truncate">{isDark ? 'Modo Claro' : 'Modo Escuro'}</span>}
         </button>
 
-        <button 
+        <button
           onClick={handleLogout}
           title="Sair do Sistema"
-          className={`flex items-center rounded-md text-sm text-red-500 hover:bg-red-500/10 transition-all duration-200 mt-1 ${
-            isCollapsed ? 'justify-center p-3' : 'justify-start gap-3 px-3 py-2 text-left'
-          }`}
+          className={`flex items-center rounded-md text-sm text-red-500 hover:bg-red-500/10 dark:hover:bg-red-500/20 transition-all duration-200 mt-1 ${isCollapsed ? 'justify-center p-3' : 'justify-start gap-3 px-3 py-2 text-left'
+            }`}
         >
           <LogOut className="h-5 w-5 flex-shrink-0" />
           {!isCollapsed && <span className="truncate">Sair</span>}

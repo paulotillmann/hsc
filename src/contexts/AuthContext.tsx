@@ -219,7 +219,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 .map((row: any) => row.modules as Module)
                 .filter((m: Module) => m && m.is_active)
                 .sort((a: Module, b: Module) => a.sort_order - b.sort_order);
-              
               if (modules.length === 0) {
                 // Se a tabela modules estiver totalmente vazia no banco, usamos o fallback.
                 // Caso contrário, se há módulos cadastrados mas nenhuma permissão vinculada, mantemos vazia.
@@ -356,6 +355,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setPermissions(null);
     setUserModules([]);
     setProfileLoaded(false);
+
+    // Limpa o cache de pendências e outros caches de sessão por segurança
+    try {
+      sessionStorage.removeItem('hsc_gestao_pendencias_data');
+      sessionStorage.removeItem('hsc_gestao_pendencias_sync_time');
+      sessionStorage.removeItem('hsc_gestao_pendencias_is_demo');
+      sessionStorage.removeItem('hsc_gestao_pendencias_sync_status');
+    } catch (e) {
+      console.error('Erro ao limpar cache na saída:', e);
+    }
   };
 
   const resetPassword = async (email: string): Promise<{ error: string | null }> => {

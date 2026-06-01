@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { BedDouble, Search, Loader2, RefreshCcw, Calendar, CheckCircle, XCircle, ChevronDown, LogOut, Moon, Sun } from 'lucide-react';
+import { BedDouble, Search, Loader2, RefreshCcw, Calendar, CheckCircle, XCircle, ChevronDown, LogOut, Moon, Sun, User } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import SyncModal from './SyncModal';
 import { useAuth } from '../../contexts/AuthContext';
@@ -17,6 +17,8 @@ interface Paciente {
   dt_entrada: string | null;
   leito: string | null;
   ultima_prescricao: string | null;
+  data_alta?: string | null;
+  updated_at?: string | null;
 }
 
 const SYNC_INTERVAL_MS = 5 * 60 * 1000; // 5 minutos
@@ -31,6 +33,7 @@ export default function PacientesInternados() {
 
   // Sync Modal (apenas para usuários sem setor)
   const [isSyncModalOpen, setIsSyncModalOpen] = useState(false);
+  const [showSetorDetails, setShowSetorDetails] = useState(false);
 
   // Auto-sync state
   const [isSyncing, setIsSyncing] = useState(false);
@@ -65,10 +68,15 @@ export default function PacientesInternados() {
 
   const fetchPacientes = useCallback(async () => {
     setLoading(true);
+    
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
+    const todayISO = startOfToday.toISOString();
+
     let query = supabase
       .from('pacientes_internados')
-      .select('id, nr_atendimento, paciente, ds_setor_atendimento, cd_cid_principal, dias_internado, teve_evolucao_hoje, previsao_alta, ativo, dt_entrada, leito, ultima_prescricao')
-      .eq('ativo', true)
+      .select('id, nr_atendimento, paciente, ds_setor_atendimento, cd_cid_principal, dias_internado, teve_evolucao_hoje, previsao_alta, ativo, dt_entrada, leito, ultima_prescricao, data_alta, updated_at')
+      .or(`ativo.eq.true,and(ativo.eq.false,updated_at.gte.${todayISO})`)
       .order('paciente', { ascending: true });
 
     if (profile?.setor_usuarios) {
@@ -152,95 +160,164 @@ export default function PacientesInternados() {
   // Filtragem
   const filteredPacientes = pacientes.filter(p => {
     const matchName = p.paciente?.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchSetor = p.ds_setor_atendimento?.toLowerCase().includes(setorTerm.toLowerCase()) || setorTerm === '';
+    const matchSetor = p.ds_setor_atendimento === setorTerm || setorTerm === '';
     return matchName && matchSetor;
   });
 
-  // Todos os registros filtrados sendo exibidos (sem paginação)
-  const currentRecords = filteredPacientes;
+  // Todos os registros filtrados ordenados (ativos primeiro, depois altas; ambos alfabeticamente)
+  const currentRecords = [...filteredPacientes].sort((a, b) => {
+    if (a.ativo && !b.ativo) return -1;
+    if (!a.ativo && b.ativo) return 1;
+    return (a.paciente || '').localeCompare(b.paciente || '');
+  });
 
   // Formata horário da última sync
   const formatSyncTime = (date: Date) => {
     return date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
   };
 
+  // 1. Total de pacientes ativos (giro/ocupação)
+  const totalPacientes = filteredPacientes.filter(p => p.ativo).length;
+
+  // 2. Média de tempo de permanência geral (ALOS)
+  const pacientesComPermanencia = filteredPacientes.filter(p => p.ativo && p.dias_internado !== null && p.dias_internado !== undefined);
+  const mediaPermanenciaGeral = pacientesComPermanencia.length > 0
+    ? Math.round((pacientesComPermanencia.reduce((sum, p) => sum + (p.dias_internado || 0), 0) / pacientesComPermanencia.length) * 10) / 10
+    : 0;
+
+  // 3. Média de tempo de permanência agrupada por setor (para exibição detalhada)
+  const permanenciaPorSetor = filteredPacientes.reduce((acc: { [key: string]: { totalDias: number; count: number } }, p) => {
+    if (!p.ativo) return acc; // Considera apenas pacientes ativos para a média de permanência
+    const setor = p.ds_setor_atendimento || 'Sem Setor';
+    if (!acc[setor]) {
+      acc[setor] = { totalDias: 0, count: 0 };
+    }
+    if (p.dias_internado !== null && p.dias_internado !== undefined) {
+      acc[setor].totalDias += p.dias_internado;
+      acc[setor].count += 1;
+    }
+    return acc;
+  }, {});
+
+  const mediasSetor = Object.entries(permanenciaPorSetor)
+    .map(([setor, data]) => ({
+      setor,
+      media: data.count > 0 ? Math.round((data.totalDias / data.count) * 10) / 10 : 0,
+      totalPacientes: data.count
+    }))
+    .sort((a, b) => b.media - a.media); // ordena pelas maiores médias
+
   return (
     <div className="flex flex-1 flex-col gap-6 p-6 md:p-8 animate-in fade-in zoom-in duration-500">
 
-      {/* Header */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-        <div className="flex flex-col gap-2">
-          <h1 className="text-3xl font-bold tracking-tight text-foreground flex items-center gap-3">
-            <div className="p-2 bg-primary/10 rounded-xl">
-              <BedDouble className="h-6 w-6 text-primary" />
+      {/* Header e Indicadores */}
+      <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-6">
+        <div className="flex flex-col gap-2 w-full xl:w-auto">
+          <div className="flex items-center gap-4 flex-wrap justify-between md:justify-start">
+            {/* Logo da Santa Casa */}
+            <div className="flex items-center pr-4 md:border-r md:border-border h-10">
+              <img src="/LOGO_HSC_PRIMARY.png" alt="Santa Casa" className="h-10 w-auto dark:hidden object-contain" />
+              <img src="/LOGO_HSC_WHITE.png" alt="Santa Casa" className="h-10 w-auto hidden dark:block object-contain" />
             </div>
-            Pacientes Internados {profile?.setor_usuarios ? `- ${profile.setor_usuarios}` : ''}
-          </h1>
+            <h1 className="text-3xl font-bold tracking-tight text-foreground flex items-center gap-3">
+              <div className="p-2 bg-primary/10 rounded-xl">
+                <BedDouble className="h-6 w-6 text-primary" />
+              </div>
+              Pacientes Internados {profile?.setor_usuarios ? `- ${profile.setor_usuarios}` : ''}
+            </h1>
+          </div>
           <p className="text-muted-foreground">
             Acompanhamento de pacientes atualmente internados na instituição.
           </p>
+          <div className="flex flex-wrap items-center gap-4 mt-2 text-xs">
+            <span className="font-semibold uppercase tracking-wider text-muted-foreground/80">Legenda:</span>
+            <div className="flex items-center gap-1.5 text-muted-foreground font-medium">
+              <XCircle className="h-4 w-4 text-red-500 dark:text-red-400" />
+              <span>Não informado</span>
+            </div>
+            <div className="flex items-center gap-1.5 text-muted-foreground font-medium">
+              <CheckCircle className="h-4 w-4 text-green-500 dark:text-green-400" />
+              <span>Realizado</span>
+            </div>
+
+            {(isSyncing || syncError || lastSyncTime) && (
+              <>
+                <span className="text-muted-foreground/30 font-light">|</span>
+                <div className="flex items-center gap-2 select-none">
+                  {isSyncing ? (
+                    <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800/40">
+                      <Loader2 className="h-3 w-3 animate-spin text-blue-500" />
+                      <span className="text-blue-600 dark:text-blue-400 font-medium">Sincronizando...</span>
+                    </div>
+                  ) : syncError ? (
+                    <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800/40">
+                      <span className="relative flex h-2 w-2">
+                        <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
+                      </span>
+                      <span className="text-red-600 dark:text-red-400 font-medium">Erro na sync</span>
+                    </div>
+                  ) : lastSyncTime ? (
+                    <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800/40">
+                      <span className="relative flex h-2 w-2">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                        <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                      </span>
+                      <span className="text-emerald-600 dark:text-emerald-400 font-medium">
+                        Sync {formatSyncTime(lastSyncTime)}
+                      </span>
+                    </div>
+                  ) : null}
+                </div>
+              </>
+            )}
+          </div>
         </div>
-        <div className="flex items-center gap-3">
-          {/* Indicador de Sincronização Automática */}
-          <div className="flex items-center gap-2 text-xs text-muted-foreground select-none">
-            {isSyncing ? (
-              <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800/40">
-                <Loader2 className="h-3 w-3 animate-spin text-blue-500" />
-                <span className="text-blue-600 dark:text-blue-400 font-medium">Sincronizando...</span>
-              </div>
-            ) : syncError ? (
-              <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800/40">
-                <span className="relative flex h-2 w-2">
-                  <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
-                </span>
-                <span className="text-red-600 dark:text-red-400 font-medium">Erro na sync</span>
-              </div>
-            ) : lastSyncTime ? (
-              <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800/40">
-                <span className="relative flex h-2 w-2">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                  <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-                </span>
-                <span className="text-emerald-600 dark:text-emerald-400 font-medium">
-                  Sync {formatSyncTime(lastSyncTime)}
-                </span>
-              </div>
-            ) : null}
+
+        {/* Cards de Indicadores Clínicos & Operacionais */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 w-full xl:w-auto xl:min-w-[840px]">
+          {/* Card 1: Total Internados */}
+          <div className="bg-card border rounded-lg px-6 py-4 flex items-center justify-between shadow-sm relative overflow-hidden group hover:border-primary/40 transition-colors">
+            <div className="flex flex-col gap-1">
+              <span className="text-xs font-medium text-muted-foreground">Pacientes Internados</span>
+              <span className="text-[30px] font-bold tracking-tight text-foreground">{totalPacientes}</span>
+            </div>
+            <div className="p-2 bg-primary/10 rounded-lg text-primary transition-transform group-hover:scale-105">
+              <BedDouble className="h-5 w-5" />
+            </div>
           </div>
 
-          {/* Theme Toggle */}
-          <button
-            onClick={toggleTheme}
-            className="p-2.5 rounded-md border bg-background hover:bg-muted text-foreground transition-colors shadow-sm flex items-center justify-center"
-            title="Alternar Tema"
-          >
-            {isDarkMode ? <Sun className="h-5 w-5 text-amber-500" /> : <Moon className="h-5 w-5 text-slate-600" />}
-          </button>
+          {/* Card 2: Tempo de Permanência (ALOS) */}
+          <div className="bg-card border rounded-lg px-6 py-4 flex items-center justify-between shadow-sm relative overflow-hidden group hover:border-primary/40 transition-colors">
+            <div className="flex flex-col gap-1">
+              <span className="text-xs font-medium text-muted-foreground">Média de Permanência</span>
+              <span className="text-[30px] font-bold tracking-tight text-foreground">
+                {mediaPermanenciaGeral} <span className="text-sm font-normal text-muted-foreground">dias</span>
+              </span>
+            </div>
+            <div className="p-2 bg-blue-500/10 rounded-lg text-blue-500 transition-transform group-hover:scale-105">
+              <Calendar className="h-5 w-5" />
+            </div>
+          </div>
 
-          {/* Botão Sincronizar - apenas para usuários SEM setor definido */}
-          {!profile?.setor_usuarios && (
-            <button
-              onClick={() => setIsSyncModalOpen(true)}
-              className="flex items-center gap-2 bg-blue-600 text-white hover:bg-blue-700 px-4 py-2 rounded-md font-medium transition-colors shadow-sm"
-            >
-              <RefreshCcw className="h-5 w-5" />
-              Sincronizar Pacientes
-            </button>
-          )}
-
-          {/* Botão Sair - apenas para usuários com setor definido */}
-          {profile?.setor_usuarios && (
-            <button
-              onClick={handleLogout}
-              className="flex items-center gap-2 bg-red-600/10 text-red-600 hover:bg-red-600/20 px-4 py-2 rounded-md font-medium transition-colors shadow-sm border border-red-600/20"
-              title="Sair do Sistema"
-            >
-              <LogOut className="h-5 w-5" />
-              Sair
-            </button>
-          )}
+          {/* Card 3: Giro & Eficiência de Evolução */}
+          <div className="bg-card border rounded-lg px-6 py-4 flex items-center justify-between shadow-sm relative overflow-hidden group hover:border-primary/40 transition-colors">
+            <div className="flex flex-col gap-1">
+              <span className="text-xs font-medium text-muted-foreground">Giro & Evolução</span>
+              <span className="text-[30px] font-bold tracking-tight text-foreground">
+                {totalPacientes > 0 
+                  ? Math.round((filteredPacientes.filter(p => p.ativo && p.teve_evolucao_hoje === 'S').length / totalPacientes) * 100)
+                  : 0}%
+              </span>
+            </div>
+            <div className="p-2 bg-emerald-500/10 rounded-lg text-emerald-500 transition-transform group-hover:scale-105">
+              <CheckCircle className="h-5 w-5" />
+            </div>
+          </div>
         </div>
       </div>
+
+
+
 
       <div className="bg-card border rounded-lg shadow-sm flex flex-col flex-1 overflow-hidden min-h-[500px]">
         {/* Toolbar & Filters */}
@@ -296,12 +373,11 @@ export default function PacientesInternados() {
                   <th className="px-6 py-3 font-semibold">Paciente</th>
                   <th className="px-6 py-3 font-semibold text-center">Leito</th>
                   {!profile?.setor_usuarios && <th className="px-6 py-3 font-semibold">Setor</th>}
-                  <th className="px-6 py-3 font-semibold text-center">CID</th>
                   <th className="px-6 py-3 font-semibold">Data Entrada</th>
                   <th className="px-6 py-3 font-semibold">Dias Int.</th>
-                  <th className="px-6 py-3 font-semibold">Prev. Alta</th>
+                  <th className="px-6 py-3 font-semibold text-center">Prev. Alta</th>
                   <th className="px-6 py-3 font-semibold text-center">Últ. Prescrição</th>
-                  <th className="px-6 py-3 font-semibold text-center">Evolução Médica</th>
+                  <th className="px-6 py-3 font-semibold text-center">EV. Médica</th>
                   <th className="px-6 py-3 font-semibold text-center">Status</th>
                 </tr>
               </thead>
@@ -315,30 +391,35 @@ export default function PacientesInternados() {
                       {p.paciente}
                     </td>
                     <td className="px-6 py-4 text-center">
-                      {p.leito ? (
+                      {!p.ativo ? (
+                        <span className="text-muted-foreground font-semibold">-</span>
+                      ) : p.leito ? (
                         <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-semibold bg-blue-50 text-blue-700 dark:bg-blue-900/20 dark:text-blue-300 border border-blue-100 dark:border-blue-800/30">
                           {p.leito}
                         </span>
                       ) : (
-                        <span className="text-muted-foreground">-</span>
+                        <div className="flex justify-center">
+                          <XCircle className="h-5 w-5 text-red-500 dark:text-red-400" title="Sem leito" />
+                        </div>
                       )}
                     </td>
                     {!profile?.setor_usuarios && (
                       <td className="px-6 py-4 text-muted-foreground">
-                        {p.ds_setor_atendimento || '-'}
+                        {p.ds_setor_atendimento || (
+                          <div className="flex justify-start">
+                            <XCircle className="h-5 w-5 text-red-500 dark:text-red-400" title="Sem setor" />
+                          </div>
+                        )}
                       </td>
                     )}
-                    <td className="px-6 py-4 text-center">
-                      {p.cd_cid_principal ? (
-                        <span className="inline-flex items-center justify-center px-2.5 py-1 rounded text-sm font-bold bg-blue-600/20 text-white dark:bg-blue-500/20 font-mono tracking-wider shadow-sm min-w-[3rem]">
-                          {p.cd_cid_principal}
-                        </span>
-                      ) : (
-                        <span className="text-muted-foreground">-</span>
-                      )}
-                    </td>
                     <td className="px-6 py-4 font-medium text-foreground">
-                      {p.dt_entrada ? new Date(p.dt_entrada).toLocaleDateString('pt-BR') : '-'}
+                      {p.dt_entrada ? (
+                        `${new Date(p.dt_entrada).toLocaleDateString('pt-BR')} ${new Date(p.dt_entrada).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`
+                      ) : (
+                        <div className="flex justify-start">
+                          <XCircle className="h-5 w-5 text-red-500 dark:text-red-400" title="Sem data de entrada" />
+                        </div>
+                      )}
                     </td>
                     <td className="px-6 py-4 font-medium text-foreground">
                       <div className="flex items-center gap-1.5">
@@ -346,42 +427,80 @@ export default function PacientesInternados() {
                         <span>{p.dias_internado ?? 0}</span>
                       </div>
                     </td>
-                    <td className="px-6 py-4 font-medium text-foreground">
-                      {p.previsao_alta ? new Date(p.previsao_alta).toLocaleDateString('pt-BR', { timeZone: 'UTC' }) : '-'}
+                    <td className="px-6 py-4 font-medium text-foreground text-center">
+                      {p.previsao_alta ? (() => {
+                        const hoje = new Date();
+                        hoje.setHours(0, 0, 0, 0);
+                        const hojeTime = hoje.getTime();
+
+                        // Parse da data de previsão (vem como string YYYY-MM-DD do banco)
+                        const [year, month, day] = p.previsao_alta.split('T')[0].split('-').map(Number);
+                        const previsao = new Date(year, month - 1, day);
+                        previsao.setHours(0, 0, 0, 0);
+                        const previsaoTime = previsao.getTime();
+
+                        // Previsão - 1 dia
+                        const previsaoMenos1 = new Date(previsaoTime);
+                        previsaoMenos1.setDate(previsaoMenos1.getDate() - 1);
+                        const previsaoMenos1Time = previsaoMenos1.getTime();
+
+                        // Determina a cor
+                        let colorClass = '';
+                        if (hojeTime > previsaoTime) {
+                          // Data atual MAIOR que previsão → VERMELHO
+                          colorClass = 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400 border border-red-200 dark:border-red-800/40';
+                        } else if (hojeTime === previsaoMenos1Time || hojeTime === previsaoTime) {
+                          // Data atual = previsão - 1 dia OU data atual = previsão → VERDE
+                          colorClass = 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400 border border-green-200 dark:border-green-800/40';
+                        }
+
+                        const dataFormatada = previsao.toLocaleDateString('pt-BR');
+
+                        return colorClass ? (
+                          <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-semibold ${colorClass}`}>
+                            {dataFormatada}
+                          </span>
+                        ) : (
+                          <span>{dataFormatada}</span>
+                        );
+                      })() : (
+                        <div className="flex justify-center">
+                          <XCircle className="h-5 w-5 text-red-500 dark:text-red-400" title="Sem previsão" />
+                        </div>
+                      )}
                     </td>
                     <td className="px-6 py-4 text-center">
                       {p.ultima_prescricao ? (
-                        <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-semibold border ${
-                          (() => {
-                            const diff = new Date().getTime() - new Date(p.ultima_prescricao).getTime();
-                            return diff >= 0 && diff <= 30 * 60 * 1000;
-                          })()
-                            ? 'bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-300 border-green-100 dark:border-green-800/30'
-                            : 'bg-blue-50 text-blue-700 dark:bg-blue-900/20 dark:text-blue-300 border-blue-100 dark:border-blue-800/30'
-                        }`}>
+                        <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-semibold border ${(() => {
+                          const diff = new Date().getTime() - new Date(p.ultima_prescricao).getTime();
+                          return diff >= 0 && diff <= 30 * 60 * 1000;
+                        })()
+                          ? 'bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-300 border-green-100 dark:border-green-800/30'
+                          : 'bg-blue-50 text-blue-700 dark:bg-blue-900/20 dark:text-blue-300 border-blue-100 dark:border-blue-800/30'
+                          }`}>
                           {new Date(p.ultima_prescricao).toLocaleDateString('pt-BR')} {new Date(p.ultima_prescricao).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
                         </span>
                       ) : (
-                        <span className="text-muted-foreground">-</span>
+                        <div className="flex justify-center">
+                          <XCircle className="h-5 w-5 text-red-500 dark:text-red-400" title="Sem prescrição" />
+                        </div>
                       )}
                     </td>
                     <td className="px-6 py-4 text-center">
                       {p.teve_evolucao_hoje === 'S' ? (
-                        <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-semibold bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400">
-                          <CheckCircle className="h-4 w-4" />
-                          Sim
-                        </span>
+                        <div className="flex justify-center">
+                          <CheckCircle className="h-5 w-5 text-green-500 dark:text-green-400" title="Sim" />
+                        </div>
                       ) : (
-                        <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-semibold bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400">
-                          <XCircle className="h-4 w-4" />
-                          Não
-                        </span>
+                        <div className="flex justify-center">
+                          <XCircle className="h-5 w-5 text-red-500 dark:text-red-400" title="Não" />
+                        </div>
                       )}
                     </td>
                     <td className="px-6 py-4 text-center">
                       <span className={`inline-flex px-3 py-1.5 text-sm font-semibold rounded-full ${p.ativo
-                          ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400'
-                          : 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400'
+                        ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400'
+                        : 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400'
                         }`}>
                         {p.ativo ? 'Internado' : 'Alta'}
                       </span>
@@ -400,6 +519,41 @@ export default function PacientesInternados() {
               Total de <span className="font-medium text-foreground">{filteredPacientes.length}</span> resultados
             </span>
           </div>
+        )}
+      </div>
+
+      {/* Ações e Controles */}
+      <div className="flex flex-wrap items-center justify-start gap-3 mt-4">
+        {/* Theme Toggle */}
+        <button
+          onClick={toggleTheme}
+          className="p-2 rounded-md border bg-background hover:bg-muted text-foreground transition-colors shadow-sm flex items-center justify-center h-[38px] w-[38px]"
+          title="Alternar Tema"
+        >
+          {isDarkMode ? <Sun className="h-4 w-4 text-amber-500" /> : <Moon className="h-4 w-4 text-slate-600" />}
+        </button>
+
+        {/* Botão Sincronizar - apenas para usuários SEM setor definido */}
+        {!profile?.setor_usuarios && (
+          <button
+            onClick={() => setIsSyncModalOpen(true)}
+            className="flex items-center gap-2 bg-blue-600 text-white hover:bg-blue-700 px-4 py-2 rounded-md font-medium transition-colors shadow-sm text-sm h-[38px]"
+          >
+            <RefreshCcw className="h-4 w-4" />
+            Sincronizar Pacientes
+          </button>
+        )}
+
+        {/* Botão Sair - apenas para usuários com setor definido */}
+        {profile?.setor_usuarios && (
+          <button
+            onClick={handleLogout}
+            className="flex items-center gap-2 bg-red-600/10 text-red-600 hover:bg-red-600/20 px-4 py-2 rounded-md font-medium transition-colors shadow-sm border border-red-600/20 text-sm h-[38px]"
+            title="Sair do Sistema"
+          >
+            <LogOut className="h-4 w-4" />
+            Sair
+          </button>
         )}
       </div>
 
