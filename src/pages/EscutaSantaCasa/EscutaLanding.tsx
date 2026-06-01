@@ -106,12 +106,15 @@ export default function EscutaLanding() {
       <header className="w-full border-b border-slate-100 bg-white/80 backdrop-blur-md sticky top-0 z-40 transition-colors dark:bg-slate-900/80 dark:border-slate-800">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="p-2 bg-primary/10 rounded-xl text-primary border border-primary/20">
-              <ShieldAlert className="h-6 w-6" />
+            <div className="flex items-center pr-3 border-r border-slate-200 dark:border-slate-800 h-9">
+              <img src="/LOGO_HSC_PRIMARY.png" alt="Santa Casa" className="h-8 w-auto dark:hidden object-contain" />
+              <img src="/LOGO_HSC_WHITE.png" alt="Santa Casa" className="h-8 w-auto hidden dark:block object-contain" />
             </div>
-            <div className="flex flex-col">
-              <span className="font-black text-slate-900 tracking-tight dark:text-white text-lg leading-none">Escuta</span>
-              <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest leading-none mt-1">Santa Casa</span>
+            <div className="flex items-center gap-2">
+              <div className="p-1.5 bg-primary/10 rounded-lg text-primary border border-primary/20">
+                <ShieldAlert className="h-4.5 w-4.5" />
+              </div>
+              <span className="font-bold text-slate-900 dark:text-white text-lg tracking-tight">Escuta Santa Casa</span>
             </div>
           </div>
           
