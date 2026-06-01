@@ -114,7 +114,7 @@ export default function EscutaLanding() {
               <div className="p-1.5 bg-primary/10 rounded-lg text-primary border border-primary/20">
                 <ShieldAlert className="h-4.5 w-4.5" />
               </div>
-              <span className="font-bold text-slate-900 dark:text-white text-lg tracking-tight">Escuta Santa Casa</span>
+              <span className="font-bold text-slate-900 dark:text-white text-lg tracking-tight">Escuta Santa Casa de Misericórdia de Araguari</span>
             </div>
           </div>
           
@@ -195,8 +195,8 @@ export default function EscutaLanding() {
                     <ShieldCheck className="h-6 w-6" />
                   </div>
                   <div className="mt-4 text-center">
-                    <span className="text-xs font-bold text-slate-900 dark:text-white block">Canal Independente</span>
-                    <span className="text-[10px] font-semibold text-slate-400 block mt-0.5">Hospital Santa Casa</span>
+                    <span className="text-xs font-bold text-slate-900 dark:text-white block">Canal de Denúncias</span>
+                    <span className="text-[10px] font-semibold text-slate-400 block mt-0.5">Santa Casa de Misericórdia de Araguari</span>
                   </div>
                 </div>
               </motion.div>
