@@ -32,32 +32,6 @@ interface UsePermissionsReturn {
 export function usePermissions(): UsePermissionsReturn {
   const { permissions, isAdmin, userModules } = useAuth();
 
-  // Injetar o módulo mockado "gestao-escuta-santa-casa" para visualização e navegação no frontend
-  const mockModules = useMemo(() => {
-    const idx = userModules.findIndex(m => m.slug === 'pacientes-internados' || m.slug === 'pacientes');
-    const mockEscuta: Module = {
-      id: 'gestao-escuta-santa-casa-mock-id',
-      name: 'Gestão Escuta Santa Casa',
-      slug: 'gestao-escuta-santa-casa',
-      icon: 'ShieldAlert',
-      is_active: true,
-      sort_order: idx !== -1 ? userModules[idx].sort_order + 1 : 80,
-      is_system: false,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    };
-
-    const list = [...userModules];
-    if (!list.some(m => m.slug === 'gestao-escuta-santa-casa')) {
-      if (idx !== -1) {
-        list.splice(idx + 1, 0, mockEscuta);
-      } else {
-        list.push(mockEscuta);
-      }
-    }
-    return list;
-  }, [userModules]);
-
   // Verifica permissão de ação (colunas booleanas na tabela roles)
   const can = useCallback(
     (permission: PermissionKey): boolean => {
@@ -67,15 +41,14 @@ export function usePermissions(): UsePermissionsReturn {
     [permissions]
   );
 
-  // Verifica acesso a módulo pelo slug (sistema dinâmico)
+  // Verifica acesso a módulo pelo slug (sistema dinâmico baseado no banco de dados)
   const canAccess = useCallback(
     (slug: string): boolean => {
-      if (slug === 'gestao-escuta-santa-casa') return true;
-      return mockModules.some(m => m.slug === slug && m.is_active);
+      return userModules.some(m => m.slug === slug && m.is_active);
     },
-    [mockModules]
+    [userModules]
   );
 
-  return { permissions, can, isAdmin, userModules: mockModules, canAccess };
+  return { permissions, can, isAdmin, userModules, canAccess };
 }
 
