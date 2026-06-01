@@ -1,15 +1,16 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  Calendar as CalendarIcon, ChevronLeft, ChevronRight, Plus, Trash2,
+  Calendar as CalendarIcon, ChevronLeft, ChevronRight, ChevronDown, Plus, Trash2,
   Loader2, UserPlus, X, CalendarX, AlertCircle, CheckCircle, Info,
-  FileText, MapPin
+  FileText, MapPin, Monitor
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
+import { supabase } from '../../lib/supabase';
 import {
   fetchColaboradoresTI, fetchEscalasMes, adicionarPlantonista,
   removerPlantonista, limparEscalaDia, adicionarOcorrenciaPlantao,
-  removerOcorrenciaPlantao, ColaboradorTI, EscalaPlantao, OcorrenciaPlantao
+  removerOcorrenciaPlantao, fetchSetoresInternacao, buscarNomesSolicitantes, ColaboradorTI, EscalaPlantao, OcorrenciaPlantao
 } from '../../services/plantaoTiService';
 
 // ── Mapeamento de cores premium para cada plantonista ───────────────────────
@@ -168,6 +169,11 @@ export default function PlantaoTI() {
   const [formSetorSolicitante, setFormSetorSolicitante] = useState('');
   const [formDescricaoPlantao, setFormDescricaoPlantao] = useState('');
   const [formAtendimentoPresencial, setFormAtendimentoPresencial] = useState(false);
+  const [setores, setSetores] = useState<string[]>([]);
+  const [sugestoesNomes, setSugestoesNomes] = useState<string[]>([]);
+  const [loadingSugestoes, setLoadingSugestoes] = useState(false);
+  const [showSugestoes, setShowSugestoes] = useState(false);
+  const [nomeSelecionado, setNomeSelecionado] = useState(false);
 
   // Estados de controle para múltiplas ocorrências
   const [showOcorrenciaForm, setShowOcorrenciaForm] = useState(false);
@@ -198,6 +204,28 @@ export default function PlantaoTI() {
     return `${year}-${month}-${day}`;
   }, [selectedDate]);
 
+  // Estatísticas de ocorrências do mês selecionado
+  const estatisticasMes = useMemo(() => {
+    let total = 0;
+    let presencial = 0;
+    let remoto = 0;
+
+    escalas.forEach(escala => {
+      if (escala.ocorrencias) {
+        total += escala.ocorrencias.length;
+        escala.ocorrencias.forEach(o => {
+          if (o.atendimento_presencial) {
+            presencial++;
+          } else {
+            remoto++;
+          }
+        });
+      }
+    });
+
+    return { total, presencial, remoto };
+  }, [escalas]);
+
   // Resetar escala selecionada ao mudar a data do calendário
   useEffect(() => {
     setSelectedEscala(null);
@@ -212,8 +240,35 @@ export default function PlantaoTI() {
       setFormSetorSolicitante('');
       setFormDescricaoPlantao('');
       setFormAtendimentoPresencial(false);
+      setSugestoesNomes([]);
+      setShowSugestoes(false);
+      setNomeSelecionado(false);
     }
   }, [showOcorrenciaForm]);
+
+  // Efeito para buscar sugestões de nomes com debounce de 300ms
+  useEffect(() => {
+    if (nomeSelecionado || formNomeSolicitante.trim().length < 2) {
+      setSugestoesNomes([]);
+      setShowSugestoes(false);
+      return;
+    }
+
+    const delayDebounce = setTimeout(async () => {
+      setLoadingSugestoes(true);
+      try {
+        const results = await buscarNomesSolicitantes(formNomeSolicitante);
+        setSugestoesNomes(results);
+        setShowSugestoes(results.length > 0);
+      } catch (err) {
+        console.error('Erro ao buscar sugestões de nomes:', err);
+      } finally {
+        setLoadingSugestoes(false);
+      }
+    }, 300);
+
+    return () => clearTimeout(delayDebounce);
+  }, [formNomeSolicitante, nomeSelecionado]);
 
   // Fechar formulário ao mudar a escala selecionada
   useEffect(() => {
@@ -234,7 +289,7 @@ export default function PlantaoTI() {
     }
   }, [currentYear, currentMonth, showToast]);
 
-  // ── Carregar colaboradores ao montar o componente ─────────────────────────
+  // ── Carregar colaboradores e setores ao montar o componente ─────────────────────────
   useEffect(() => {
     const loadColaboradores = async () => {
       try {
@@ -244,11 +299,65 @@ export default function PlantaoTI() {
         showToast('error', 'Erro ao carregar colaboradores do banco.');
       }
     };
+
+    const loadSetores = async () => {
+      try {
+        const data = await fetchSetoresInternacao();
+        setSetores(data);
+      } catch (err) {
+        console.error('Erro ao carregar setores de pacientes internados:', err);
+      }
+    };
+
     loadColaboradores();
+    loadSetores();
   }, [showToast]);
 
   useEffect(() => {
     loadEscalas();
+  }, [loadEscalas]);
+
+  // Manter selectedEscala sincronizado com as escalas carregadas (realtime ou atualizações locais)
+  useEffect(() => {
+    if (selectedEscala) {
+      const escalaAtualizada = escalas.find(item => item.id === selectedEscala.id);
+      if (escalaAtualizada) {
+        setSelectedEscala(escalaAtualizada);
+      } else {
+        setSelectedEscala(null);
+      }
+    }
+  }, [escalas]);
+
+  // Configurar o Supabase Realtime para escalas e ocorrências
+  useEffect(() => {
+    console.log('[Realtime] Conectando ao canal plantao_ti_realtime...');
+    const channel = supabase
+      .channel('plantao_ti_realtime')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'plantao_ti_escala' },
+        (payload) => {
+          console.log('[Realtime] Mudança na tabela plantao_ti_escala recebida:', payload);
+          loadEscalas();
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'plantao_ti_ocorrencias' },
+        (payload) => {
+          console.log('[Realtime] Mudança na tabela plantao_ti_ocorrencias recebida:', payload);
+          loadEscalas();
+        }
+      )
+      .subscribe((status) => {
+        console.log('[Realtime] Status da inscrição:', status);
+      });
+
+    return () => {
+      console.log('[Realtime] Removendo canal plantao_ti_realtime...');
+      supabase.removeChannel(channel);
+    };
   }, [loadEscalas]);
 
   // ── Navegação do calendário ────────────────────────────────────────────────
@@ -647,6 +756,67 @@ export default function PlantaoTI() {
 
         {/* ── Painel da Direita: Escala do Dia (4/12) ── */}
         <div className="lg:col-span-4 space-y-6">
+          {/* Indicadores de Ocorrências do Mês */}
+          <div className="grid grid-cols-2 gap-4">
+            {/* Card 1: Total de Ocorrências */}
+            <div className="bg-card border border-border/80 shadow-md rounded-xl p-4 flex items-center justify-between relative overflow-hidden transition-all hover:shadow-lg">
+              <div className="space-y-1 z-10">
+                <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
+                  Total de Ocorrências no Mês
+                </p>
+                <p className="text-2xl font-extrabold text-foreground tracking-tight">
+                  {estatisticasMes.total}
+                </p>
+              </div>
+              <div className="p-2 rounded-lg bg-primary/10 text-primary z-10">
+                <FileText className="h-5 w-5" />
+              </div>
+              <div className="absolute -right-4 -bottom-4 w-12 h-12 bg-primary/5 rounded-full blur-md" />
+            </div>
+
+            {/* Card 2: Presencial vs Remoto */}
+            <div className="bg-card border border-border/80 shadow-md rounded-xl p-4 flex flex-col justify-between relative overflow-hidden transition-all hover:shadow-lg">
+              <div className="space-y-1.5 z-10 w-full">
+                <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
+                  Tipos de Atendimento
+                </p>
+                <div className="flex items-center justify-between text-sm font-bold text-foreground">
+                  <span className="flex items-center gap-1.5 text-amber-600 dark:text-amber-400" title="Atendimento Presencial">
+                    <MapPin className="h-4 w-4" />
+                    <span className="text-lg font-extrabold">{estatisticasMes.presencial}</span>
+                    <span className="text-[11px] font-medium text-muted-foreground">Presencial</span>
+                  </span>
+                  <span className="text-xs text-muted-foreground/60 font-normal">/</span>
+                  <span className="flex items-center gap-1.5 text-blue-600 dark:text-blue-400" title="Atendimento Remoto">
+                    <Monitor className="h-4 w-4" />
+                    <span className="text-lg font-extrabold">{estatisticasMes.remoto}</span>
+                    <span className="text-[11px] font-medium text-muted-foreground">Remoto</span>
+                  </span>
+                </div>
+                {/* Barra de Proporção */}
+                <div className="w-full h-1.5 bg-muted rounded-full overflow-hidden flex mt-1">
+                  {estatisticasMes.total > 0 ? (
+                    <>
+                      <div 
+                        className="bg-amber-500 transition-all duration-500" 
+                        style={{ width: `${(estatisticasMes.presencial / estatisticasMes.total) * 100}%` }}
+                        title={`Presencial: ${Math.round((estatisticasMes.presencial / estatisticasMes.total) * 100)}%`}
+                      />
+                      <div 
+                        className="bg-blue-500 transition-all duration-500" 
+                        style={{ width: `${(estatisticasMes.remoto / estatisticasMes.total) * 100}%` }}
+                        title={`Remoto: ${Math.round((estatisticasMes.remoto / estatisticasMes.total) * 100)}%`}
+                      />
+                    </>
+                  ) : (
+                    <div className="w-full bg-muted" />
+                  )}
+                </div>
+              </div>
+              <div className="absolute -right-4 -bottom-4 w-12 h-12 bg-amber-500/5 rounded-full blur-md" />
+            </div>
+          </div>
+
           {/* Painel Detalhado do Dia Selecionado */}
           <div className="bg-card border border-border/80 shadow-md rounded-xl p-5 md:p-6 space-y-4">
             <div className="border-b border-border/50 pb-3 flex justify-between items-center">
@@ -706,44 +876,51 @@ export default function PlantaoTI() {
                     >
                       <div className="flex items-center gap-2.5 min-w-0 flex-1">
                         <span className={`h-2.5 w-2.5 rounded-full flex-shrink-0 ${estilo.bullet}`} />
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-center gap-2">
-                            <p className="text-sm font-semibold text-foreground truncate">
-                              {escala.profiles?.full_name || 'Usuário Sem Nome'}
-                            </p>
-                            <div className="flex items-center gap-1 shrink-0">
-                              {temOcorrencia && (
-                                <span className="p-0.5 rounded bg-blue-500/10 text-blue-600 dark:text-blue-400" title="Possui ocorrência registrada">
-                                  <FileText className="h-3 w-3" />
-                                </span>
-                              )}
-                              {ePresencial && (
-                                <span className="p-0.5 rounded bg-amber-500/10 text-amber-600 dark:text-amber-400" title="Houve atendimento presencial">
-                                  <MapPin className="h-3 w-3" />
-                                </span>
-                              )}
-                            </div>
-                          </div>
+                        <div className="min-w-0 flex-1 flex flex-col justify-center">
+                          <p className="text-sm font-semibold text-foreground truncate">
+                            {escala.profiles?.full_name || 'Usuário Sem Nome'}
+                          </p>
                           <p className="text-[10px] text-muted-foreground truncate">
                             {escala.profiles?.email || ''}
                           </p>
                         </div>
+                        {(temOcorrencia || ePresencial) && (
+                          <div className="flex items-center gap-1.5 shrink-0 ml-2">
+                            {temOcorrencia && (
+                              <span 
+                                className="flex items-center gap-1.5 px-2 py-1 rounded bg-blue-500/10 text-blue-600 dark:text-blue-400 text-xs font-bold" 
+                                title={`${escala.ocorrencias?.length || 0} ocorrência(s) registrada(s)`}
+                              >
+                                <FileText className="h-5 w-5" />
+                                <span>{escala.ocorrencias?.length || 0}</span>
+                              </span>
+                            )}
+                            {ePresencial && (
+                              <span className="p-1 rounded bg-amber-500/10 text-amber-600 dark:text-amber-400" title="Houve atendimento presencial">
+                                <MapPin className="h-5 w-5" />
+                              </span>
+                            )}
+                          </div>
+                        )}
                       </div>
 
-                      {/* Botão de exclusão (apenas para admin) */}
-                      {isAdmin && (
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleRemovePlantonista(escala.id, escala.profiles?.full_name || '');
-                          }}
-                          disabled={operando}
-                          className="p-1.5 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors disabled:opacity-50"
-                          title="Remover plantonista"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
-                      )}
+                      {/* Ações no lado direito */}
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        {/* Botão de exclusão (apenas para admin) */}
+                        {isAdmin && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleRemovePlantonista(escala.id, escala.profiles?.full_name || '');
+                            }}
+                            disabled={operando}
+                            className="p-1.5 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors disabled:opacity-50"
+                            title="Remover plantonista"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        )}
+                      </div>
                     </div>
                   );
                 })}
@@ -791,32 +968,87 @@ export default function PlantaoTI() {
                 {/* Exibição Condicional: Grid ou Formulário */}
                 {showOcorrenciaForm ? (
                   <form onSubmit={handleSaveOcorrencia} className="space-y-3.5">
-                    <div>
+                    <div className="relative">
                       <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider block mb-1">
                         Nome do Solicitante
                       </label>
-                      <input
-                        type="text"
-                        required
-                        value={formNomeSolicitante}
-                        onChange={e => setFormNomeSolicitante(e.target.value)}
-                        placeholder="Ex: João da Silva"
-                        className="w-full bg-background border border-border rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary text-foreground"
-                      />
+                      <div className="relative">
+                        <input
+                          type="text"
+                          required
+                          value={formNomeSolicitante}
+                          onChange={e => {
+                            setFormNomeSolicitante(e.target.value);
+                            setNomeSelecionado(false);
+                          }}
+                          onFocus={() => {
+                            if (sugestoesNomes.length > 0) {
+                              setShowSugestoes(true);
+                            }
+                          }}
+                          onBlur={() => {
+                            setTimeout(() => {
+                              setShowSugestoes(false);
+                            }, 200);
+                          }}
+                          placeholder="Digite para buscar..."
+                          className="w-full bg-background border border-border rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary text-foreground pr-9"
+                          autoComplete="off"
+                        />
+                        {loadingSugestoes && (
+                          <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                            <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Lista de sugestões flutuante */}
+                      <AnimatePresence>
+                        {showSugestoes && (
+                          <motion.ul
+                            initial={{ opacity: 0, y: -5 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, y: -5 }}
+                            className="absolute z-50 w-full mt-1 bg-background dark:bg-zinc-900 border border-border/80 rounded-md shadow-2xl max-h-48 overflow-y-auto divide-y divide-border"
+                          >
+                            {sugestoesNomes.map((nome, idx) => (
+                              <li
+                                key={idx}
+                                onClick={() => {
+                                  setFormNomeSolicitante(nome);
+                                  setNomeSelecionado(true);
+                                  setShowSugestoes(false);
+                                }}
+                                className="px-3 py-2 text-sm text-foreground hover:bg-accent hover:text-accent-foreground cursor-pointer transition-colors"
+                              >
+                                {nome}
+                              </li>
+                            ))}
+                          </motion.ul>
+                        )}
+                      </AnimatePresence>
                     </div>
 
                     <div>
                       <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider block mb-1">
                         Setor Solicitante
                       </label>
-                      <input
-                        type="text"
-                        required
-                        value={formSetorSolicitante}
-                        onChange={e => setFormSetorSolicitante(e.target.value)}
-                        placeholder="Ex: Pediatria"
-                        className="w-full bg-background border border-border rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary text-foreground"
-                      />
+                      <div className="relative">
+                        <select
+                          required
+                          value={formSetorSolicitante}
+                          onChange={e => setFormSetorSolicitante(e.target.value)}
+                          className="w-full bg-background border border-border rounded-md pl-3 pr-9 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary text-foreground cursor-pointer appearance-none"
+                        >
+                          <option value="" disabled>Selecione um setor...</option>
+                          {setores.map(setor => (
+                            <option key={setor} value={setor}>
+                              {setor}
+                            </option>
+                          ))}
+                        </select>
+                        <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+                      </div>
                     </div>
 
                     <div>
@@ -902,13 +1134,24 @@ export default function PlantaoTI() {
                             </div>
                             <div className="flex items-center gap-1.5 shrink-0 self-center">
                               {ocorrencia.atendimento_presencial && (
-                                <span className="p-0.5 rounded bg-amber-500/10 text-amber-600 dark:text-amber-400" title="Atendimento presencial">
-                                  <MapPin className="h-3 w-3" />
+                                <span className="p-1 rounded bg-amber-500/10 text-amber-600 dark:text-amber-400" title="Atendimento presencial">
+                                  <MapPin className="h-4 w-4" />
                                 </span>
                               )}
-                              <span className="text-[10px] text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity">
-                                Detalhes &rarr;
-                              </span>
+
+                              {isAdmin && (
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleRemoveOcorrencia(ocorrencia.id);
+                                  }}
+                                  disabled={operando}
+                                  className="p-1.5 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors disabled:opacity-50"
+                                  title="Excluir ocorrência"
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </button>
+                              )}
                             </div>
                           </div>
                         ))}

@@ -182,3 +182,45 @@ export async function removerOcorrenciaPlantao(
 
   return error ? { success: false, error: error.message } : { success: true };
 }
+
+// ── Busca os setores dos pacientes internados atualmente ativos ──────────────
+export async function fetchSetoresInternacao(): Promise<string[]> {
+  const { data, error } = await supabase
+    .from('pacientes_internados')
+    .select('ds_setor_atendimento')
+    .eq('ativo', true)
+    .not('ds_setor_atendimento', 'is', null);
+
+  if (error) {
+    console.error('Erro ao buscar setores de internação:', error);
+    throw error;
+  }
+
+  const setores = Array.from(
+    new Set((data as any[]).map(item => item.ds_setor_atendimento).filter(Boolean))
+  ).sort() as string[];
+
+  return setores;
+}
+
+// ── Busca nomes de colaboradores na tabela holerites para Autocomplete ───────
+export async function buscarNomesSolicitantes(termo: string): Promise<string[]> {
+  if (!termo || termo.trim().length < 2) return [];
+
+  const { data, error } = await supabase
+    .from('holerites')
+    .select('nome_completo')
+    .ilike('nome_completo', `%${termo}%`)
+    .limit(30); // traz 30 para termos mais chances de nomes únicos após o filter
+
+  if (error) {
+    console.error('Erro ao buscar nomes de solicitantes:', error);
+    return [];
+  }
+
+  const nomes = Array.from(
+    new Set((data as any[]).map(item => item.nome_completo).filter(Boolean))
+  ).sort() as string[];
+
+  return nomes.slice(0, 10); // limita em 10 nomes únicos após filtragem
+}

@@ -50,3 +50,14 @@ CREATE POLICY "Permitir delecao de ocorrencias para administradores"
       WHERE profiles.id = auth.uid() AND profiles.role = 'admin'
     )
   );
+
+-- Habilitar Supabase Realtime para a tabela de ocorrencias
+do $$
+begin
+  if exists (select 1 from pg_publication where pubname = 'supabase_realtime') then
+    alter publication supabase_realtime add table public.plantao_ti_ocorrencias;
+  end if;
+exception
+  when duplicate_object then
+    null;
+end $$;
