@@ -7,14 +7,15 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
 async function run() {
   try {
-    const { data: cirurgias, error: err1 } = await supabase
+    const { data: cirurgias, error } = await supabase
       .from('cirurgias')
-      .select('nr_cirurgia, nm_paciente, sala, evento, dt_registro, historico_eventos_cirurgia(*)');
+      .select('nr_cirurgia, nm_paciente, sala, evento, dt_registro')
+      .limit(5);
 
-    if (err1) throw err1;
+    if (error) throw error;
     
-    console.log('--- TODAS AS CIRURGIAS ATIVAS ---');
-    console.log(JSON.stringify(cirurgias, null, 2));
+    console.log('--- CIRURGIAS ENCONTRADAS ---');
+    console.log(cirurgias);
   } catch (error) {
     console.error('Erro:', error);
   }

@@ -3,10 +3,12 @@ import {
   Activity, Search, Loader2, RefreshCcw, Calendar, ChevronDown,
   User, Stethoscope, SlidersHorizontal, CheckCircle2,
   Clock, ShieldAlert, ChevronLeft, ChevronRight, LayoutGrid, List, Info, AlertTriangle, AlertCircle,
-  Sun, Moon
+  Sun, Moon, ShieldOff
 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
+import { usePermissions } from '../../hooks/usePermissions';
 
 interface EventoHistorico {
   evento: string;
@@ -253,7 +255,29 @@ const getTodayLocalString = (): string => {
   return new Date(d.getTime() - tzOffset).toISOString().slice(0, 10);
 };
 
-const getDiferencaMinutos = (c: Cirurgia, eventoA: string, eventoB: string): string => {
+const getHoraEvento = (c: Cirurgia, nomeEvento: string): string => {
+  const hist = c.historico_eventos_cirurgia?.find(
+    h => h.evento.toLowerCase().trim() === nomeEvento.toLowerCase().trim()
+  );
+  if (!hist || !hist.dt_registro) return '';
+
+  try {
+    const cleanStr = hist.dt_registro.replace(/Z$/, '').replace(/[+-]\d{2}:\d{2}$/, '');
+    const d = new Date(cleanStr);
+    const pad = (n: number) => n.toString().padStart(2, '0');
+    return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  } catch {
+    return '';
+  }
+};
+
+const getDiferencaMinutos = (
+  c: Cirurgia,
+  eventoA: string,
+  eventoB: string,
+  useSysdateAsFallback: boolean,
+  now: Date
+): string => {
   const histA = c.historico_eventos_cirurgia?.find(
     h => h.evento.toLowerCase().trim() === eventoA.toLowerCase().trim()
   );
@@ -261,14 +285,26 @@ const getDiferencaMinutos = (c: Cirurgia, eventoA: string, eventoB: string): str
     h => h.evento.toLowerCase().trim() === eventoB.toLowerCase().trim()
   );
 
-  if (!histA || !histB || !histA.dt_registro || !histB.dt_registro) return '';
+  // O evento inicial A é obrigatório
+  if (!histA || !histA.dt_registro) return '';
 
   try {
-    const tA = new Date(histA.dt_registro.replace(/Z$/, '')).getTime();
-    const tB = new Date(histB.dt_registro.replace(/Z$/, '')).getTime();
+    const cleanA = histA.dt_registro.replace(/Z$/, '').replace(/[+-]\d{2}:\d{2}$/, '');
+    const tA = new Date(cleanA).getTime();
+
+    let tB: number;
+    if (histB && histB.dt_registro) {
+      const cleanB = histB.dt_registro.replace(/Z$/, '').replace(/[+-]\d{2}:\d{2}$/, '');
+      tB = new Date(cleanB).getTime();
+    } else if (useSysdateAsFallback) {
+      tB = now.getTime();
+    } else {
+      return '';
+    }
+
     const diffMs = tB - tA;
     if (diffMs < 0) return '';
-    const diffMins = Math.round(diffMs / 60000);
+    const diffMins = Math.floor(diffMs / 60000);
     return `${diffMins} min`;
   } catch {
     return '';
@@ -278,26 +314,41 @@ const getDiferencaMinutos = (c: Cirurgia, eventoA: string, eventoB: string): str
 const getDuracaoTotalMinutos = (c: Cirurgia, now: Date): string => {
   if (!c.historico_eventos_cirurgia || c.historico_eventos_cirurgia.length === 0) return '';
   
-  const ordenado = [...c.historico_eventos_cirurgia].sort(
+  // Busca o evento de Entrada do Paciente (ex: "Entrada do paciente em Sala Cirúrgica")
+  const eventoEntrada = c.historico_eventos_cirurgia.find(h => {
+    const name = h.evento.toLowerCase();
+    return name.includes('entrada') && name.includes('paciente');
+  });
+
+  // Se não encontrar, faz o fallback para o primeiro evento registrado
+  const tInicioStr = eventoEntrada?.dt_registro || [...c.historico_eventos_cirurgia].sort(
     (a, b) => new Date(a.dt_registro).getTime() - new Date(b.dt_registro).getTime()
-  );
+  )[0]?.dt_registro;
 
-  const tInicioStr = ordenado[0].dt_registro;
-  const tFimStr = ordenado[ordenado.length - 1].dt_registro;
+  if (!tInicioStr) return '';
 
-  if (!tInicioStr || !tFimStr) return '';
+  // Busca o evento de Saída para o Setor de Origem (ou Retorno)
+  const eventoSaida = c.historico_eventos_cirurgia.find(h => {
+    const name = h.evento.toLowerCase();
+    return (name.includes('saida') || name.includes('saída') || name.includes('retorno')) && (name.includes('origem') || name.includes('setor'));
+  });
 
   try {
-    const tInicio = new Date(tInicioStr.replace(/Z$/, '')).getTime();
-    const status = getStatusPorEvento(c.evento);
+    // Remove o indicador de Z e o offset de fuso horário para interpretar como hora local da máquina
+    const cleanInicioStr = tInicioStr.replace(/Z$/, '').replace(/[+-]\d{2}:\d{2}$/, '');
+    const tInicio = new Date(cleanInicioStr).getTime();
     
-    const tFim = status.percent === 100 
-      ? new Date(tFimStr.replace(/Z$/, '')).getTime() 
-      : now.getTime();
+    let tFim: number;
+    if (eventoSaida && eventoSaida.dt_registro) {
+      const cleanFimStr = eventoSaida.dt_registro.replace(/Z$/, '').replace(/[+-]\d{2}:\d{2}$/, '');
+      tFim = new Date(cleanFimStr).getTime();
+    } else {
+      tFim = now.getTime(); // sysdate
+    }
 
     const diffMs = tFim - tInicio;
     if (diffMs < 0) return '';
-    const diffMins = Math.round(diffMs / 60000);
+    const diffMins = Math.floor(diffMs / 60000);
     
     if (diffMins < 60) {
       return `${diffMins} min`;
@@ -341,7 +392,9 @@ export default function CentroCirurgico() {
   // Novos estados para a visualização avançada
   const [viewMode, setViewMode] = useState<'salas' | 'tabela'>('salas');
 
-  const { profile } = useAuth();
+  const { profile, profileLoaded } = useAuth();
+  const { canAccess } = usePermissions();
+  const navigate = useNavigate();
 
   const [isDark, setIsDark] = useState(false);
 
@@ -680,6 +733,40 @@ export default function CentroCirurgico() {
   } else {
     cols = Math.ceil(Math.sqrt(totalCards));
     rows = Math.ceil(totalCards / cols);
+  }
+
+  if (!profileLoaded) {
+    return (
+      <div className="flex min-h-screen w-full items-center justify-center bg-background text-foreground">
+        <div className="flex flex-col items-center gap-4">
+          <Loader2 className="h-10 w-10 text-primary animate-spin" />
+          <p className="text-sm text-muted-foreground font-medium">Verificando permissões...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!canAccess('centro-cirurgico')) {
+    return (
+      <div className="flex min-h-screen w-full flex-col items-center justify-center bg-background text-foreground gap-6 p-8">
+        <div className="flex items-center justify-center h-20 w-20 rounded-full bg-destructive/10 text-destructive animate-in zoom-in-50 duration-300">
+          <ShieldOff className="h-10 w-10" />
+        </div>
+        <div className="text-center max-w-sm animate-in fade-in slide-in-from-bottom-4 duration-300">
+          <h2 className="text-xl font-bold text-foreground mb-2">Acesso Restrito</h2>
+          <p className="text-muted-foreground text-sm leading-relaxed mb-6">
+            Você não tem permissão para acessar o módulo do Centro Cirúrgico.
+            Entre em contato com o administrador do sistema para solicitar acesso.
+          </p>
+          <button
+            onClick={() => navigate('/perfil')}
+            className="px-4 py-2 bg-primary text-primary-foreground rounded-lg font-semibold text-sm hover:bg-primary/95 shadow-md hover:shadow-lg transition-all duration-200"
+          >
+            Voltar para o Perfil
+          </button>
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -1236,9 +1323,18 @@ export default function CentroCirurgico() {
                     const isUrgente = c.ds_carater?.toLowerCase().includes('urg') || c.ds_carater?.toLowerCase().includes('emerg');
                     const statusInfo = getStatusPorEvento(c.evento);
 
+                    const horaEntrada = getHoraEvento(c, 'Entrada do paciente em Sala Cirúrgica');
+                    const tempoEsperaAnestesia = getDiferencaMinutos(c, 'Entrada do paciente em Sala Cirúrgica', 'Início da Anestesia', true, now);
+                    const tempoProcedimento = getDiferencaMinutos(c, 'Início da Cirurgia/Procedimento', 'Término Cirurgia/Procedimento', true, now);
+                    const tempoAnestesia = getDiferencaMinutos(c, 'Início da Anestesia', 'Término da Anestesia', true, now);
+                    const tempoRpa = getDiferencaMinutos(c, 'Entrada em Recuperação Anestésica', 'Saída Recuperação anestésica - Retorno Setor de Origem', true, now);
+                    const tempoTotal = getDuracaoTotalMinutos(c, now);
+
+                    const temTempos = horaEntrada || tempoEsperaAnestesia || tempoProcedimento || tempoAnestesia || tempoRpa || tempoTotal;
+
                     return (
                       <React.Fragment key={c.id}>
-                        <tr className="hover:bg-muted/20 transition-all duration-150">
+                        <tr className={`hover:bg-muted/10 transition-all duration-150 ${!temTempos ? 'border-b border-border' : 'border-b-0'}`}>
                           {/* Cirurgia */}
                           <td className="px-6 py-4 text-sm font-bold font-mono text-foreground">
                             {c.nr_cirurgia}
@@ -1374,69 +1470,56 @@ export default function CentroCirurgico() {
                             </div>
                           </td>
                         </tr>
-                        {(() => {
-                          const tempoEsp = getDiferencaMinutos(c, 'Entrada do paciente em Sala Cirúrgica', 'Início da Anestesia');
-                          const tempoPrep = getDiferencaMinutos(c, 'Início da Anestesia', 'Início da Cirurgia/Procedimento');
-                          const tempoCir = getDiferencaMinutos(c, 'Início da Cirurgia/Procedimento', 'Término Cirurgia/Procedimento');
-                          const tempoDesp = getDiferencaMinutos(c, 'Término Cirurgia/Procedimento', 'Término da Anestesia');
-                          const tempoRpa = getDiferencaMinutos(c, 'Término da Anestesia', 'Entrada em Recuperação Anestésica');
-                          const tempoTotal = getDuracaoTotalMinutos(c, now);
-
-                          const temTempos = tempoEsp || tempoPrep || tempoCir || tempoDesp || tempoRpa || tempoTotal;
-
-                          if (!temTempos) return null;
-
-                          return (
-                            <tr className="bg-muted/5 dark:bg-muted/2">
-                              <td colSpan={9} className="px-6 py-2 pb-3.5 border-b border-border/40">
-                                <div className="flex items-center gap-6 text-xs text-muted-foreground bg-muted/20 dark:bg-muted/10 px-4 py-2.5 rounded-lg border border-border/30">
+                        {temTempos && (
+                          <tr className="hover:bg-muted/10 transition-all duration-150 border-b border-border">
+                            <td colSpan={9} className="px-6 py-2 pb-3 bg-muted/5 dark:bg-muted/2">
+                              <div className="flex items-center justify-between w-full text-xs text-muted-foreground bg-muted/20 dark:bg-muted/10 px-4 py-2.5 rounded-lg border border-border/30">
+                                <div className="flex flex-wrap items-center gap-4 flex-1">
                                   <div className="flex items-center gap-1.5 font-bold uppercase tracking-wider text-[10px] text-muted-foreground/80">
                                     <Clock className="h-3.5 w-3.5 text-muted-foreground/60" />
                                     <span>Tempos de Transição:</span>
                                   </div>
-                                  <div className="flex flex-wrap items-center gap-4 flex-1">
-                                    {tempoEsp && (
-                                      <div className="flex items-center gap-1.5 bg-background dark:bg-slate-900 px-2.5 py-1 rounded-md border border-border/40 shadow-xs">
-                                        <span className="font-medium text-muted-foreground/90">Espera p/ Anestesia:</span>
-                                        <strong className="text-foreground font-bold">{tempoEsp}</strong>
-                                      </div>
-                                    )}
-                                    {tempoPrep && (
-                                      <div className="flex items-center gap-1.5 bg-background dark:bg-slate-900 px-2.5 py-1 rounded-md border border-border/40 shadow-xs">
-                                        <span className="font-medium text-muted-foreground/90">Indução/Preparação:</span>
-                                        <strong className="text-foreground font-bold">{tempoPrep}</strong>
-                                      </div>
-                                    )}
-                                    {tempoCir && (
-                                      <div className="flex items-center gap-1.5 bg-background dark:bg-slate-900 px-2.5 py-1 rounded-md border border-border/40 shadow-xs">
-                                        <span className="font-medium text-muted-foreground/90">Tempo Cirúrgico:</span>
-                                        <strong className="text-foreground font-bold">{tempoCir}</strong>
-                                      </div>
-                                    )}
-                                    {tempoDesp && (
-                                      <div className="flex items-center gap-1.5 bg-background dark:bg-slate-900 px-2.5 py-1 rounded-md border border-border/40 shadow-xs">
-                                        <span className="font-medium text-muted-foreground/90">Despertar:</span>
-                                        <strong className="text-foreground font-bold">{tempoDesp}</strong>
-                                      </div>
-                                    )}
-                                    {tempoRpa && (
-                                      <div className="flex items-center gap-1.5 bg-background dark:bg-slate-900 px-2.5 py-1 rounded-md border border-border/40 shadow-xs">
-                                        <span className="font-medium text-muted-foreground/90">Saída p/ RPA:</span>
-                                        <strong className="text-foreground font-bold">{tempoRpa}</strong>
-                                      </div>
-                                    )}
-                                  </div>
-                                  {tempoTotal && (
-                                    <div className="flex items-center gap-2 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 px-3.5 py-1.5 rounded-md font-bold shadow-xs">
-                                      <span className="uppercase text-[9px] tracking-wider font-extrabold opacity-75">Duração Total:</span>
-                                      <span className="text-sm font-mono">{tempoTotal}</span>
+                                  {horaEntrada && (
+                                    <div className="flex items-center gap-1.5 bg-background dark:bg-slate-900 px-2.5 py-1 rounded-md border border-border/40 shadow-xs">
+                                      <span className="font-medium text-muted-foreground/90">Entrada do Paciente:</span>
+                                      <strong className="text-foreground font-bold">{horaEntrada}</strong>
+                                    </div>
+                                  )}
+                                  {tempoEsperaAnestesia && (
+                                    <div className="flex items-center gap-1.5 bg-background dark:bg-slate-900 px-2.5 py-1 rounded-md border border-border/40 shadow-xs">
+                                      <span className="font-medium text-muted-foreground/90">Espera para Anestesia:</span>
+                                      <strong className="text-foreground font-bold">{tempoEsperaAnestesia}</strong>
+                                    </div>
+                                  )}
+                                  {tempoProcedimento && (
+                                    <div className="flex items-center gap-1.5 bg-background dark:bg-slate-900 px-2.5 py-1 rounded-md border border-border/40 shadow-xs">
+                                      <span className="font-medium text-muted-foreground/90">Tempo do Procedimento:</span>
+                                      <strong className="text-foreground font-bold">{tempoProcedimento}</strong>
+                                    </div>
+                                  )}
+                                  {tempoAnestesia && (
+                                    <div className="flex items-center gap-1.5 bg-background dark:bg-slate-900 px-2.5 py-1 rounded-md border border-border/40 shadow-xs">
+                                      <span className="font-medium text-muted-foreground/90">Tempo Anestesia:</span>
+                                      <strong className="text-foreground font-bold">{tempoAnestesia}</strong>
+                                    </div>
+                                  )}
+                                  {tempoRpa && (
+                                    <div className="flex items-center gap-1.5 bg-background dark:bg-slate-900 px-2.5 py-1 rounded-md border border-border/40 shadow-xs">
+                                      <span className="font-medium text-muted-foreground/90">Tempo em RPA:</span>
+                                      <strong className="text-foreground font-bold">{tempoRpa}</strong>
                                     </div>
                                   )}
                                 </div>
-                              </td>
-                            </tr>
-                          );
-                        })()}
+                                {tempoTotal && (
+                                  <div className="flex items-center gap-2 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 px-3.5 py-1.5 rounded-md font-bold shadow-xs ml-4">
+                                    <span className="uppercase text-[9px] tracking-wider font-extrabold opacity-75">Duração Total:</span>
+                                    <span className="text-sm font-mono">{tempoTotal}</span>
+                                  </div>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        )}
                       </React.Fragment>
                     );
                   })}
