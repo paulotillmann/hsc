@@ -31,19 +31,19 @@ export interface EscalaPlantao {
   } | null;
 }
 
+export const ALLOWED_EMAILS = [
+  'talysson.resende@santacasaaraguari.org.br',
+  'bruno.lima@santacasaaraguari.org.br',
+  'jessica.araujo@santacasaaraguari.org.br',
+  'jhon.silva@santacasaaraguari.org.br'
+];
+
 // ── Busca os colaboradores de TI no banco por e-mail ────────────────────────
 export async function fetchColaboradoresTI(): Promise<ColaboradorTI[]> {
-  const allowedEmails = [
-    'talysson.resende@santacasaaraguari.org.br',
-    'bruno.lima@santacasaaraguari.org.br',
-    'jessica.araujo@santacasaaraguari.org.br',
-    'jhon.silva@santacasaaraguari.org.br'
-  ];
-
   const { data, error } = await supabase
     .from('profiles')
     .select('id, full_name, email')
-    .in('email', allowedEmails)
+    .in('email', ALLOWED_EMAILS)
     .order('full_name');
 
   if (error) {
