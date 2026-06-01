@@ -3,17 +3,16 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   Calendar as CalendarIcon, ChevronLeft, ChevronRight, ChevronDown, Plus, Trash2,
   Loader2, UserPlus, X, CalendarX, AlertCircle, CheckCircle, Info,
-  FileText, MapPin, Monitor
+  FileText, MapPin, Monitor, Coins
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../lib/supabase';
 import {
   fetchColaboradoresTI, fetchEscalasMes, adicionarPlantonista,
   removerPlantonista, limparEscalaDia, adicionarOcorrenciaPlantao,
-  removerOcorrenciaPlantao, fetchSetoresInternacao, buscarNomesSolicitantes, ColaboradorTI, EscalaPlantao, OcorrenciaPlantao
+  removerOcorrenciaPlantao, fetchSetoresInternacao, buscarNomesSolicitantes,
+  ColaboradorTI, EscalaPlantao, OcorrenciaPlantao, ALLOWED_EMAILS
 } from '../../services/plantaoTiService';
-
-// ── Mapeamento de cores premium para cada plantonista ───────────────────────
 const COLABORADORES_CORES: Record<string, { bullet: string; text: string; bg: string; border: string }> = {
   'talysson': {
     bullet: 'bg-purple-500 shadow-[0_0_8px_rgba(168,85,247,0.5)]',
@@ -147,7 +146,12 @@ const MESES = [
 ];
 
 export default function PlantaoTI() {
-  const { isAdmin } = useAuth();
+  const { isAdmin, profile } = useAuth();
+
+  const canDoPlantao = useMemo(() => {
+    if (!profile?.email) return false;
+    return ALLOWED_EMAILS.includes(profile.email.toLowerCase());
+  }, [profile]);
 
   // Estados de data e navegação
   const [currentDate, setCurrentDate] = useState(() => new Date());
@@ -203,6 +207,80 @@ export default function PlantaoTI() {
     const day = String(selectedDate.getDate()).padStart(2, '0');
     return `${year}-${month}-${day}`;
   }, [selectedDate]);
+
+  const resumoValoresTodos = useMemo(() => {
+    if (!canDoPlantao || colaboradores.length === 0) return [];
+
+    const jhonColab = colaboradores.find(c => c.email.toLowerCase() === 'jhon.silva@santacasaaraguari.org.br');
+    const jhonId = jhonColab?.id;
+
+    const reducedGroupEmails = [
+      'talysson.resende@santacasaaraguari.org.br',
+      'bruno.lima@santacasaaraguari.org.br',
+      'jessica.araujo@santacasaaraguari.org.br'
+    ];
+
+    return colaboradores.map(colab => {
+      let total = 0;
+      let diasUteisNormais = 0;
+      let diasUteisReduzidos = 0;
+      let finaisFeriadosNormais = 0;
+      let finaisFeriadosReduzidos = 0;
+
+      const escalasUsuario = escalas.filter(e => e.usuario_id === colab.id);
+      const isReducedGroup = reducedGroupEmails.includes(colab.email.toLowerCase());
+
+      escalasUsuario.forEach(e => {
+        const dateParts = e.data_plantao.split('-');
+        const year = parseInt(dateParts[0], 10);
+        const month = parseInt(dateParts[1], 10) - 1;
+        const day = parseInt(dateParts[2], 10);
+        const dateObj = new Date(year, month, day);
+        
+        const dayOfWeek = dateObj.getDay();
+        const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+        const isFeriado = !!feriadosDoAno[e.data_plantao];
+        const isWeekendOrFeriado = isWeekend || isFeriado;
+
+        // Verificar se Jhon também está escalado no mesmo dia
+        const isJhonTogether = escalas.some(other => 
+          other.data_plantao === e.data_plantao && 
+          (other.profiles?.email.toLowerCase() === 'jhon.silva@santacasaaraguari.org.br' || 
+           (jhonId && other.usuario_id === jhonId))
+        );
+
+        if (isReducedGroup && isJhonTogether) {
+          if (isWeekendOrFeriado) {
+            total += 100;
+            finaisFeriadosReduzidos++;
+          } else {
+            total += 50;
+            diasUteisReduzidos++;
+          }
+        } else {
+          if (isWeekendOrFeriado) {
+            total += 200;
+            finaisFeriadosNormais++;
+          } else {
+            total += 100;
+            diasUteisNormais++;
+          }
+        }
+      });
+
+      return {
+        id: colab.id,
+        nome: colab.full_name,
+        email: colab.email,
+        total,
+        diasUteisNormais,
+        diasUteisReduzidos,
+        finaisFeriadosNormais,
+        finaisFeriadosReduzidos,
+        isSelf: colab.id === profile?.id
+      };
+    }).sort((a, b) => b.total - a.total);
+  }, [escalas, colaboradores, canDoPlantao, feriadosDoAno, profile]);
 
   // Estatísticas de ocorrências do mês selecionado
   const estatisticasMes = useMemo(() => {
@@ -563,7 +641,7 @@ export default function PlantaoTI() {
   }, []);
 
   return (
-    <div className="flex-1 space-y-6 min-h-[60vh] pb-6 w-full mx-auto px-1 pt-2 text-foreground transition-all">
+    <div className="flex-1 space-y-3 min-h-[60vh] pb-2 w-full mx-auto px-1 pt-2 text-foreground transition-all">
       {/* ── Toast de Notificação Local ── */}
       <AnimatePresence>
         {toast && (
@@ -591,23 +669,22 @@ export default function PlantaoTI() {
       </AnimatePresence>
 
       {/* ── Cabeçalho do Módulo ── */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-2">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight text-foreground flex items-center gap-2.5">
+          <h1 className="text-2xl font-bold tracking-tight text-foreground flex items-center gap-2">
             <CalendarIcon className="h-8 w-8 text-primary" />
             Plantão TI
           </h1>
-          <p className="text-muted-foreground mt-1 text-sm">
+          <p className="text-muted-foreground mt-1 text-xs">
             Calendário de escalas e controle de plantonistas de tecnologia.
           </p>
         </div>
       </div>
-
       {/* ── Grid Principal de dois painéis ── */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
         {/* ── Painel da Esquerda: Agenda do Mês (8/12) ── */}
-        <div className="lg:col-span-8 bg-card border border-border/80 shadow-md rounded-xl p-5 md:p-6 space-y-6">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-border/55 pb-4">
+        <div className="lg:col-span-8 bg-card border border-border/80 shadow-md rounded-xl p-4 space-y-3">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-border/55 pb-2">
             <div>
               <h2 className="text-lg font-bold text-foreground">Agenda do Mês</h2>
               <p className="text-xs text-muted-foreground">Visão geral dos compromissos registrados.</p>
@@ -637,18 +714,18 @@ export default function PlantaoTI() {
 
           {/* Grade de Dias do Calendário */}
           {loading ? (
-            <div className="h-[450px] flex flex-col items-center justify-center text-muted-foreground gap-3">
+            <div className="h-[380px] flex flex-col items-center justify-center text-muted-foreground gap-3">
               <Loader2 className="h-10 w-10 animate-spin text-primary" />
               <span>Carregando escala do mês...</span>
             </div>
           ) : (
-            <div className="space-y-2">
+            <div className="space-y-1">
               {/* Dias da semana */}
               <div className="grid grid-cols-7 text-center">
                 {DIAS_SEMANA.map(dia => (
                   <span
                     key={dia}
-                    className="text-xs font-semibold text-muted-foreground uppercase tracking-wider py-2"
+                    className="text-xs font-semibold text-muted-foreground uppercase tracking-wider py-1"
                   >
                     {dia}
                   </span>
@@ -656,7 +733,7 @@ export default function PlantaoTI() {
               </div>
 
               {/* Grid 6x7 de slots de dias */}
-              <div className="grid grid-cols-7 gap-1.5">
+              <div className="grid grid-cols-7 gap-1">
                 {slotsCalendario.map((slot, index) => {
                   const diaEscalas = escalasAgrupadas[slot.dateStr] ?? [];
                   const isSelected = selectedDateString === slot.dateStr;
@@ -674,7 +751,7 @@ export default function PlantaoTI() {
                     <button
                       key={index}
                       onClick={() => setSelectedDate(slot.date)}
-                      className={`min-h-[95px] md:min-h-[115px] p-2 rounded-lg border flex flex-col justify-between items-stretch text-left transition-all relative ${
+                      className={`min-h-[75px] md:min-h-[85px] p-1.5 rounded-lg border flex flex-col justify-between items-stretch text-left transition-all relative ${
                         slot.isCurrentMonth
                           ? feriadoClasses || 'bg-card border-border/50 text-foreground'
                           : 'bg-muted/10 border-border/20 text-muted-foreground opacity-50'
@@ -729,13 +806,13 @@ export default function PlantaoTI() {
                       </div>
 
                       {/* Plantonistas do Dia */}
-                      <div className="flex-1 mt-1.5 space-y-1 overflow-y-auto max-h-[70px] pr-0.5 scrollbar-thin">
+                      <div className="flex-1 mt-1.5 space-y-1 overflow-y-auto max-h-[50px] pr-0.5 scrollbar-thin">
                         {diaEscalas.map(escala => {
                           const estilo = getColaboradorEstilo(escala.profiles?.full_name);
                           return (
                             <div
                               key={escala.id}
-                              className={`flex items-center gap-1.5 px-1.5 py-0.5 rounded text-[10px] font-medium border ${estilo.bg} ${estilo.border}`}
+                              className={`flex items-center gap-1 px-1 py-0.5 rounded text-[9px] font-medium border ${estilo.bg} ${estilo.border}`}
                               title={escala.profiles?.full_name || ''}
                             >
                               <span className={`h-1.5 w-1.5 rounded-full flex-shrink-0 ${estilo.bullet}`} />
@@ -755,11 +832,11 @@ export default function PlantaoTI() {
         </div>
 
         {/* ── Painel da Direita: Escala do Dia (4/12) ── */}
-        <div className="lg:col-span-4 space-y-6">
+        <div className="lg:col-span-4 space-y-3">
           {/* Indicadores de Ocorrências do Mês */}
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-2 gap-3">
             {/* Card 1: Total de Ocorrências */}
-            <div className="bg-card border border-border/80 shadow-md rounded-xl p-4 flex items-center justify-between relative overflow-hidden transition-all hover:shadow-lg">
+            <div className="bg-card border border-border/80 shadow-md rounded-xl p-3 flex items-center justify-between relative overflow-hidden transition-all hover:shadow-lg">
               <div className="space-y-1 z-10">
                 <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
                   Total de Ocorrências no Mês
@@ -775,7 +852,7 @@ export default function PlantaoTI() {
             </div>
 
             {/* Card 2: Presencial vs Remoto */}
-            <div className="bg-card border border-border/80 shadow-md rounded-xl p-4 flex flex-col justify-between relative overflow-hidden transition-all hover:shadow-lg">
+            <div className="bg-card border border-border/80 shadow-md rounded-xl p-3 flex flex-col justify-between relative overflow-hidden transition-all hover:shadow-lg">
               <div className="space-y-1.5 z-10 w-full">
                 <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
                   Tipos de Atendimento
@@ -784,17 +861,17 @@ export default function PlantaoTI() {
                   <span className="flex items-center gap-1.5 text-amber-600 dark:text-amber-400" title="Atendimento Presencial">
                     <MapPin className="h-4 w-4" />
                     <span className="text-lg font-extrabold">{estatisticasMes.presencial}</span>
-                    <span className="text-[11px] font-medium text-muted-foreground">Presencial</span>
+                    <span className="text-[10px] font-medium text-muted-foreground">Presencial</span>
                   </span>
                   <span className="text-xs text-muted-foreground/60 font-normal">/</span>
                   <span className="flex items-center gap-1.5 text-blue-600 dark:text-blue-400" title="Atendimento Remoto">
                     <Monitor className="h-4 w-4" />
                     <span className="text-lg font-extrabold">{estatisticasMes.remoto}</span>
-                    <span className="text-[11px] font-medium text-muted-foreground">Remoto</span>
+                    <span className="text-[10px] font-medium text-muted-foreground">Remoto</span>
                   </span>
                 </div>
                 {/* Barra de Proporção */}
-                <div className="w-full h-1.5 bg-muted rounded-full overflow-hidden flex mt-1">
+                <div className="w-full h-1.5 bg-muted rounded-full overflow-hidden flex mt-0.5">
                   {estatisticasMes.total > 0 ? (
                     <>
                       <div 
@@ -849,16 +926,16 @@ export default function PlantaoTI() {
             </div>
 
             {loading ? (
-              <div className="py-8 flex justify-center">
+              <div className="py-4 flex justify-center">
                 <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
               </div>
             ) : plantonistasDoDiaSelecionado.length === 0 ? (
-              <div className="py-8 text-center text-muted-foreground space-y-2">
+              <div className="py-4 text-center text-muted-foreground space-y-2">
                 <CalendarIcon className="h-8 w-8 mx-auto opacity-30 text-foreground" />
                 <p className="text-xs">Nenhum plantonista cadastrado para este dia.</p>
               </div>
             ) : (
-              <div className="space-y-2.5">
+              <div className="space-y-1.5">
                 {plantonistasDoDiaSelecionado.map(escala => {
                   const estilo = getColaboradorEstilo(escala.profiles?.full_name);
                   const isEscalaSelecionada = selectedEscala?.id === escala.id;
@@ -870,12 +947,12 @@ export default function PlantaoTI() {
                       onClick={() => {
                         setSelectedEscala(isEscalaSelecionada ? null : escala);
                       }}
-                      className={`flex items-center justify-between p-3 rounded-lg border cursor-pointer hover:border-primary/50 transition-all ${
+                      className={`flex items-center justify-between p-2 rounded-lg border cursor-pointer hover:border-primary/50 transition-all ${
                         isEscalaSelecionada ? 'ring-2 ring-primary bg-primary/5 shadow-inner' : estilo.bg
                       } ${estilo.border}`}
                     >
                       <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                        <span className={`h-2.5 w-2.5 rounded-full flex-shrink-0 ${estilo.bullet}`} />
+                        <span className={`h-2 w-2 flex-shrink-0 rounded-full ${estilo.bullet}`} />
                         <div className="min-w-0 flex-1 flex flex-col justify-center">
                           <p className="text-sm font-semibold text-foreground truncate">
                             {escala.profiles?.full_name || 'Usuário Sem Nome'}
@@ -935,10 +1012,10 @@ export default function PlantaoTI() {
                 initial={{ opacity: 0, y: 15 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: 15 }}
-                className="bg-card border border-border/80 shadow-md rounded-xl p-5 md:p-6 space-y-4"
+                className="bg-card border border-border/80 shadow-md rounded-xl p-4 space-y-2.5"
               >
                 {/* Cabeçalho */}
-                <div className="flex items-center justify-between border-b border-border/50 pb-2.5">
+                <div className="flex items-center justify-between border-b border-border/50 pb-1.5">
                   <div className="min-w-0 flex-1">
                     <h3 className="text-sm font-bold text-foreground">Ocorrências do Plantão</h3>
                     <p className="text-[10px] text-muted-foreground truncate">
@@ -1100,7 +1177,7 @@ export default function PlantaoTI() {
                   /* Grid de Ocorrências Cadastradas */
                   <div className="space-y-2">
                     {!selectedEscala.ocorrencias || selectedEscala.ocorrencias.length === 0 ? (
-                      <div className="py-8 text-center text-muted-foreground space-y-2.5">
+                      <div className="py-4 text-center text-muted-foreground space-y-2.5">
                         <FileText className="h-8 w-8 mx-auto opacity-30 text-foreground" />
                         <p className="text-xs">Nenhuma ocorrência registrada para este plantão.</p>
                         <button
@@ -1112,7 +1189,7 @@ export default function PlantaoTI() {
                         </button>
                       </div>
                     ) : (
-                      <div className="grid grid-cols-1 gap-2 max-h-[280px] overflow-y-auto pr-0.5 scrollbar-thin">
+                      <div className="grid grid-cols-1 gap-2 max-h-[140px] overflow-y-auto pr-0.5 scrollbar-thin">
                         {selectedEscala.ocorrencias.map(ocorrencia => (
                           <div
                             key={ocorrencia.id}
@@ -1159,6 +1236,70 @@ export default function PlantaoTI() {
                     )}
                   </div>
                 )}
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* Card de Resumo Financeiro do Mês para Plantonistas de TI */}
+          <AnimatePresence>
+            {canDoPlantao && resumoValoresTodos.length > 0 && (
+              <motion.div
+                initial={{ opacity: 0, y: 15 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 15 }}
+                className="bg-card border border-border/80 shadow-md rounded-xl p-4 space-y-3"
+              >
+                <div className="flex items-center gap-2.5 border-b border-border/50 pb-1.5">
+                  <div className="p-2 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+                    <Coins className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold text-foreground">Ganhos do Mês (Estimado)</h3>
+                    <p className="text-[10px] text-muted-foreground">
+                      Valores a serem recebidos por cada plantonista.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  {resumoValoresTodos.map(pl => {
+                    const estilo = getColaboradorEstilo(pl.nome);
+                    return (
+                      <div
+                        key={pl.id}
+                        className={`p-2 rounded-lg border flex flex-col gap-1.5 ${
+                          pl.isSelf ? 'ring-1 ring-primary bg-primary/[0.02] border-primary/20' : 'bg-muted/10 border-border/40'
+                        }`}
+                      >
+                        <div className="flex justify-between items-start">
+                          <div className="min-w-0 flex-1 flex items-center gap-2">
+                            <span className={`h-2 w-2 rounded-full flex-shrink-0 ${estilo.bullet}`} />
+                            <span className="text-xs font-bold text-foreground truncate">
+                              {pl.nome} {pl.isSelf && "(Você)"}
+                            </span>
+                          </div>
+                          <span className="text-xs font-extrabold text-emerald-600 dark:text-emerald-400 shrink-0 ml-2">
+                            R$ {pl.total.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </span>
+                        </div>
+                        <div className="flex flex-col text-[10px] text-muted-foreground pl-4 space-y-0.5 border-t border-border/10 pt-1.5 mt-0.5">
+                          <div className="flex justify-between gap-2">
+                            <span>Dias Úteis (R$100): <strong>{pl.diasUteisNormais}x</strong></span>
+                            {pl.diasUteisReduzidos > 0 && (
+                              <span className="text-amber-600 dark:text-amber-400 font-medium">sistema (R$50): <strong>{pl.diasUteisReduzidos}x</strong></span>
+                            )}
+                          </div>
+                          <div className="flex justify-between gap-2">
+                            <span>Finais/Feriados (R$200): <strong>{pl.finaisFeriadosNormais}x</strong></span>
+                            {pl.finaisFeriadosReduzidos > 0 && (
+                              <span className="text-amber-600 dark:text-amber-400 font-medium">sistema (R$100): <strong>{pl.finaisFeriadosReduzidos}x</strong></span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
               </motion.div>
             )}
           </AnimatePresence>
