@@ -439,7 +439,7 @@ const LancamentoTaxas: React.FC = () => {
       <BubbleSyncModal
         isOpen={isBubbleModalOpen}
         onClose={() => setIsBubbleModalOpen(false)}
-        onSuccess={fetchLancamentos}
+        onSuccess={() => fetchLancamentos(currentDate)}
       />
     </div>
   );

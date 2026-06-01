@@ -44,7 +44,7 @@ export default function Visitantes() {
   const [syncModalOpen, setSyncModalOpen] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncProgress, setSyncProgress] = useState<SyncProgress | null>(null);
-  const cancelSyncRef = useRef({ current: false });
+  const cancelSyncRef = useRef(false);
 
   // Sorting
   const [sortCol, setSortCol] = useState('nome');
@@ -75,7 +75,7 @@ export default function Visitantes() {
   const [syncVisitasModalOpen, setSyncVisitasModalOpen] = useState(false);
   const [isSyncingVisitas, setIsSyncingVisitas] = useState(false);
   const [syncVisitasProgress, setSyncVisitasProgress] = useState<VisitaSyncProgress | null>(null);
-  const cancelSyncVisitasRef = useRef({ current: false });
+  const cancelSyncVisitasRef = useRef(false);
   const [manualStartCursorVisitas, setManualStartCursorVisitas] = useState<number | ''>('');
   const [reverseSyncVisitas, setReverseSyncVisitas] = useState(false);
   const [dateFromVisitas, setDateFromVisitas] = useState('');

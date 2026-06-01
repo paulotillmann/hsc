@@ -1,7 +1,7 @@
 // src/hooks/usePermissions.ts
 // Hook centralizado para verificação de permissões e módulos do usuário logado
 
-import { useCallback } from 'react';
+import { useCallback, useMemo } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { PermissionKey, Permissions, Module } from '../types/permissions';
 
@@ -51,3 +51,4 @@ export function usePermissions(): UsePermissionsReturn {
 
   return { permissions, can, isAdmin, userModules, canAccess };
 }
+

@@ -20,6 +20,7 @@ const Sidebar: React.FC = () => {
     if (window.location.pathname.startsWith('/taxa-ocupacao')) return 'taxa-ocupacao';
     if (window.location.pathname.startsWith('/pacientes-internados') || window.location.pathname.startsWith('/centro-cirurgico')) return 'assistencial';
     if (window.location.pathname.startsWith('/gestao-pendencias')) return 'faturamento';
+    if (window.location.pathname.startsWith('/escuta-santa-casa')) return 'escuta-santa-casa';
     return null;
   });
 
@@ -34,6 +35,7 @@ const Sidebar: React.FC = () => {
     else if (location.pathname.startsWith('/taxa-ocupacao')) setExpandedMenu('taxa-ocupacao');
     else if (location.pathname.startsWith('/pacientes-internados') || location.pathname.startsWith('/centro-cirurgico')) setExpandedMenu('assistencial');
     else if (location.pathname.startsWith('/gestao-pendencias')) setExpandedMenu('faturamento');
+    else if (location.pathname.startsWith('/escuta-santa-casa')) setExpandedMenu('escuta-santa-casa');
   }, [location.pathname, isCollapsed]);
 
   useEffect(() => {
@@ -465,6 +467,68 @@ const Sidebar: React.FC = () => {
                         }
                       >
                         Gestão de Pendências
+                      </NavLink>
+                    </div>
+                  )}
+                </div>
+              );
+            }
+
+            if (module.slug === 'escuta-santa-casa') {
+              const isActiveLocal = location.pathname.startsWith('/escuta-santa-casa');
+              return (
+                <div key={module.slug} className="flex flex-col">
+                  {isCollapsed ? (
+                    <a
+                      href="/escuta-santa-casa"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      title={module.name}
+                      className={navLinkClass(isActiveLocal)}
+                    >
+                      <DynamicIcon name={module.icon} className="h-5 w-5 flex-shrink-0" />
+                    </a>
+                  ) : (
+                    <button
+                      onClick={() => {
+                        setExpandedMenu(expandedMenu === 'escuta-santa-casa' ? null : 'escuta-santa-casa');
+                      }}
+                      className={`flex items-center rounded-md text-sm transition-all duration-200 justify-start gap-3 px-3 py-2 w-full ${
+                        isActiveLocal
+                          ? 'bg-primary text-primary-foreground shadow-sm hover:shadow-md hover:shadow-primary/20 font-medium'
+                          : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                      }`}
+                    >
+                      <DynamicIcon name={module.icon} className="h-5 w-5 flex-shrink-0" />
+                      <div className="flex flex-1 items-center justify-between">
+                        <span className="truncate">{module.name}</span>
+                        <ChevronRight className={`h-4 w-4 transition-transform ${expandedMenu === 'escuta-santa-casa' ? 'rotate-90' : ''}`} />
+                      </div>
+                    </button>
+                  )}
+
+                  {!isCollapsed && expandedMenu === 'escuta-santa-casa' && (
+                    <div className="flex flex-col ml-9 mt-1 gap-1 border-l-2 border-border pl-2 border-primary/20">
+                      <a
+                        href="/escuta-santa-casa"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-sm px-3 py-2 rounded-md transition-colors flex items-center justify-between text-muted-foreground hover:bg-muted hover:text-foreground font-medium"
+                      >
+                        <span>Escuta Santa Casa</span>
+                        <DynamicIcon name="ExternalLink" className="h-3.5 w-3.5 opacity-60" />
+                      </a>
+                      <NavLink
+                        to="/escuta-santa-casa/gestao"
+                        className={({ isActive }) => 
+                          `text-sm px-3 py-2 rounded-md transition-colors ${
+                            isActive 
+                              ? 'bg-primary text-primary-foreground shadow-sm font-medium' 
+                              : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                          }`
+                        }
+                      >
+                         Gestão de Denúncias
                       </NavLink>
                     </div>
                   )}

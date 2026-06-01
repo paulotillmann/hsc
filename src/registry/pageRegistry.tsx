@@ -22,5 +22,6 @@ export const pageRegistry: Record<string, React.LazyExoticComponent<React.Compon
   'taxa-ocupacao':lazy(() => import('../pages/TaxaOcupacao/index')),
   'gestao-pendencias': lazy(() => import('../pages/GestaoPendencias/index')),
   'centro-cirurgico':  lazy(() => import('../pages/CentroCirurgico/index')),
+  'escuta-santa-casa': lazy(() => import('../pages/EscutaSantaCasa/index')),
   // 'relatorios': lazy(() => import('../pages/Relatorios')),
 };
