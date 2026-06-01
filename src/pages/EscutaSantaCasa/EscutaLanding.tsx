@@ -23,11 +23,13 @@ import {
   ArrowUpRight
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
+import { usePermissions } from '../../hooks/usePermissions';
 import { denunciaService, Denuncia } from '../../services/denunciaService';
 
 export default function EscutaLanding() {
   const navigate = useNavigate();
   const { profile } = useAuth();
+  const { canAccess } = usePermissions();
 
   // Estados para Acompanhamento de Denúncia
   const [modalAberto, setModalAberto] = useState(false);
@@ -124,7 +126,7 @@ export default function EscutaLanding() {
               Conexão Segura e Criptografada
             </div>
             
-            {profile && (
+            {profile && canAccess('gestao-escuta-santa-casa') && (
               <button
                 onClick={() => navigate('/dashboard')}
                 className="inline-flex h-9 items-center justify-center gap-1.5 border bg-white hover:bg-slate-50 text-slate-700 hover:text-slate-900 text-xs font-bold rounded-lg px-3.5 transition-all shadow-sm shrink-0 cursor-pointer border-slate-200 dark:bg-slate-900 dark:border-slate-800 dark:text-slate-300 dark:hover:bg-slate-800"
