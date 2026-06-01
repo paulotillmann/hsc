@@ -45,7 +45,7 @@ export default function EscutaLanding() {
       transition: {
         delay: i * 0.1,
         duration: 0.5,
-        ease: 'easeOut'
+        ease: 'easeOut' as const
       }
     })
   };
