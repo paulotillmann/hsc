@@ -65,3 +65,14 @@ CREATE OR REPLACE TRIGGER set_plantao_ti_escala_updated_at
   BEFORE UPDATE ON public.plantao_ti_escala
   FOR EACH ROW
   EXECUTE FUNCTION public.handle_updated_at();
+
+-- 6. Habilitar Supabase Realtime para a tabela de escala
+do $$
+begin
+  if exists (select 1 from pg_publication where pubname = 'supabase_realtime') then
+    alter publication supabase_realtime add table public.plantao_ti_escala;
+  end if;
+exception
+  when duplicate_object then
+    null;
+end $$;

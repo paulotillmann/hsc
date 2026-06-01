@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { NavLink, useNavigate, useLocation } from 'react-router-dom';
-import { LogOut, Sun, Moon, ChevronLeft, ChevronRight, ChevronDown, HeartPulse, Cpu } from 'lucide-react';
+import { LogOut, Sun, Moon, ChevronLeft, ChevronRight, ChevronDown, HeartPulse, Cpu, Users } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { usePermissions } from '../hooks/usePermissions';
 import DynamicIcon from './DynamicIcon';
@@ -15,29 +15,50 @@ const Sidebar: React.FC = () => {
 
   // Controle unificado de acordeão (apenas um aberto por vez)
   const [expandedMenu, setExpandedMenu] = useState<string | null>(() => {
-    if (window.location.pathname.startsWith('/notificacoes')) return 'notificacoes';
+    if (window.location.pathname.startsWith('/notificacoes')) return 'assistencial';
     if (window.location.pathname.startsWith('/recepcao')) return 'recepcao';
-    if (window.location.pathname.startsWith('/taxa-ocupacao')) return 'taxa-ocupacao';
+    if (window.location.pathname.startsWith('/taxa-ocupacao')) return 'assistencial';
     if (window.location.pathname.startsWith('/pacientes-internados') || window.location.pathname.startsWith('/centro-cirurgico')) return 'assistencial';
     if (window.location.pathname.startsWith('/gestao-pendencias')) return 'faturamento';
     if (window.location.pathname.startsWith('/gestao-escuta-santa-casa')) return 'gestao-escuta-santa-casa';
     if (window.location.pathname.startsWith('/plantao-ti')) return 'tecnologia-informacao';
+    if (window.location.pathname.startsWith('/dashboard') || window.location.pathname.startsWith('/holerites') || window.location.pathname.startsWith('/informes')) return 'recursos-humanos';
+    return null;
+  });
+
+  // Controle de submenus aninhados dentro de Assistencial
+  const [expandedSubMenu, setExpandedSubMenu] = useState<string | null>(() => {
+    if (window.location.pathname.startsWith('/notificacoes')) return 'notificacoes';
+    if (window.location.pathname.startsWith('/taxa-ocupacao')) return 'taxa-ocupacao';
     return null;
   });
 
   useEffect(() => {
     if (isCollapsed) {
       setExpandedMenu(null);
+      setExpandedSubMenu(null);
       return;
     }
 
-    if (location.pathname.startsWith('/notificacoes')) setExpandedMenu('notificacoes');
-    else if (location.pathname.startsWith('/recepcao')) setExpandedMenu('recepcao');
-    else if (location.pathname.startsWith('/taxa-ocupacao')) setExpandedMenu('taxa-ocupacao');
-    else if (location.pathname.startsWith('/pacientes-internados') || location.pathname.startsWith('/centro-cirurgico')) setExpandedMenu('assistencial');
-    else if (location.pathname.startsWith('/gestao-pendencias')) setExpandedMenu('faturamento');
-    else if (location.pathname.startsWith('/gestao-escuta-santa-casa')) setExpandedMenu('gestao-escuta-santa-casa');
-    else if (location.pathname.startsWith('/plantao-ti')) setExpandedMenu('tecnologia-informacao');
+    if (location.pathname.startsWith('/notificacoes')) {
+      setExpandedMenu('assistencial');
+      setExpandedSubMenu('notificacoes');
+    } else if (location.pathname.startsWith('/recepcao')) {
+      setExpandedMenu('recepcao');
+    } else if (location.pathname.startsWith('/taxa-ocupacao')) {
+      setExpandedMenu('assistencial');
+      setExpandedSubMenu('taxa-ocupacao');
+    } else if (location.pathname.startsWith('/pacientes-internados') || location.pathname.startsWith('/centro-cirurgico')) {
+      setExpandedMenu('assistencial');
+    } else if (location.pathname.startsWith('/gestao-pendencias')) {
+      setExpandedMenu('faturamento');
+    } else if (location.pathname.startsWith('/gestao-escuta-santa-casa')) {
+      setExpandedMenu('gestao-escuta-santa-casa');
+    } else if (location.pathname.startsWith('/plantao-ti')) {
+      setExpandedMenu('tecnologia-informacao');
+    } else if (location.pathname.startsWith('/dashboard') || location.pathname.startsWith('/holerites') || location.pathname.startsWith('/informes')) {
+      setExpandedMenu('recursos-humanos');
+    }
   }, [location.pathname, isCollapsed]);
 
   useEffect(() => {
@@ -109,16 +130,28 @@ const Sidebar: React.FC = () => {
         {(() => {
           const hasPacientesAccess = userModules.some(m => m.slug === 'pacientes-internados');
           const hasCentroCirurgicoAccess = userModules.some(m => m.slug === 'centro-cirurgico');
-          const showAssistencial = hasPacientesAccess || hasCentroCirurgicoAccess;
-          const isAssistencialActive = location.pathname.startsWith('/pacientes-internados') || location.pathname.startsWith('/centro-cirurgico');
+          const hasNotificacoesAccess = userModules.some(m => m.slug === 'notificacoes');
+          const hasTaxaOcupacaoAccess = userModules.some(m => m.slug === 'taxa-ocupacao');
+          
+          const showAssistencial = hasPacientesAccess || hasCentroCirurgicoAccess || hasNotificacoesAccess || hasTaxaOcupacaoAccess;
+          const isAssistencialActive = location.pathname.startsWith('/pacientes-internados') || 
+                                       location.pathname.startsWith('/centro-cirurgico') ||
+                                       location.pathname.startsWith('/notificacoes') ||
+                                       location.pathname.startsWith('/taxa-ocupacao');
 
           if (!showAssistencial) return null;
+
+          let firstAssistRoute = '/pacientes-internados';
+          if (hasPacientesAccess) firstAssistRoute = '/pacientes-internados';
+          else if (hasCentroCirurgicoAccess) firstAssistRoute = '/centro-cirurgico';
+          else if (hasNotificacoesAccess) firstAssistRoute = '/notificacoes';
+          else if (hasTaxaOcupacaoAccess) firstAssistRoute = '/taxa-ocupacao';
 
           return (
             <div className="flex flex-col">
               {isCollapsed ? (
                 <NavLink
-                  to={hasPacientesAccess ? '/pacientes-internados' : '/centro-cirurgico'}
+                  to={firstAssistRoute}
                   title="Assistencial"
                   className={navLinkClass(isAssistencialActive)}
                 >
@@ -172,6 +205,116 @@ const Sidebar: React.FC = () => {
                     >
                        Centro Cirúrgico
                     </NavLink>
+                  )}
+                  {hasNotificacoesAccess && (
+                    <div className="flex flex-col">
+                      <button
+                        onClick={() => setExpandedSubMenu(expandedSubMenu === 'notificacoes' ? null : 'notificacoes')}
+                        className={`flex items-center justify-between text-sm px-3 py-2 rounded-md transition-colors w-full ${
+                          location.pathname.startsWith('/notificacoes')
+                            ? 'bg-primary/10 text-primary font-medium'
+                            : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
+                        }`}
+                      >
+                        <span className="truncate">Notificação</span>
+                        <ChevronRight className={`h-3 w-3 transition-transform ${expandedSubMenu === 'notificacoes' ? 'rotate-90' : ''}`} />
+                      </button>
+                      
+                      {expandedSubMenu === 'notificacoes' && (
+                        <div className="flex flex-col ml-3 mt-1 gap-1 border-l border-border pl-2 border-primary/10 animate-in fade-in duration-200">
+                          <NavLink
+                            to="/notificacoes"
+                            end
+                            className={({ isActive }) =>
+                              `text-xs px-3 py-1.5 rounded-md transition-colors ${isActive
+                                ? 'bg-primary/10 text-primary font-medium'
+                                : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
+                              }`
+                            }
+                          >
+                            Cadastros
+                          </NavLink>
+                          <NavLink
+                            to="/notificacoes/graficos"
+                            className={({ isActive }) =>
+                              `text-xs px-3 py-1.5 rounded-md transition-colors ${isActive
+                                ? 'bg-primary/10 text-primary font-medium'
+                                : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
+                              }`
+                            }
+                          >
+                            Gráficos
+                          </NavLink>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  {hasTaxaOcupacaoAccess && (
+                    <div className="flex flex-col">
+                      <button
+                        onClick={() => setExpandedSubMenu(expandedSubMenu === 'taxa-ocupacao' ? null : 'taxa-ocupacao')}
+                        className={`flex items-center justify-between text-sm px-3 py-2 rounded-md transition-colors w-full ${
+                          location.pathname.startsWith('/taxa-ocupacao')
+                            ? 'bg-primary/10 text-primary font-medium'
+                            : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
+                        }`}
+                      >
+                        <span className="truncate">Taxa de Ocupação</span>
+                        <ChevronRight className={`h-3 w-3 transition-transform ${expandedSubMenu === 'taxa-ocupacao' ? 'rotate-90' : ''}`} />
+                      </button>
+                      
+                      {expandedSubMenu === 'taxa-ocupacao' && (
+                        <div className="flex flex-col ml-3 mt-1 gap-1 border-l border-border pl-2 border-primary/10 animate-in fade-in duration-200">
+                          <NavLink
+                            to="/taxa-ocupacao"
+                            end
+                            className={({ isActive }) =>
+                              `text-xs px-3 py-1.5 rounded-md transition-colors ${isActive
+                                ? 'bg-primary/10 text-primary font-medium'
+                                : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
+                              }`
+                            }
+                          >
+                            Visão Geral
+                          </NavLink>
+                          {isAdmin && (
+                            <NavLink
+                              to="/taxa-ocupacao/cadastro-setor-leitos"
+                              className={({ isActive }) =>
+                                `text-xs px-3 py-1.5 rounded-md transition-colors ${isActive
+                                  ? 'bg-primary/10 text-primary font-medium'
+                                  : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
+                                }`
+                              }
+                            >
+                              Cadastro Setor e Leitos
+                            </NavLink>
+                          )}
+                          <NavLink
+                            to="/taxa-ocupacao/lancamento-taxas"
+                            className={({ isActive }) =>
+                              `text-xs px-3 py-1.5 rounded-md transition-colors ${isActive
+                                ? 'bg-primary/10 text-primary font-medium'
+                                : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
+                              }`
+                            }
+                          >
+                            Lançamento de Taxas
+                          </NavLink>
+                          <NavLink
+                            to="/taxa-ocupacao/relatorios"
+                            className={({ isActive }) =>
+                              `text-xs px-3 py-1.5 rounded-md transition-colors ${isActive
+                                ? 'bg-primary/10 text-primary font-medium'
+                                : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
+                              }`
+                            }
+                          >
+                            Relatórios
+                          </NavLink>
+                        </div>
+                      )}
+                    </div>
                   )}
                 </div>
               )}
@@ -238,70 +381,103 @@ const Sidebar: React.FC = () => {
           );
         })()}
 
-        {userModules
-          .filter(m => m.slug !== 'configuracoes' && m.slug !== 'pacientes-internados' && m.slug !== 'centro-cirurgico' && m.slug !== 'plantao-ti') // Configurações fica na área inferior, e assistenciais e TI ficam agrupados
-          .map(module => {
-            if (module.slug === 'notificacoes') {
-              const isActiveLocal = location.pathname.startsWith('/notificacoes');
-              return (
-                <div key={module.slug} className="flex flex-col">
-                  {isCollapsed ? (
-                    <NavLink
-                      to={`/${module.slug}`}
-                      title={module.name}
-                      className={navLinkClass(isActiveLocal)}
-                    >
-                      <DynamicIcon name={module.icon} className="h-5 w-5 flex-shrink-0" />
-                    </NavLink>
-                  ) : (
-                    <button
-                      onClick={() => {
-                        setExpandedMenu(expandedMenu === 'notificacoes' ? null : 'notificacoes');
-                        if (!isActiveLocal) navigate('/notificacoes');
-                      }}
-                      className={`flex items-center rounded-md text-sm transition-all duration-200 justify-start gap-3 px-3 py-2 w-full ${isActiveLocal
-                          ? 'bg-primary text-primary-foreground shadow-sm hover:shadow-md hover:shadow-primary/20 font-medium'
-                          : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
-                        }`}
-                    >
-                      <DynamicIcon name={module.icon} className="h-5 w-5 flex-shrink-0" />
-                      <div className="flex flex-1 items-center justify-between">
-                        <span className="truncate">{module.name}</span>
-                        <ChevronRight className={`h-4 w-4 transition-transform ${expandedMenu === 'notificacoes' ? 'rotate-90' : ''}`} />
-                      </div>
-                    </button>
-                  )}
+        {/* Categoria Recursos Humanos (Agrupador) */}
+        {(() => {
+          const hasDashboardAccess = userModules.some(m => m.slug === 'dashboard');
+          const hasHoleriteAccess = userModules.some(m => m.slug === 'holerites');
+          const hasInformeAccess = userModules.some(m => m.slug === 'informes');
+          const showRH = hasDashboardAccess || hasHoleriteAccess || hasInformeAccess;
+          const isRHActive = location.pathname.startsWith('/dashboard') || location.pathname.startsWith('/holerites') || location.pathname.startsWith('/informes');
 
-                  {!isCollapsed && expandedMenu === 'notificacoes' && (
-                    <div className="flex flex-col ml-9 mt-1 gap-1 border-l-2 border-border pl-2 border-primary/20">
-                      <NavLink
-                        to="/notificacoes"
-                        end
-                        className={({ isActive }) =>
-                          `text-sm px-3 py-2 rounded-md transition-colors ${isActive
-                            ? 'bg-primary text-primary-foreground shadow-sm font-medium'
-                            : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
-                          }`
-                        }
-                      >
-                        Cadastros
-                      </NavLink>
-                      <NavLink
-                        to="/notificacoes/graficos"
-                        className={({ isActive }) =>
-                          `text-sm px-3 py-2 rounded-md transition-colors ${isActive
-                            ? 'bg-primary text-primary-foreground shadow-sm font-medium'
-                            : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
-                          }`
-                        }
-                      >
-                        Gráficos
-                      </NavLink>
-                    </div>
+          if (!showRH) return null;
+
+          let firstRHRoute = '/dashboard';
+          if (hasDashboardAccess) firstRHRoute = '/dashboard';
+          else if (hasHoleriteAccess) firstRHRoute = '/holerites';
+          else if (hasInformeAccess) firstRHRoute = '/informes';
+
+          return (
+            <div className="flex flex-col">
+              {isCollapsed ? (
+                <NavLink
+                  to={firstRHRoute}
+                  title="Recursos Humanos"
+                  className={navLinkClass(isRHActive)}
+                >
+                  <Users className="h-5 w-5 flex-shrink-0" />
+                </NavLink>
+              ) : (
+                <button
+                  onClick={() => {
+                    setExpandedMenu(expandedMenu === 'recursos-humanos' ? null : 'recursos-humanos');
+                  }}
+                  className={`flex items-center rounded-md text-sm transition-all duration-200 justify-start gap-3 px-3 py-2 w-full ${
+                    isRHActive
+                      ? 'bg-primary text-primary-foreground shadow-sm hover:shadow-md hover:shadow-primary/20 font-medium'
+                      : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                  }`}
+                >
+                  <Users className="h-5 w-5 flex-shrink-0" />
+                  <div className="flex flex-1 items-center justify-between">
+                    <span className="truncate">Recursos Humanos</span>
+                    <ChevronRight className={`h-4 w-4 transition-transform ${expandedMenu === 'recursos-humanos' ? 'rotate-90' : ''}`} />
+                  </div>
+                </button>
+              )}
+
+              {!isCollapsed && expandedMenu === 'recursos-humanos' && (
+                <div className="flex flex-col ml-9 mt-1 gap-1 border-l-2 border-border pl-2 border-primary/20 animate-in fade-in duration-300">
+                  {hasDashboardAccess && (
+                    <NavLink
+                      to="/dashboard"
+                      className={({ isActive }) => 
+                        `text-sm px-3 py-2 rounded-md transition-colors ${
+                          isActive 
+                            ? 'bg-primary/10 text-primary font-medium' 
+                            : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                        }`
+                      }
+                    >
+                       Visão Geral
+                    </NavLink>
+                  )}
+                  {hasHoleriteAccess && (
+                    <NavLink
+                      to="/holerites"
+                      className={({ isActive }) => 
+                        `text-sm px-3 py-2 rounded-md transition-colors ${
+                          isActive 
+                            ? 'bg-primary/10 text-primary font-medium' 
+                            : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                        }`
+                      }
+                    >
+                       Holerite
+                    </NavLink>
+                  )}
+                  {hasInformeAccess && (
+                    <NavLink
+                      to="/informes"
+                      className={({ isActive }) => 
+                        `text-sm px-3 py-2 rounded-md transition-colors ${
+                          isActive 
+                            ? 'bg-primary/10 text-primary font-medium' 
+                            : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                        }`
+                      }
+                    >
+                       Informe
+                    </NavLink>
                   )}
                 </div>
-              );
-            }
+              )}
+            </div>
+          );
+        })()}
+
+        {userModules
+          .filter(m => m.slug !== 'configuracoes' && m.slug !== 'pacientes-internados' && m.slug !== 'centro-cirurgico' && m.slug !== 'plantao-ti' && m.slug !== 'dashboard' && m.slug !== 'holerites' && m.slug !== 'informes' && m.slug !== 'notificacoes' && m.slug !== 'taxa-ocupacao') // Configurações fica na área inferior, e assistenciais, TI, RH, notificações e taxas ficam agrupados
+          .map(module => {
 
             if (module.slug === 'recepcao') {
               const isActiveLocal = location.pathname.startsWith('/recepcao');
@@ -398,91 +574,6 @@ const Sidebar: React.FC = () => {
               );
             }
 
-            if (module.slug === 'taxa-ocupacao') {
-              const isActiveLocal = location.pathname.startsWith('/taxa-ocupacao');
-              return (
-                <div key={module.slug} className="flex flex-col">
-                  {isCollapsed ? (
-                    <NavLink
-                      to={`/${module.slug}`}
-                      title={module.name}
-                      className={navLinkClass(isActiveLocal)}
-                    >
-                      <DynamicIcon name={module.icon} className="h-5 w-5 flex-shrink-0" />
-                    </NavLink>
-                  ) : (
-                    <button
-                      onClick={() => {
-                        setExpandedMenu(expandedMenu === 'taxa-ocupacao' ? null : 'taxa-ocupacao');
-                        if (!isActiveLocal) navigate('/taxa-ocupacao');
-                      }}
-                      className={`flex items-center rounded-md text-sm transition-all duration-200 justify-start gap-3 px-3 py-2 w-full ${isActiveLocal
-                          ? 'bg-primary text-primary-foreground shadow-sm hover:shadow-md hover:shadow-primary/20 font-medium'
-                          : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
-                        }`}
-                    >
-                      <DynamicIcon name={module.icon} className="h-5 w-5 flex-shrink-0" />
-                      <div className="flex flex-1 items-center justify-between">
-                        <span className="truncate">{module.name}</span>
-                        <ChevronRight className={`h-4 w-4 transition-transform ${expandedMenu === 'taxa-ocupacao' ? 'rotate-90' : ''}`} />
-                      </div>
-                    </button>
-                  )}
-
-                  {!isCollapsed && expandedMenu === 'taxa-ocupacao' && (
-                    <div className="flex flex-col ml-9 mt-1 gap-1 border-l-2 border-border pl-2 border-primary/20">
-                      <NavLink
-                        to="/taxa-ocupacao"
-                        end
-                        className={({ isActive }) =>
-                          `text-sm px-3 py-2 rounded-md transition-colors ${isActive
-                            ? 'bg-primary text-primary-foreground shadow-sm font-medium'
-                            : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
-                          }`
-                        }
-                      >
-                        Visão Geral
-                      </NavLink>
-                      {isAdmin && (
-                        <NavLink
-                          to="/taxa-ocupacao/cadastro-setor-leitos"
-                          className={({ isActive }) =>
-                            `text-sm px-3 py-2 rounded-md transition-colors ${isActive
-                              ? 'bg-primary text-primary-foreground shadow-sm font-medium'
-                              : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
-                            }`
-                          }
-                        >
-                          Cadastro Setor e Leitos
-                        </NavLink>
-                      )}
-                      <NavLink
-                        to="/taxa-ocupacao/lancamento-taxas"
-                        className={({ isActive }) =>
-                          `text-sm px-3 py-2 rounded-md transition-colors ${isActive
-                            ? 'bg-primary text-primary-foreground shadow-sm font-medium'
-                            : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
-                          }`
-                        }
-                      >
-                        Lançamento de Taxas
-                      </NavLink>
-                      <NavLink
-                        to="/taxa-ocupacao/relatorios"
-                        className={({ isActive }) =>
-                          `text-sm px-3 py-2 rounded-md transition-colors ${isActive
-                            ? 'bg-primary text-primary-foreground shadow-sm font-medium'
-                            : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
-                          }`
-                        }
-                      >
-                        Relatórios
-                      </NavLink>
-                    </div>
-                  )}
-                </div>
-              );
-            }
 
             if (module.slug === 'gestao-pendencias') {
               const isActiveLocal = location.pathname.startsWith('/gestao-pendencias');
