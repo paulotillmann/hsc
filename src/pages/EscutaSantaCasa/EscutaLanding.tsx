@@ -23,11 +23,13 @@ import {
   ArrowUpRight
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
+import { usePermissions } from '../../hooks/usePermissions';
 import { denunciaService, Denuncia } from '../../services/denunciaService';
 
 export default function EscutaLanding() {
   const navigate = useNavigate();
   const { profile } = useAuth();
+  const { canAccess } = usePermissions();
 
   // Estados para Acompanhamento de Denúncia
   const [modalAberto, setModalAberto] = useState(false);
@@ -106,12 +108,15 @@ export default function EscutaLanding() {
       <header className="w-full border-b border-slate-100 bg-white/80 backdrop-blur-md sticky top-0 z-40 transition-colors dark:bg-slate-900/80 dark:border-slate-800">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="p-2 bg-primary/10 rounded-xl text-primary border border-primary/20">
-              <ShieldAlert className="h-6 w-6" />
+            <div className="flex items-center pr-3 border-r border-slate-200 dark:border-slate-800 h-9">
+              <img src="/LOGO_HSC_PRIMARY.png" alt="Santa Casa" className="h-8 w-auto dark:hidden object-contain" />
+              <img src="/LOGO_HSC_WHITE.png" alt="Santa Casa" className="h-8 w-auto hidden dark:block object-contain" />
             </div>
-            <div className="flex flex-col">
-              <span className="font-black text-slate-900 tracking-tight dark:text-white text-lg leading-none">Escuta</span>
-              <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest leading-none mt-1">Santa Casa</span>
+            <div className="flex items-center gap-2">
+              <div className="p-1.5 bg-primary/10 rounded-lg text-primary border border-primary/20">
+                <ShieldAlert className="h-4.5 w-4.5" />
+              </div>
+              <span className="font-bold text-slate-900 dark:text-white text-lg tracking-tight">Escuta Santa Casa</span>
             </div>
           </div>
           
@@ -121,7 +126,7 @@ export default function EscutaLanding() {
               Conexão Segura e Criptografada
             </div>
             
-            {profile && (
+            {profile && canAccess('gestao-escuta-santa-casa') && (
               <button
                 onClick={() => navigate('/dashboard')}
                 className="inline-flex h-9 items-center justify-center gap-1.5 border bg-white hover:bg-slate-50 text-slate-700 hover:text-slate-900 text-xs font-bold rounded-lg px-3.5 transition-all shadow-sm shrink-0 cursor-pointer border-slate-200 dark:bg-slate-900 dark:border-slate-800 dark:text-slate-300 dark:hover:bg-slate-800"
@@ -192,8 +197,8 @@ export default function EscutaLanding() {
                     <ShieldCheck className="h-6 w-6" />
                   </div>
                   <div className="mt-4 text-center">
-                    <span className="text-xs font-bold text-slate-900 dark:text-white block">Canal Independente</span>
-                    <span className="text-[10px] font-semibold text-slate-400 block mt-0.5">Hospital Santa Casa</span>
+                    <span className="text-xs font-bold text-slate-900 dark:text-white block">Canal de Denúncias</span>
+                    <span className="text-[10px] font-semibold text-slate-400 block mt-0.5">Santa Casa de Misericórdia de Araguari</span>
                   </div>
                 </div>
               </motion.div>

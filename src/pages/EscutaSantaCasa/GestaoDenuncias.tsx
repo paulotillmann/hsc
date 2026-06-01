@@ -267,7 +267,7 @@ export default function GestaoDenuncias() {
   };
 
   return (
-    <div className="flex-1 min-h-screen pb-16 w-full mx-auto px-4 sm:px-6 lg:px-8 pt-8 space-y-8 max-w-7xl overflow-x-hidden">
+    <div className="flex flex-1 flex-col gap-6 p-6 md:p-8 animate-in fade-in zoom-in duration-500 w-full">
       
       {/* ── HEADER PREMIUM ── */}
       <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 pb-4 border-b">
