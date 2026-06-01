@@ -114,7 +114,7 @@ export default function EscutaLanding() {
               <div className="p-1.5 bg-primary/10 rounded-lg text-primary border border-primary/20">
                 <ShieldAlert className="h-4.5 w-4.5" />
               </div>
-              <span className="font-bold text-slate-900 dark:text-white text-lg tracking-tight">Escuta Santa Casa de Misericórdia de Araguari</span>
+              <span className="font-bold text-slate-900 dark:text-white text-lg tracking-tight">Escuta Santa Casa</span>
             </div>
           </div>
           
