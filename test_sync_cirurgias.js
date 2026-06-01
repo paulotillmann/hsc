@@ -96,17 +96,12 @@ async function testSync() {
 
     console.log(`Mapeamento concluído com sucesso. ${mapped.length} registros prontos.`);
 
-    // Imprimir o primeiro registro como demonstração de dados estruturados
-    if (mapped.length > 0) {
-      console.log("\n--- Amostra do Primeiro Registro Mapeado ---");
-      console.log(JSON.stringify(mapped[0], null, 2));
-      console.log("-------------------------------------------\n");
-    }
+    // Lista eventos distintos retornados pelo n8n
+    const eventosDistintos = Array.from(new Set(rawData.map(item => item.EVENTO).filter(Boolean)));
+    console.log("\n=== EVENTOS DISTINTOS DO WEBHOOK N8N ===");
+    console.log(eventosDistintos);
+    console.log("========================================\n");
 
-    // Como as políticas de segurança (RLS) impedem a escrita via anon_key (exigem service_role)
-    // nós não faremos o upsert de produção aqui para evitar erros de permissão 401/403.
-    // O teste valida com precisão de 100% que os dados retornados do webhook possuem o formato exato 
-    // esperado pela tabela PostgreSQL 'cirurgias'.
     console.log("Validação de tipos e formatos: APROVADA.");
     console.log("=== FIM DA SIMULAÇÃO COM SUCESSO ===");
 
