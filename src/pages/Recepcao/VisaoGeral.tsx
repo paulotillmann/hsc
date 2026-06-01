@@ -262,24 +262,24 @@ export default function VisaoGeral() {
   };
 
   return (
-    <div className="flex flex-1 flex-col gap-8 p-6 md:p-8 animate-in fade-in zoom-in duration-500 bg-slate-50 dark:bg-[#0a0d14] min-h-screen text-slate-800 dark:text-slate-100 pb-16">
+    <div className="flex flex-1 flex-col gap-8 p-6 md:p-8 animate-in fade-in zoom-in duration-500 bg-background text-foreground pb-16">
       {/* HEADER */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div className="flex flex-col gap-2">
-          <h1 className="text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white flex items-center gap-3">
+          <h1 className="text-3xl font-extrabold tracking-tight text-foreground flex items-center gap-3">
             <div className="p-2.5 bg-red-500/10 rounded-2xl border border-red-500/20 text-[#8a1515] dark:text-[#f43f5e] shadow-[0_0_15px_rgba(138,21,21,0.1)]">
               <Activity className="h-6 w-6" />
             </div>
             Recepção: Visão Geral
           </h1>
-          <p className="text-sm text-slate-500 dark:text-slate-400">
+          <p className="text-sm text-muted-foreground">
             Acompanhe em tempo real os dados de visitas, acompanhantes, prestadores de serviço e pacientes internados.
           </p>
         </div>
         
         <button
           onClick={handleRefresh}
-          className="inline-flex items-center justify-center rounded-xl text-sm font-semibold transition-all border border-slate-200 dark:border-white/10 bg-white dark:bg-white/5 hover:bg-slate-50 dark:hover:bg-white/10 text-slate-700 dark:text-white px-4 py-2.5 shadow-md flex-shrink-0 cursor-pointer gap-2"
+          className="inline-flex items-center justify-center rounded-xl text-sm font-semibold transition-all border border-border bg-card hover:bg-muted text-foreground px-4 py-2.5 shadow-md flex-shrink-0 cursor-pointer gap-2"
         >
           <RefreshCw className={`h-4 w-4 ${loading || loadingCharts ? 'animate-spin' : ''}`} />
           Atualizar Dados
@@ -342,14 +342,14 @@ export default function VisaoGeral() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         
         {/* Gráfico 1: Acompanhantes vs Visitantes Semanal (Barras Verticais lado a lado em tons de Vermelho) */}
-        <div className="lg:col-span-2 bg-white dark:bg-[#121625] p-6 rounded-2xl border border-slate-200/80 dark:border-white/5 flex flex-col shadow-md dark:shadow-xl min-h-[420px]">
+        <div className="lg:col-span-2 bg-card p-6 rounded-2xl border border-border flex flex-col shadow-md dark:shadow-xl min-h-[420px]">
           <div className="flex justify-between items-center mb-6">
             <div>
-              <h3 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+              <h3 className="text-lg font-bold text-foreground flex items-center gap-2">
                 <BarChart3 className="w-5 h-5 text-[#8a1515]" />
                 Comparativo Semanal (Segunda a Domingo)
               </h3>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+              <p className="text-xs text-muted-foreground mt-1">
                 Quantidade diária de acompanhantes e visitantes da semana atual.
               </p>
             </div>
@@ -359,10 +359,10 @@ export default function VisaoGeral() {
             {loadingCharts ? (
               <div className="w-full h-full flex flex-col items-center justify-center gap-3">
                 <div className="h-8 w-8 rounded-full border-2 border-red-700 border-t-transparent animate-spin" />
-                <span className="text-sm text-slate-500 dark:text-slate-400">Carregando dados semanais...</span>
+                <span className="text-sm text-muted-foreground">Carregando dados semanais...</span>
               </div>
             ) : weeklyDataset.length === 0 ? (
-              <div className="w-full h-full flex items-center justify-center text-sm text-slate-500 dark:text-slate-400">
+              <div className="w-full h-full flex items-center justify-center text-sm text-muted-foreground">
                 Nenhum dado encontrado para a semana atual.
               </div>
             ) : (
@@ -374,10 +374,10 @@ export default function VisaoGeral() {
                   <Tooltip 
                     cursor={{ fill: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)' }}
                     contentStyle={{ 
-                      backgroundColor: isDark ? '#121625' : '#ffffff', 
-                      borderColor: isDark ? 'rgba(255,255,255,0.1)' : '#e2e8f0', 
+                      backgroundColor: 'var(--card)', 
+                      borderColor: 'var(--border)', 
                       borderRadius: '12px',
-                      color: isDark ? '#f8fafc' : '#1e293b',
+                      color: 'var(--card-foreground)',
                       boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)'
                     }}
                   />
@@ -396,13 +396,13 @@ export default function VisaoGeral() {
         </div>
 
         {/* Gráfico 2: Rosca de Atendentes (Donut - Modelo do Anexo 2 em Tons Monocromáticos Vermelhos) */}
-        <div className="bg-white dark:bg-[#121625] p-6 rounded-2xl border border-slate-200/80 dark:border-white/5 flex flex-col shadow-md dark:shadow-xl min-h-[420px]">
+        <div className="bg-card p-6 rounded-2xl border border-border flex flex-col shadow-md dark:shadow-xl min-h-[420px]">
           <div className="mb-6">
-            <h3 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+            <h3 className="text-lg font-bold text-foreground flex items-center gap-2">
               <PieIcon className="w-5 h-5 text-[#8a1515]" />
               Cadastro de Visitas por Usuário
             </h3>
-            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+            <p className="text-xs text-muted-foreground mt-1">
               Participação de cada atendente nos cadastros da semana atual.
             </p>
           </div>
@@ -411,10 +411,10 @@ export default function VisaoGeral() {
             {loadingCharts ? (
               <div className="flex flex-col items-center justify-center gap-3">
                 <div className="h-8 w-8 rounded-full border-2 border-red-700 border-t-transparent animate-spin" />
-                <span className="text-sm text-slate-500 dark:text-slate-400">Carregando dados de atendentes...</span>
+                <span className="text-sm text-muted-foreground">Carregando dados de atendentes...</span>
               </div>
             ) : donutDataset.length === 0 ? (
-              <span className="text-sm text-slate-500 dark:text-slate-400">Nenhum cadastro nesta semana.</span>
+              <span className="text-sm text-muted-foreground">Nenhum cadastro nesta semana.</span>
             ) : (
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
@@ -423,7 +423,7 @@ export default function VisaoGeral() {
                     y="43%" 
                     textAnchor="middle" 
                     dominantBaseline="middle" 
-                    className="fill-slate-900 dark:fill-white text-3xl font-extrabold font-sans"
+                    className="fill-foreground text-3xl font-extrabold font-sans"
                   >
                     {totalWeekVisits}
                   </text>
@@ -432,7 +432,7 @@ export default function VisaoGeral() {
                     y="53%" 
                     textAnchor="middle" 
                     dominantBaseline="middle" 
-                    className="fill-slate-500 dark:fill-slate-400 text-[11px] font-bold uppercase tracking-wider"
+                    className="fill-muted-foreground text-[11px] font-bold uppercase tracking-wider"
                   >
                     Acessos
                   </text>
@@ -454,10 +454,10 @@ export default function VisaoGeral() {
                   </Pie>
                   <Tooltip 
                     contentStyle={{ 
-                      backgroundColor: isDark ? '#121625' : '#ffffff', 
-                      borderColor: isDark ? 'rgba(255,255,255,0.1)' : '#e2e8f0', 
+                      backgroundColor: 'var(--card)', 
+                      borderColor: 'var(--border)', 
                       borderRadius: '12px',
-                      color: isDark ? '#f8fafc' : '#1e293b',
+                      color: 'var(--card-foreground)',
                       boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)'
                     }}
                   />
@@ -474,30 +474,30 @@ export default function VisaoGeral() {
         </div>
 
         {/* Gráfico 3: Volume Diário no Mês (Barra Vermelha Estilizada) */}
-        <div className="lg:col-span-3 bg-white dark:bg-[#121625] p-6 rounded-2xl border border-slate-200/80 dark:border-white/5 flex flex-col shadow-md dark:shadow-xl min-h-[400px]">
+        <div className="lg:col-span-3 bg-card p-6 rounded-2xl border border-border flex flex-col shadow-md dark:shadow-xl min-h-[400px]">
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
             <div>
-              <h3 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+              <h3 className="text-lg font-bold text-foreground flex items-center gap-2">
                 <Calendar className="w-5 h-5 text-[#8a1515]" />
                 Histórico Diário de Acessos
               </h3>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+              <p className="text-xs text-muted-foreground mt-1">
                 Volume total de visitas registradas em cada dia do mês selecionado.
               </p>
             </div>
 
             {/* Elegant Period Picker */}
             <div className="flex items-center gap-2">
-              <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+              <label className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
                 Período:
               </label>
               <select
                 value={selectedMonth}
                 onChange={(e) => setSelectedMonth(e.target.value)}
-                className="bg-slate-100 dark:bg-[#1b2136] border border-slate-200 dark:border-white/10 rounded-xl px-3 py-1.5 text-xs text-slate-800 dark:text-white font-semibold focus:outline-none focus:ring-2 focus:ring-[#8a1515] cursor-pointer hover:border-slate-300 dark:hover:border-white/20 transition-all shadow-sm"
+                className="bg-muted border border-border rounded-xl px-3 py-1.5 text-xs text-foreground font-semibold focus:outline-none focus:ring-2 focus:ring-primary cursor-pointer hover:border-border/80 transition-all shadow-sm"
               >
                 {monthsOptions.map(opt => (
-                  <option key={opt.value} value={opt.value} className="bg-white dark:bg-[#121625] text-slate-800 dark:text-white">
+                  <option key={opt.value} value={opt.value} className="bg-card text-foreground">
                     {opt.label}
                   </option>
                 ))}
@@ -509,10 +509,10 @@ export default function VisaoGeral() {
             {loadingCharts ? (
               <div className="w-full h-full flex flex-col items-center justify-center gap-3">
                 <div className="h-8 w-8 rounded-full border-2 border-red-700 border-t-transparent animate-spin" />
-                <span className="text-sm text-slate-500 dark:text-slate-400">Carregando dados mensais...</span>
+                <span className="text-sm text-muted-foreground">Carregando dados mensais...</span>
               </div>
             ) : monthlyDataset.length === 0 ? (
-              <div className="w-full h-full flex items-center justify-center text-sm text-slate-500 dark:text-slate-400">
+              <div className="w-full h-full flex items-center justify-center text-sm text-muted-foreground">
                 Nenhum dado encontrado para o mês selecionado.
               </div>
             ) : (
@@ -524,10 +524,10 @@ export default function VisaoGeral() {
                   <Tooltip 
                     cursor={{ fill: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)' }}
                     contentStyle={{ 
-                      backgroundColor: isDark ? '#121625' : '#ffffff', 
-                      borderColor: isDark ? 'rgba(255,255,255,0.1)' : '#e2e8f0', 
+                      backgroundColor: 'var(--card)', 
+                      borderColor: 'var(--border)', 
                       borderRadius: '12px',
-                      color: isDark ? '#f8fafc' : '#1e293b',
+                      color: 'var(--card-foreground)',
                       boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)'
                     }}
                   />
