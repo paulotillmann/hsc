@@ -471,8 +471,8 @@ const Sidebar: React.FC = () => {
           </NavLink>
         )}
 
-        {/* Configurações — apenas se o módulo estiver liberado para o perfil */}
-        {userModules.some(m => m.slug === 'configuracoes') && (
+        {/* Configurações — apenas se o módulo estiver liberado para o perfil ou for administrador */}
+        {(isAdmin || userModules.some(m => m.slug === 'configuracoes')) && (
           <NavLink
             to="/configuracoes"
             title="Configurações"

@@ -48,6 +48,107 @@ const DEFAULT_PERMISSIONS: Permissions = {
   can_view_all: false,
 };
 
+// Helper para fornecer módulos padrão como fallback seguro quando o banco estiver vazio ou perfil não configurado
+const getDefaultModules = (isAdmin: boolean): Module[] => {
+  const baseModules: Module[] = [
+    {
+      id: 'm-dashboard',
+      name: 'Dashboard',
+      slug: 'dashboard',
+      icon: 'LayoutDashboard',
+      is_active: true,
+      sort_order: 10,
+      is_system: true,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    },
+    {
+      id: 'm-informes',
+      name: 'Informes de Rendimento',
+      slug: 'informes',
+      icon: 'FileText',
+      is_active: true,
+      sort_order: 20,
+      is_system: true,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    },
+    {
+      id: 'm-holerites',
+      name: 'Holerites',
+      slug: 'holerites',
+      icon: 'Receipt',
+      is_active: true,
+      sort_order: 30,
+      is_system: true,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    },
+  ];
+
+  if (isAdmin) {
+    baseModules.push(
+      {
+        id: 'm-notificacoes',
+        name: 'Notificações',
+        slug: 'notificacoes',
+        icon: 'AlertTriangle',
+        is_active: true,
+        sort_order: 50,
+        is_system: false,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      },
+      {
+        id: 'm-recepcao',
+        name: 'Recepção',
+        slug: 'recepcao',
+        icon: 'Users',
+        is_active: true,
+        sort_order: 60,
+        is_system: false,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      },
+      {
+        id: 'm-taxa-ocupacao',
+        name: 'Taxa de Ocupação',
+        slug: 'taxa-ocupacao',
+        icon: 'TrendingUp',
+        is_active: true,
+        sort_order: 70,
+        is_system: false,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      },
+      {
+        id: 'm-escuta',
+        name: 'Gestão Escuta Santa Casa',
+        slug: 'escuta-santa-casa',
+        icon: 'ShieldAlert',
+        is_active: true,
+        sort_order: 80,
+        is_system: false,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      },
+      {
+        id: 'm-configuracoes',
+        name: 'Configurações',
+        slug: 'configuracoes',
+        icon: 'Settings',
+        is_active: true,
+        sort_order: 90,
+        is_system: true,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      }
+    );
+  }
+
+  return baseModules;
+};
+
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -111,17 +212,32 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
             if (rmpError) {
               console.error('[AuthContext] Erro ao buscar módulos:', rmpError.message);
-              setUserModules([]);
+              setUserModules(getDefaultModules(data.role === 'admin'));
             } else {
               // Extrai os módulos, filtra apenas os ativos e ordena
               const modules = (rmpData ?? [])
                 .map((row: any) => row.modules as Module)
                 .filter((m: Module) => m && m.is_active)
                 .sort((a: Module, b: Module) => a.sort_order - b.sort_order);
-              setUserModules(modules);
+              
+              if (modules.length === 0) {
+                // Se a tabela modules estiver totalmente vazia no banco, usamos o fallback.
+                // Caso contrário, se há módulos cadastrados mas nenhuma permissão vinculada, mantemos vazia.
+                const { count, error: countError } = await supabase
+                  .from('modules')
+                  .select('*', { count: 'exact', head: true });
+                
+                if (!countError && count === 0) {
+                  setUserModules(getDefaultModules(data.role === 'admin'));
+                } else {
+                  setUserModules([]);
+                }
+              } else {
+                setUserModules(modules);
+              }
             }
           } else {
-            setUserModules([]);
+            setUserModules(getDefaultModules(data.role === 'admin'));
           }
         } else {
           // Fallback: campo role text ('admin' | 'colaborador')
@@ -134,7 +250,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             can_send_email: isAdmin,
             can_view_all: isAdmin,
           });
-          setUserModules([]);
+          setUserModules(getDefaultModules(isAdmin));
         }
       }
     } catch (err) {

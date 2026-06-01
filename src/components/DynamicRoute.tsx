@@ -53,7 +53,7 @@ const ModuleNotFound: React.FC<{ slug: string }> = ({ slug }) => (
 const DynamicRoute: React.FC = () => {
   const { moduleSlug } = useParams<{ moduleSlug: string }>();
   const { profileLoaded } = useAuth();
-  const { canAccess } = usePermissions();
+  const { canAccess, isAdmin } = usePermissions();
 
   // Aguarda o perfil carregar antes de julgar permissões
   if (!profileLoaded) {
@@ -64,8 +64,9 @@ const DynamicRoute: React.FC = () => {
     return <Navigate to="/" replace />;
   }
 
-  // Verifica permissão de acesso ao módulo pelo slug
-  if (!canAccess(moduleSlug)) {
+  // Verifica permissão de acesso ao módulo pelo slug (Admins sempre podem acessar as configurações)
+  const hasAccess = canAccess(moduleSlug) || (moduleSlug === 'configuracoes' && isAdmin);
+  if (!hasAccess) {
     return <AccessDenied />;
   }
 
