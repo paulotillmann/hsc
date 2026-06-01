@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { NavLink, useNavigate, useLocation } from 'react-router-dom';
-import { LogOut, Sun, Moon, ChevronLeft, ChevronRight, ChevronDown, HeartPulse } from 'lucide-react';
+import { LogOut, Sun, Moon, ChevronLeft, ChevronRight, ChevronDown, HeartPulse, Cpu } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { usePermissions } from '../hooks/usePermissions';
 import DynamicIcon from './DynamicIcon';
@@ -21,6 +21,7 @@ const Sidebar: React.FC = () => {
     if (window.location.pathname.startsWith('/pacientes-internados') || window.location.pathname.startsWith('/centro-cirurgico')) return 'assistencial';
     if (window.location.pathname.startsWith('/gestao-pendencias')) return 'faturamento';
     if (window.location.pathname.startsWith('/gestao-escuta-santa-casa')) return 'gestao-escuta-santa-casa';
+    if (window.location.pathname.startsWith('/plantao-ti')) return 'tecnologia-informacao';
     return null;
   });
 
@@ -36,6 +37,7 @@ const Sidebar: React.FC = () => {
     else if (location.pathname.startsWith('/pacientes-internados') || location.pathname.startsWith('/centro-cirurgico')) setExpandedMenu('assistencial');
     else if (location.pathname.startsWith('/gestao-pendencias')) setExpandedMenu('faturamento');
     else if (location.pathname.startsWith('/gestao-escuta-santa-casa')) setExpandedMenu('gestao-escuta-santa-casa');
+    else if (location.pathname.startsWith('/plantao-ti')) setExpandedMenu('tecnologia-informacao');
   }, [location.pathname, isCollapsed]);
 
   useEffect(() => {
@@ -177,8 +179,67 @@ const Sidebar: React.FC = () => {
           );
         })()}
 
+        {/* Categoria Tecnologia da Informação (Agrupador) */}
+        {(() => {
+          const hasPlantaoTiAccess = userModules.some(m => m.slug === 'plantao-ti');
+          const showTI = hasPlantaoTiAccess;
+          const isTIActive = location.pathname.startsWith('/plantao-ti');
+
+          if (!showTI) return null;
+
+          return (
+            <div className="flex flex-col">
+              {isCollapsed ? (
+                <NavLink
+                  to="/plantao-ti"
+                  title="Tecnologia da Informação"
+                  className={navLinkClass(isTIActive)}
+                >
+                  <Cpu className="h-5 w-5 flex-shrink-0" />
+                </NavLink>
+              ) : (
+                <button
+                  onClick={() => {
+                    setExpandedMenu(expandedMenu === 'tecnologia-informacao' ? null : 'tecnologia-informacao');
+                  }}
+                  className={`flex items-center rounded-md text-sm transition-all duration-200 justify-start gap-3 px-3 py-2 w-full ${
+                    isTIActive
+                      ? 'bg-primary text-primary-foreground shadow-sm hover:shadow-md hover:shadow-primary/20 font-medium'
+                      : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                  }`}
+                >
+                  <Cpu className="h-5 w-5 flex-shrink-0" />
+                  <div className="flex flex-1 items-center justify-between">
+                    <span className="truncate">Tecnologia da Informação</span>
+                    <ChevronRight className={`h-4 w-4 transition-transform ${expandedMenu === 'tecnologia-informacao' ? 'rotate-90' : ''}`} />
+                  </div>
+                </button>
+              )}
+
+              {!isCollapsed && expandedMenu === 'tecnologia-informacao' && (
+                <div className="flex flex-col ml-9 mt-1 gap-1 border-l-2 border-border pl-2 border-primary/20 animate-in fade-in duration-300">
+                  {hasPlantaoTiAccess && (
+                    <NavLink
+                      to="/plantao-ti"
+                      className={({ isActive }) => 
+                        `text-sm px-3 py-2 rounded-md transition-colors ${
+                          isActive 
+                            ? 'bg-primary text-primary-foreground shadow-sm font-medium' 
+                            : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                        }`
+                      }
+                    >
+                       Plantão TI
+                    </NavLink>
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })()}
+
         {userModules
-          .filter(m => m.slug !== 'configuracoes' && m.slug !== 'pacientes-internados' && m.slug !== 'centro-cirurgico') // Configurações fica na área inferior, e assistenciais ficam agrupados
+          .filter(m => m.slug !== 'configuracoes' && m.slug !== 'pacientes-internados' && m.slug !== 'centro-cirurgico' && m.slug !== 'plantao-ti') // Configurações fica na área inferior, e assistenciais e TI ficam agrupados
           .map(module => {
             if (module.slug === 'notificacoes') {
               const isActiveLocal = location.pathname.startsWith('/notificacoes');

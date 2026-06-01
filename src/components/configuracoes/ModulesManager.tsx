@@ -294,18 +294,22 @@ const ModulesManager: React.FC<ModulesManagerProps> = ({ roles, showToast }) => 
               <tbody className="divide-y divide-border">
                 {modules.map(m => (
                   <tr key={m.id} className="hover:bg-muted/20 transition-colors">
-                    <td className="px-5 py-3.5">
+                    <td className="px-5 py-2">
                       <div className="flex items-center gap-3">
-                        <div className="h-8 w-8 rounded-md bg-primary/10 flex items-center justify-center flex-shrink-0">
-                          <DynamicIcon name={m.icon} className="h-4 w-4 text-primary" />
+                        <div className="h-7 w-7 rounded-md bg-primary/10 flex items-center justify-center flex-shrink-0">
+                          <DynamicIcon name={m.icon} className="h-3.5 w-3.5 text-primary" />
                         </div>
                         <div className="min-w-0">
                           <p className="font-medium text-foreground truncate">{m.name}</p>
-                          {m.description && <p className="text-xs text-muted-foreground truncate">{m.description}</p>}
+                          {m.description && (
+                            <p className="text-xs text-muted-foreground whitespace-pre-line max-w-xs">
+                              {m.description}
+                            </p>
+                          )}
                         </div>
                       </div>
                     </td>
-                    <td className="px-5 py-3.5 hidden md:table-cell">
+                    <td className="px-5 py-2 hidden md:table-cell">
                       <div className="flex items-center gap-2">
                         <span className="font-mono text-xs bg-muted px-2 py-0.5 rounded text-muted-foreground">/{m.slug}</span>
                         {m.is_system && (
@@ -320,7 +324,7 @@ const ModulesManager: React.FC<ModulesManagerProps> = ({ roles, showToast }) => 
                       const key = `${role.id}-${m.id}`;
                       const isToggling = togglingAccess === key;
                       return (
-                        <td key={role.id} className="px-4 py-3.5 text-center">
+                        <td key={role.id} className="px-4 py-2 text-center">
                           <button
                             onClick={() => handleAccessToggle(role.id, m.id, hasAccess)}
                             disabled={isToggling}
@@ -343,7 +347,7 @@ const ModulesManager: React.FC<ModulesManagerProps> = ({ roles, showToast }) => 
                     })}
 
                     {/* Toggle ativo/inativo */}
-                    <td className="px-4 py-3.5 text-center">
+                    <td className="px-4 py-2 text-center">
                       <button
                         onClick={() => handleToggleActive(m)}
                         title={m.is_active ? 'Desativar módulo' : 'Ativar módulo'}
@@ -359,7 +363,7 @@ const ModulesManager: React.FC<ModulesManagerProps> = ({ roles, showToast }) => 
                     </td>
 
                     {/* Ações */}
-                    <td className="px-4 py-3.5">
+                    <td className="px-4 py-2">
                       <div className="flex items-center gap-1 justify-end">
                         <button
                           onClick={() => setModal({
