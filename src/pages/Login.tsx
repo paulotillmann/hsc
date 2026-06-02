@@ -78,11 +78,16 @@ const Login: React.FC = () => {
     }
 
     setIsSubmitting(true);
-    const { error: authError } = await signIn(email.trim(), password);
-    setIsSubmitting(false);
-
-    if (authError) {
-      setError(authError);
+    try {
+      const { error: authError } = await signIn(email.trim(), password);
+      if (authError) {
+        setError(authError);
+      }
+    } catch (err: any) {
+      console.error('[Login] Erro durante o login:', err);
+      setError('Ocorreu um erro inesperado ao tentar entrar. Tente novamente.');
+    } finally {
+      setIsSubmitting(false);
     }
     // O redirect será feito pelo useEffect acima assim que o profile for carregado
   };
@@ -369,10 +374,10 @@ const Login: React.FC = () => {
                   </div>
 
                   {error && (
-                    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex items-center gap-2 p-3 rounded-md bg-red-50 text-red-600 text-sm border border-red-200 dark:bg-red-500/10 dark:border-red-500/20 dark:text-red-400">
+                    <div className="flex items-center gap-2 p-3 rounded-md bg-red-50 text-red-600 text-sm border border-red-200 dark:bg-red-500/10 dark:border-red-500/20 dark:text-red-400 animate-in fade-in duration-200">
                       <AlertCircle className="h-4 w-4 shrink-0" />
                       {error}
-                    </motion.div>
+                    </div>
                   )}
 
                   <div className="pt-2 flex flex-col space-y-4">
@@ -526,17 +531,17 @@ const Login: React.FC = () => {
                   </div>
 
                   {error && (
-                    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex items-center gap-2 p-3 rounded-md bg-red-50 text-red-600 text-sm border border-red-200 dark:bg-red-500/10 dark:border-red-500/20 dark:text-red-400">
+                    <div className="flex items-center gap-2 p-3 rounded-md bg-red-50 text-red-600 text-sm border border-red-200 dark:bg-red-500/10 dark:border-red-500/20 dark:text-red-400 animate-in fade-in duration-200">
                       <AlertCircle className="h-4 w-4 shrink-0" />
                       {error}
-                    </motion.div>
+                    </div>
                   )}
 
                   {success && (
-                    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex items-center gap-2 p-3 rounded-md bg-green-50 text-green-700 text-sm border border-green-200 dark:bg-green-500/10 dark:border-green-500/20 dark:text-green-400">
+                    <div className="flex items-center gap-2 p-3 rounded-md bg-green-50 text-green-700 text-sm border border-green-200 dark:bg-green-500/10 dark:border-green-500/20 dark:text-green-400 animate-in fade-in duration-200">
                       <CheckCircle2 className="h-4 w-4 shrink-0" />
                       {success}
-                    </motion.div>
+                    </div>
                   )}
 
                   <div className="pt-6 flex items-center justify-end gap-3 mt-4">
@@ -587,17 +592,17 @@ const Login: React.FC = () => {
                   </div>
 
                   {error && (
-                    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex items-center gap-2 p-3 rounded-md bg-red-50 text-red-600 text-sm border border-red-200 dark:bg-red-500/10 dark:border-red-500/20 dark:text-red-400">
+                    <div className="flex items-center gap-2 p-3 rounded-md bg-red-50 text-red-600 text-sm border border-red-200 dark:bg-red-500/10 dark:border-red-500/20 dark:text-red-400 animate-in fade-in duration-200">
                       <AlertCircle className="h-4 w-4 shrink-0" />
                       {error}
-                    </motion.div>
+                    </div>
                   )}
 
                   {success && (
-                    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex items-center gap-2 p-3 rounded-md bg-green-50 text-green-700 text-sm border border-green-200 dark:bg-green-500/10 dark:border-green-500/20 dark:text-green-400">
+                    <div className="flex items-center gap-2 p-3 rounded-md bg-green-50 text-green-700 text-sm border border-green-200 dark:bg-green-500/10 dark:border-green-500/20 dark:text-green-400 animate-in fade-in duration-200">
                       <CheckCircle2 className="h-4 w-4 shrink-0" />
                       {success}
-                    </motion.div>
+                    </div>
                   )}
 
                   <div className="pt-2 flex flex-col space-y-4">

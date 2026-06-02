@@ -15,10 +15,10 @@ import {
 } from '../../services/plantaoTiService';
 const COLABORADORES_CORES: Record<string, { bullet: string; text: string; bg: string; border: string }> = {
   'talysson': {
-    bullet: 'bg-purple-500 shadow-[0_0_8px_rgba(168,85,247,0.5)]',
-    text: 'text-purple-700 dark:text-purple-300',
-    bg: 'bg-purple-500/10 dark:bg-purple-500/20',
-    border: 'border-purple-500/20 dark:border-purple-500/30',
+    bullet: 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]',
+    text: 'text-emerald-700 dark:text-emerald-300',
+    bg: 'bg-emerald-500/10 dark:bg-emerald-500/20',
+    border: 'border-emerald-500/20 dark:border-emerald-500/30',
   },
   'bruno': {
     bullet: 'bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.5)]',
@@ -33,10 +33,10 @@ const COLABORADORES_CORES: Record<string, { bullet: string; text: string; bg: st
     border: 'border-pink-500/20 dark:border-pink-500/30',
   },
   'jhon': {
-    bullet: 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]',
-    text: 'text-emerald-700 dark:text-emerald-300',
-    bg: 'bg-emerald-500/10 dark:bg-emerald-500/20',
-    border: 'border-emerald-500/20 dark:border-emerald-500/30',
+    bullet: 'bg-purple-500 shadow-[0_0_8px_rgba(168,85,247,0.5)]',
+    text: 'text-purple-700 dark:text-purple-300',
+    bg: 'bg-purple-500/10 dark:bg-purple-500/20',
+    border: 'border-purple-500/20 dark:border-purple-500/30',
   },
 };
 

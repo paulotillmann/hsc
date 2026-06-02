@@ -193,7 +193,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setProfile(data as Profile);
 
         const role = data.roles as Role | null;
-        if (role) {
+        const isAdmin = data.role === 'admin';
+        const hasRoleId = !!data.role_id;
+
+        if (hasRoleId && role) {
           setPermissions({
             can_informes: role.can_informes,
             can_holerites: role.can_holerites,
@@ -204,52 +207,54 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           });
 
           // 2. Busca os módulos que este perfil tem acesso
-          if (data.role_id) {
-            const { data: rmpData, error: rmpError } = await supabase
-              .from('role_module_permissions')
-              .select('modules(*)')
-              .eq('role_id', data.role_id);
+          const { data: rmpData, error: rmpError } = await supabase
+            .from('role_module_permissions')
+            .select('modules(*)')
+            .eq('role_id', data.role_id);
 
-            if (rmpError) {
-              console.error('[AuthContext] Erro ao buscar módulos:', rmpError.message);
-              setUserModules(getDefaultModules(data.role === 'admin'));
-            } else {
-              // Extrai os módulos, filtra apenas os ativos e ordena
-              const modules = (rmpData ?? [])
-                .map((row: any) => row.modules as Module)
-                .filter((m: Module) => m && m.is_active)
-                .sort((a: Module, b: Module) => a.sort_order - b.sort_order);
-              if (modules.length === 0) {
-                // Se a tabela modules estiver totalmente vazia no banco, usamos o fallback.
-                // Caso contrário, se há módulos cadastrados mas nenhuma permissão vinculada, mantemos vazia.
-                const { count, error: countError } = await supabase
-                  .from('modules')
-                  .select('*', { count: 'exact', head: true });
-                
-                if (!countError && count === 0) {
-                  setUserModules(getDefaultModules(data.role === 'admin'));
-                } else {
-                  setUserModules([]);
-                }
-              } else {
-                setUserModules(modules);
-              }
-            }
+          if (rmpError) {
+            console.error('[AuthContext] Erro ao buscar módulos:', rmpError.message);
+            setUserModules(isAdmin ? getDefaultModules(true) : []);
           } else {
-            setUserModules(getDefaultModules(data.role === 'admin'));
+            // Extrai os módulos, filtra apenas os ativos e ordena
+            const modules = (rmpData ?? [])
+              .map((row: any) => row.modules as Module)
+              .filter((m: Module) => m && m.is_active)
+              .sort((a: Module, b: Module) => a.sort_order - b.sort_order);
+
+            if (modules.length === 0) {
+              // Se a tabela modules estiver totalmente vazia no banco, usamos o fallback para admin.
+              // Caso contrário, se há módulos cadastrados mas nenhuma permissão vinculada, mantemos vazia.
+              const { count, error: countError } = await supabase
+                .from('modules')
+                .select('*', { count: 'exact', head: true });
+
+              if (!countError && count === 0) {
+                setUserModules(isAdmin ? getDefaultModules(true) : []);
+              } else {
+                setUserModules([]);
+              }
+            } else {
+              setUserModules(modules);
+            }
           }
         } else {
-          // Fallback: campo role text ('admin' | 'colaborador')
-          const isAdmin = data.role === 'admin';
-          setPermissions({
-            can_informes: true,
-            can_holerites: true,
-            can_config: isAdmin,
-            can_upload: isAdmin,
-            can_send_email: isAdmin,
-            can_view_all: isAdmin,
-          });
-          setUserModules(getDefaultModules(isAdmin));
+          // Fallback para quando o usuário não possui perfil (role_id) definido no banco de dados
+          if (isAdmin) {
+            setPermissions({
+              can_informes: true,
+              can_holerites: true,
+              can_config: true,
+              can_upload: true,
+              can_send_email: true,
+              can_view_all: true,
+            });
+            setUserModules(getDefaultModules(true));
+          } else {
+            // Usuário comum sem perfil definido: não apresenta nenhum módulo e zera as permissões
+            setPermissions(DEFAULT_PERMISSIONS);
+            setUserModules([]);
+          }
         }
       }
     } catch (err) {
@@ -306,21 +311,27 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
       return { error: 'Erro ao realizar login. Tente novamente.' };
     }
-    
-    // Check if user is blocked
+
+    // Check if user is blocked (envelopado com segurança)
     if (data?.user) {
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('is_blocked')
-        .eq('id', data.user.id)
-        .single();
-        
-      if (profile?.is_blocked) {
-        await supabase.auth.signOut();
-        return { error: 'Usuário bloqueado. Você está impedido de usar o sistema.' };
+      try {
+        const { data: profile, error: profileError } = await supabase
+          .from('profiles')
+          .select('is_blocked')
+          .eq('id', data.user.id)
+          .single();
+          
+        if (profileError) {
+          console.error('[AuthContext] Erro ao verificar bloqueio de usuário:', profileError.message);
+        } else if (profile?.is_blocked) {
+          await supabase.auth.signOut();
+          return { error: 'Usuário bloqueado. Você está impedido de usar o sistema.' };
+        }
+      } catch (err) {
+        console.error('[AuthContext] Exceção ao verificar bloqueio no signIn:', err);
       }
     }
-    
+
     return { error: null };
   };
 

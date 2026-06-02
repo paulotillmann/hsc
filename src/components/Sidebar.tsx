@@ -322,7 +322,7 @@ const Sidebar: React.FC = () => {
           );
         })()}
 
-        {/* Categoria Tecnologia da Informação (Agrupador) */}
+        {/* Categoria T.I (Agrupador) */}
         {(() => {
           const hasPlantaoTiAccess = userModules.some(m => m.slug === 'plantao-ti');
           const showTI = hasPlantaoTiAccess;
@@ -335,7 +335,7 @@ const Sidebar: React.FC = () => {
               {isCollapsed ? (
                 <NavLink
                   to="/plantao-ti"
-                  title="Tecnologia da Informação"
+                  title="T.I"
                   className={navLinkClass(isTIActive)}
                 >
                   <Cpu className="h-5 w-5 flex-shrink-0" />
@@ -353,7 +353,7 @@ const Sidebar: React.FC = () => {
                 >
                   <Cpu className="h-5 w-5 flex-shrink-0" />
                   <div className="flex flex-1 items-center justify-between">
-                    <span className="truncate">Tecnologia da Informação</span>
+                    <span className="truncate">T.I</span>
                     <ChevronRight className={`h-4 w-4 transition-transform ${expandedMenu === 'tecnologia-informacao' ? 'rotate-90' : ''}`} />
                   </div>
                 </button>
