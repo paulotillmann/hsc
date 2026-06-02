@@ -633,7 +633,7 @@ const Sidebar: React.FC = () => {
                   {isCollapsed ? (
                     <NavLink
                       to={`/${module.slug}`}
-                      title={module.name}
+                      title="Escuta santa casa"
                       className={navLinkClass(isActiveLocal)}
                     >
                       <DynamicIcon name={module.icon} className="h-5 w-5 flex-shrink-0" />
@@ -651,7 +651,7 @@ const Sidebar: React.FC = () => {
                     >
                       <DynamicIcon name={module.icon} className="h-5 w-5 flex-shrink-0" />
                       <div className="flex flex-1 items-center justify-between">
-                        <span className="truncate">{module.name}</span>
+                        <span className="truncate">Escuta santa casa</span>
                         <ChevronRight className={`h-4 w-4 transition-transform ${expandedMenu === 'gestao-escuta-santa-casa' ? 'rotate-90' : ''}`} />
                       </div>
                     </button>
