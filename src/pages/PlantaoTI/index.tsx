@@ -740,6 +740,7 @@ export default function PlantaoTI() {
                   const isToday = hojeStr === slot.dateStr;
                   const feriadoInfo = feriadosDoAno[slot.dateStr];
                   const hasFeriado = !!feriadoInfo;
+                  const temOcorrenciaDia = diaEscalas.some(e => e.ocorrencias && e.ocorrencias.length > 0);
 
                   // Estilos de destaque para feriados e pontos facultativos
                   let feriadoClasses = '';
@@ -788,6 +789,13 @@ export default function PlantaoTI() {
                             </span>
                           )}
 
+                          {temOcorrenciaDia && (
+                            <FileText 
+                              className="h-3.5 w-3.5 text-blue-500 dark:text-blue-400 shrink-0" 
+                              title="Há ocorrências registradas neste dia" 
+                            />
+                          )}
+
                           {isAdmin && (
                             <button
                               onClick={(e) => {
@@ -799,7 +807,7 @@ export default function PlantaoTI() {
                               title="Adicionar plantonista"
                               type="button"
                             >
-                              <Plus className="h-3 w-3" strokeWidth={3} />
+                              <Plus className="h-3.5 w-3.5" strokeWidth={3} />
                             </button>
                           )}
                         </div>
@@ -809,16 +817,25 @@ export default function PlantaoTI() {
                       <div className="flex-1 mt-1.5 space-y-1 overflow-y-auto max-h-[50px] pr-0.5 scrollbar-thin">
                         {diaEscalas.map(escala => {
                           const estilo = getColaboradorEstilo(escala.profiles?.full_name);
+                          const temOcorrenciaPlantonista = escala.ocorrencias && escala.ocorrencias.length > 0;
                           return (
                             <div
                               key={escala.id}
-                              className={`flex items-center gap-1 px-1 py-0.5 rounded text-[9px] font-medium border ${estilo.bg} ${estilo.border}`}
+                              className={`flex items-center justify-between gap-1 px-1 py-0.5 rounded text-[9px] font-medium border ${estilo.bg} ${estilo.border}`}
                               title={escala.profiles?.full_name || ''}
                             >
-                              <span className={`h-1.5 w-1.5 rounded-full flex-shrink-0 ${estilo.bullet}`} />
-                              <span className={`truncate ${estilo.text}`}>
-                                {obterPrimeiroNome(escala.profiles?.full_name)}
-                              </span>
+                              <div className="flex items-center gap-1 min-w-0">
+                                <span className={`h-1.5 w-1.5 rounded-full flex-shrink-0 ${estilo.bullet}`} />
+                                <span className={`truncate ${estilo.text}`}>
+                                  {obterPrimeiroNome(escala.profiles?.full_name)}
+                                </span>
+                              </div>
+                              {temOcorrenciaPlantonista && (
+                                <FileText 
+                                  className="h-2.5 w-2.5 text-blue-500 dark:text-blue-400 shrink-0" 
+                                  title={`${escala.ocorrencias.length} ocorrência(s) registrada(s)`}
+                                />
+                              )}
                             </div>
                           );
                         })}
