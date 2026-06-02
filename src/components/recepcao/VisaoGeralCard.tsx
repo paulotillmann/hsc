@@ -26,7 +26,7 @@ export const VisaoGeralCard: React.FC<VisaoGeralCardProps> = ({
       </div>
 
       <div className="flex flex-col">
-        <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
+        <span className="text-[16px] font-bold text-foreground uppercase tracking-wider">
           {title}
         </span>
         

@@ -70,6 +70,25 @@ const corsHeaders = {
   'Content-Type': 'application/json',
 };
 
+// Função para remover tags HTML e decodificar entidades HTML comuns
+function cleanHTML(html: string | null): string {
+  if (!html) return '';
+  
+  // 1. Remover tags HTML
+  let text = html.replace(/<[^>]*>/g, '');
+  
+  // 2. Substituir entidades HTML comuns
+  text = text
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&amp;/g, '&')
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'");
+    
+  return text.trim();
+}
+
 Deno.serve(async (req: Request) => {
   // Trata requisição OPTIONS para CORS pre-flight
   if (req.method === 'OPTIONS') {
@@ -129,12 +148,12 @@ Deno.serve(async (req: Request) => {
         ie_prioridade: item.IE_PRIORIDADE ? String(item.IE_PRIORIDADE).trim() : null,
         ds_prioridade: item.DS_PRIORIDADE ? String(item.DS_PRIORIDADE).trim() : null,
         ie_parado: item.IE_PARADO ? String(item.IE_PARADO).trim() : null,
-        ds_dano_breve: item.DS_DANO_BREVE ? String(item.DS_DANO_BREVE).trim() : null,
-        ds_dano: item.DS_DANO ? String(item.DS_DANO).trim() : null,
+        ds_dano_breve: item.DS_DANO_BREVE ? cleanHTML(item.DS_DANO_BREVE) : null,
+        ds_dano: item.DS_DANO ? cleanHTML(item.DS_DANO) : null,
         nr_seq_estagio: item.NR_SEQ_ESTAGIO ? Number(item.NR_SEQ_ESTAGIO) : null,
         ds_situacao: item.DS_SITUACAO ? String(item.DS_SITUACAO).trim() : null,
-        ds_solucao: item.DS_SOLUCAO ? String(item.DS_SOLUCAO).trim() : null,
-        ds_relat_tecnico: item.DS_RELAT_TECNICO ? String(item.DS_RELAT_TECNICO).trim() : null,
+        ds_solucao: item.DS_SOLUCAO ? cleanHTML(item.DS_SOLUCAO) : null,
+        ds_relat_tecnico: item.DS_RELAT_TECNICO ? cleanHTML(item.DS_RELAT_TECNICO) : null,
       };
 
       recordsToInsert.push(mappedRecord);
@@ -206,7 +225,7 @@ Deno.serve(async (req: Request) => {
         }
 
         const nrSeq = Number(item.NR_SEQUENCIA);
-        const novoRelato = item.DS_RELAT_TECNICO ? String(item.DS_RELAT_TECNICO).trim() : '';
+        const novoRelato = item.DS_RELAT_TECNICO ? cleanHTML(item.DS_RELAT_TECNICO) : '';
 
         // Só insere se houver relato técnico não nulo/vazio e for diferente do último gravado
         if (novoRelato !== '') {

@@ -1,22 +1,26 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  Wrench, 
-  RefreshCcw, 
-  CheckCircle2, 
-  AlertCircle, 
-  Search, 
-  MapPin, 
-  Cpu, 
-  User, 
-  UserCheck, 
-  Calendar, 
+import {
+  Wrench,
+  RefreshCcw,
+  CheckCircle2,
+  AlertCircle,
+  Search,
+  MapPin,
+  Cpu,
+  User,
+  UserCheck,
+  Calendar,
   Tag,
   AlertTriangle,
   Play,
   ArrowUpRight,
-  CheckCircle
+  CheckCircle,
+  X,
+  History,
+  ClipboardList
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
+import { VisaoGeralCard } from '../../components/recepcao/VisaoGeralCard';
 
 interface OrdemServicoItem {
   id: string;
@@ -55,7 +59,7 @@ export default function OrdemServico() {
   const [syncing, setSyncing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
-  
+
   // Filtros
   const [searchTerm, setSearchTerm] = useState('');
   const [dateFilter, setDateFilter] = useState<'dia' | 'semana' | 'mes' | 'todas'>('todas');
@@ -101,6 +105,31 @@ export default function OrdemServico() {
 
   const [selectedExecutor, setSelectedExecutor] = useState<string | null>(null);
 
+  const [selectedOrder, setSelectedOrder] = useState<OrdemServicoItem | null>(null);
+  const [orderHistory, setOrderHistory] = useState<any[]>([]);
+  const [loadingHistory, setLoadingHistory] = useState(false);
+  const [ordersWithHistory, setOrdersWithHistory] = useState<Set<number>>(new Set());
+
+  const handleCardClick = async (os: OrdemServicoItem) => {
+    setSelectedOrder(os);
+    setOrderHistory([]);
+    setLoadingHistory(true);
+    try {
+      const { data, error } = await supabase
+        .from('historico_ordem_servico')
+        .select('*')
+        .eq('nr_sequencia', os.nr_sequencia)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      setOrderHistory(data || []);
+    } catch (err) {
+      console.error('Erro ao carregar histórico da OS:', err);
+    } finally {
+      setLoadingHistory(false);
+    }
+  };
+
   const fetchOrders = async () => {
     try {
       setLoading(true);
@@ -113,6 +142,20 @@ export default function OrdemServico() {
 
       if (dbError) throw dbError;
       setOrders(data || []);
+
+      // Buscar os históricos das ordens carregadas para identificar quais possuem histórico
+      if (data && data.length > 0) {
+        const nrSequencias = data.map(o => o.nr_sequencia);
+        const { data: histData, error: histError } = await supabase
+          .from('historico_ordem_servico')
+          .select('nr_sequencia')
+          .in('nr_sequencia', nrSequencias);
+
+        if (!histError && histData) {
+          const hasHistorySet = new Set(histData.map(h => h.nr_sequencia));
+          setOrdersWithHistory(hasHistorySet);
+        }
+      }
     } catch (err: any) {
       console.error('Erro ao carregar ordens de serviço:', err);
       setError('Erro ao carregar as ordens de serviço do banco de dados.');
@@ -175,7 +218,7 @@ export default function OrdemServico() {
 
       setSuccess(`Sincronização realizada! ${data?.upserted || 0} ordens de serviço atualizadas.`);
       await fetchOrders(); // Atualiza a grid com os novos dados
-      
+
       setTimeout(() => {
         setSuccess(null);
       }, 5000);
@@ -197,7 +240,7 @@ export default function OrdemServico() {
     // 2. Filtro por Período
     const today = new Date();
     if (dateFilter === 'dia') {
-      const isToday = 
+      const isToday =
         orderDate.getDate() === today.getDate() &&
         orderDate.getMonth() === today.getMonth() &&
         orderDate.getFullYear() === today.getFullYear();
@@ -214,7 +257,7 @@ export default function OrdemServico() {
       const isInWeek = orderDate >= startOfWeek && orderDate <= endOfWeek;
       if (!isInWeek) return false;
     } else if (dateFilter === 'mes') {
-      const isInMonth = 
+      const isInMonth =
         orderDate.getMonth() === today.getMonth() &&
         orderDate.getFullYear() === today.getFullYear();
       if (!isInMonth) return false;
@@ -255,12 +298,12 @@ export default function OrdemServico() {
       const estagioLower = estagio.toLowerCase();
 
       // 1. Finalizado (ou Encerrado)
-      const isFinalizado = 
-        situacao.includes('finalizada') || 
-        situacao.includes('finalizado') || 
-        situacao.includes('encerrada') || 
-        situacao.includes('concluída') || 
-        situacao.includes('concluido') || 
+      const isFinalizado =
+        situacao.includes('finalizada') ||
+        situacao.includes('finalizado') ||
+        situacao.includes('encerrada') ||
+        situacao.includes('concluída') ||
+        situacao.includes('concluido') ||
         encer !== '' ||
         estagioLower.includes('encerrad');
 
@@ -323,11 +366,31 @@ export default function OrdemServico() {
     });
   };
 
+  // Formatar texto para o padrão pt-br (Sentence Case) suavizando CAIXA ALTA
+  const formatSentenceCase = (text: string | null) => {
+    if (!text) return '';
+    const trimmed = text.trim();
+    if (trimmed === trimmed.toUpperCase()) {
+      let lower = trimmed.toLowerCase();
+      // Capitaliza a primeira letra de cada frase
+      lower = lower.replace(/(^\s*|[.!?]\s+)([a-z])/g, (match, separator, letter) => separator + letter.toUpperCase());
+      // Lista de siglas para manter em maiúsculas
+      const siglas = ['go', 'hsc', 'pa', 'ti', 'os', 'id', 'ip', 'cpu', 'xml', 'pdf', 'rj', 'sp', 'mg', 'df'];
+      siglas.forEach(sigla => {
+        const regex = new RegExp(`\\b${sigla}\\b`, 'gi');
+        lower = lower.replace(regex, sigla.toUpperCase());
+      });
+      return lower;
+    }
+    return trimmed;
+  };
+
   // Render do Card Kanban
   const renderCard = (os: OrdemServicoItem) => (
-    <div 
-      key={os.id} 
-      className="bg-card border border-border/80 rounded-xl p-4 shadow-sm hover:shadow-md transition-all duration-200 hover:-translate-y-0.5 flex flex-col gap-3 group"
+    <div
+      key={os.id}
+      onClick={() => handleCardClick(os)}
+      className="bg-card border border-border/80 rounded-xl p-4 shadow-sm hover:shadow-md transition-all duration-200 hover:-translate-y-0.5 flex flex-col gap-3 group cursor-pointer"
     >
       <div className="flex items-center justify-between gap-2">
         <span className="text-xs font-bold text-muted-foreground group-hover:text-primary transition-colors">
@@ -336,27 +399,33 @@ export default function OrdemServico() {
         {getPriorityBadge(os.ie_prioridade)}
       </div>
 
-      <h3 className="text-sm font-semibold text-foreground leading-snug line-clamp-2">
+      <h3 className="text-sm font-semibold text-foreground leading-snug line-clamp-2 uppercase">
         {os.ds_dano_breve || os.ds_dano || 'Sem descrição'}
       </h3>
 
-      <div className="flex flex-col gap-1.5 text-xs text-muted-foreground mt-1">
+      <div className="flex flex-col gap-1.5 text-sm text-foreground/90 mt-1">
         {os.ds_localizacao && (
           <div className="flex items-center gap-1.5">
-            <MapPin className="h-3.5 w-3.5 shrink-0 text-muted-foreground/60" />
+            <MapPin className="h-4 w-4 shrink-0 text-muted-foreground/80" />
             <span className="truncate">{os.ds_localizacao}</span>
           </div>
         )}
         {os.ds_equipamento && (
           <div className="flex items-center gap-1.5">
-            <Cpu className="h-3.5 w-3.5 shrink-0 text-muted-foreground/60" />
+            <Cpu className="h-4 w-4 shrink-0 text-muted-foreground/80" />
             <span className="truncate">{os.ds_equipamento}</span>
           </div>
         )}
         {os.nm_solicitante && (
           <div className="flex items-center gap-1.5">
-            <User className="h-3.5 w-3.5 shrink-0 text-muted-foreground/60" />
-            <span className="truncate">Sol: {os.nm_solicitante}</span>
+            <User className="h-4 w-4 shrink-0 text-muted-foreground/80" />
+            <span className="truncate">{os.nm_solicitante}</span>
+          </div>
+        )}
+        {os.ds_dano && (
+          <div className="flex items-start gap-1.5">
+            <AlertTriangle className="h-4 w-4 shrink-0 text-muted-foreground/80 mt-0.5" />
+            <span className="break-words whitespace-normal" title={os.ds_dano}>{formatSentenceCase(os.ds_dano)}</span>
           </div>
         )}
         {os.nm_executor && (
@@ -368,9 +437,20 @@ export default function OrdemServico() {
       </div>
 
       <div className="flex items-center justify-between border-t border-border/40 pt-2.5 mt-1 text-[10px] text-muted-foreground">
-        <div className="flex items-center gap-1">
-          <Calendar className="h-3 w-3" />
-          <span>{formatDate(os.dt_ordem_servico)}</span>
+        <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 text-sm font-semibold text-foreground/90 dark:text-foreground/95 bg-muted px-2 py-0.5 rounded">
+            <Calendar className="h-3.5 w-3.5 text-foreground/70 dark:text-foreground/80" />
+            <span>{formatDate(os.dt_ordem_servico)}</span>
+          </div>
+          {ordersWithHistory.has(os.nr_sequencia) && (
+            <div 
+              className="flex items-center gap-0.5 text-sky-600 dark:text-sky-400 bg-sky-500/10 dark:bg-sky-500/5 px-1 py-0.5 rounded font-semibold border border-sky-500/10 shrink-0" 
+              title="Possui histórico de relatos"
+            >
+              <History className="h-3 w-3 shrink-0" />
+              <span className="text-[8px] uppercase tracking-wider font-bold">Histórico</span>
+            </div>
+          )}
         </div>
         {(os.ds_estagio || os.ds_situacao) && (
           <span className="font-semibold uppercase tracking-wider text-[9px] bg-muted px-1.5 py-0.5 rounded">
@@ -425,30 +505,48 @@ export default function OrdemServico() {
       )}
 
       {/* Estatísticas Rápidas */}
-      {!loading && (
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-          <div className="bg-card border border-border/80 rounded-xl p-3 flex flex-col justify-between shadow-sm border-l-4 border-l-slate-400">
-            <span className="text-xs font-semibold text-muted-foreground font-medium">Em Triagem</span>
-            <span className="text-2xl font-bold mt-1 text-slate-700 dark:text-slate-300">{triagemItems.length}</span>
-          </div>
-          <div className="bg-card border border-border/80 rounded-xl p-3 flex flex-col justify-between shadow-sm border-l-4 border-l-sky-500">
-            <span className="text-xs font-semibold text-muted-foreground font-medium">Em Processo</span>
-            <span className="text-2xl font-bold mt-1 text-sky-600 dark:text-sky-400">{processoItems.length}</span>
-          </div>
-          <div className="bg-card border border-border/80 rounded-xl p-3 flex flex-col justify-between shadow-sm border-l-4 border-l-amber-500">
-            <span className="text-xs font-semibold text-muted-foreground font-medium">Escalado / Parado</span>
-            <span className="text-2xl font-bold mt-1 text-amber-600 dark:text-amber-400">{escalonadoItems.length}</span>
-          </div>
-          <div className="bg-card border border-border/80 rounded-xl p-3 flex flex-col justify-between shadow-sm border-l-4 border-l-emerald-500">
-            <span className="text-xs font-semibold text-muted-foreground font-medium">Encerrados</span>
-            <span className="text-2xl font-bold mt-1 text-emerald-600 dark:text-emerald-400">{finalizadoItems.length}</span>
-          </div>
-          <div className="bg-card border border-border/80 rounded-xl p-3 flex flex-col justify-between shadow-sm border-l-4 border-l-primary">
-            <span className="text-xs font-semibold text-muted-foreground font-medium">Total</span>
-            <span className="text-2xl font-bold mt-1 text-primary">{filteredOrders.length}</span>
-          </div>
-        </div>
-      )}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+        <VisaoGeralCard
+          title="Em Triagem"
+          value={triagemItems.length}
+          icon={Search}
+          subtext="🔍 Aguardando análise"
+          subtextColorClass="text-slate-500 dark:text-slate-400"
+          isLoading={loading}
+        />
+        <VisaoGeralCard
+          title="Em Processo"
+          value={processoItems.length}
+          icon={Play}
+          subtext="⚡ Técnicos em atendimento"
+          subtextColorClass="text-sky-600 dark:text-sky-400"
+          isLoading={loading}
+        />
+        <VisaoGeralCard
+          title="Escalado / Parado"
+          value={escalonadoItems.length}
+          icon={AlertTriangle}
+          subtext="⚠️ Aguardando peça/terceiro"
+          subtextColorClass="text-amber-600 dark:text-amber-400"
+          isLoading={loading}
+        />
+        <VisaoGeralCard
+          title="Encerrados"
+          value={finalizadoItems.length}
+          icon={CheckCircle2}
+          subtext="✅ Chamados finalizados"
+          subtextColorClass="text-emerald-600 dark:text-emerald-400"
+          isLoading={loading}
+        />
+        <VisaoGeralCard
+          title="Total"
+          value={filteredOrders.length}
+          icon={ClipboardList}
+          subtext="📋 Total de ordens no período"
+          subtextColorClass="text-primary dark:text-primary/95"
+          isLoading={loading}
+        />
+      </div>
 
       {/* Filtros e Busca */}
       <div className="flex flex-col md:flex-row gap-4 items-center justify-between bg-card border border-border/80 p-3.5 rounded-xl shadow-sm w-full">
@@ -459,17 +557,16 @@ export default function OrdemServico() {
             {sortedExecutors.map((exec) => {
               const isSelected = selectedExecutor === exec.dbKey;
               const initials = exec.displayName.substring(0, 2).toUpperCase();
-              
+
               return (
                 <button
                   key={exec.dbKey}
                   onClick={() => setSelectedExecutor(isSelected ? null : exec.dbKey)}
                   title={exec.fullName}
-                  className={`relative flex items-center justify-center h-10 w-10 rounded-full border overflow-hidden p-0 transition-all duration-200 bg-background ${
-                    isSelected
+                  className={`relative flex items-center justify-center h-10 w-10 rounded-full border overflow-hidden p-0 transition-all duration-200 bg-background ${isSelected
                       ? 'border-primary ring-2 ring-primary/30 scale-110 shadow-sm'
                       : 'border-border hover:border-muted-foreground/50 hover:scale-105'
-                  }`}
+                    }`}
                 >
                   {exec.avatarUrl ? (
                     <img
@@ -478,9 +575,8 @@ export default function OrdemServico() {
                       className="h-full w-full rounded-full object-cover antialiased"
                     />
                   ) : (
-                    <div className={`h-full w-full rounded-full flex items-center justify-center text-xs font-bold ${
-                      isSelected ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'
-                    }`}>
+                    <div className={`h-full w-full rounded-full flex items-center justify-center text-xs font-bold ${isSelected ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'
+                      }`}>
                       {initials}
                     </div>
                   )}
@@ -492,7 +588,7 @@ export default function OrdemServico() {
                 </button>
               );
             })}
-            
+
             {selectedExecutor && (
               <button
                 onClick={() => setSelectedExecutor(null)}
@@ -516,7 +612,7 @@ export default function OrdemServico() {
               className="w-full pl-9 pr-4 py-2 bg-muted/40 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all text-foreground placeholder:text-muted-foreground"
             />
           </div>
-          
+
           {/* Filtro de Período */}
           <div className="flex items-center gap-2 w-full sm:w-auto shrink-0">
             <Calendar className="h-4 w-4 text-muted-foreground shrink-0 hidden sm:block" />
@@ -559,13 +655,10 @@ export default function OrdemServico() {
             <div className="flex items-center justify-between pb-2 border-b border-border/40 mb-3 shrink-0">
               <div className="flex items-center gap-2">
                 <div className="h-2 w-2 rounded-full bg-slate-400" />
-                <h2 className="font-bold text-sm text-foreground">Triagem</h2>
+                <h2 className="font-bold text-[16px] text-foreground">Triagem</h2>
               </div>
-              <span className="text-xs bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400 font-semibold px-2 py-0.5 rounded-full">
-                {triagemItems.length}
-              </span>
             </div>
-            
+
             <div className="flex-1 overflow-y-auto space-y-3 pr-1 scrollbar-thin scrollbar-thumb-muted-foreground/20 hover:scrollbar-thumb-muted-foreground/45 transition-colors">
               {triagemItems.length === 0 ? (
                 <div className="text-center py-8 text-xs text-muted-foreground border border-dashed rounded-lg">
@@ -582,11 +675,8 @@ export default function OrdemServico() {
             <div className="flex items-center justify-between pb-2 border-b border-border/40 mb-3 shrink-0">
               <div className="flex items-center gap-2">
                 <div className="h-2 w-2 rounded-full bg-sky-500 animate-pulse" />
-                <h2 className="font-bold text-sm text-foreground">Em processo</h2>
+                <h2 className="font-bold text-[16px] text-foreground">Em processo</h2>
               </div>
-              <span className="text-xs bg-sky-100 dark:bg-sky-950 text-sky-600 dark:text-sky-400 font-semibold px-2 py-0.5 rounded-full">
-                {processoItems.length}
-              </span>
             </div>
 
             <div className="flex-1 overflow-y-auto space-y-3 pr-1 scrollbar-thin scrollbar-thumb-muted-foreground/20 hover:scrollbar-thumb-muted-foreground/45 transition-colors">
@@ -605,11 +695,8 @@ export default function OrdemServico() {
             <div className="flex items-center justify-between pb-2 border-b border-border/40 mb-3 shrink-0">
               <div className="flex items-center gap-2">
                 <div className="h-2 w-2 rounded-full bg-amber-500" />
-                <h2 className="font-bold text-sm text-foreground">Escalonado</h2>
+                <h2 className="font-bold text-[16px] text-foreground">Escalonado</h2>
               </div>
-              <span className="text-xs bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-400 font-semibold px-2 py-0.5 rounded-full">
-                {escalonadoItems.length}
-              </span>
             </div>
 
             <div className="flex-1 overflow-y-auto space-y-3 pr-1 scrollbar-thin scrollbar-thumb-muted-foreground/20 hover:scrollbar-thumb-muted-foreground/45 transition-colors">
@@ -628,11 +715,8 @@ export default function OrdemServico() {
             <div className="flex items-center justify-between pb-2 border-b border-border/40 mb-3 shrink-0">
               <div className="flex items-center gap-2">
                 <div className="h-2 w-2 rounded-full bg-emerald-500" />
-                <h2 className="font-bold text-sm text-foreground">Finalizado</h2>
+                <h2 className="font-bold text-[16px] text-foreground">Finalizado</h2>
               </div>
-              <span className="text-xs bg-emerald-100 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-400 font-semibold px-2 py-0.5 rounded-full">
-                {finalizadoItems.length}
-              </span>
             </div>
 
             <div className="flex-1 overflow-y-auto space-y-3 pr-1 scrollbar-thin scrollbar-thumb-muted-foreground/20 hover:scrollbar-thumb-muted-foreground/45 transition-colors">
@@ -643,6 +727,154 @@ export default function OrdemServico() {
               ) : (
                 finalizadoItems.map(renderCard)
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Detalhes da OS */}
+      {selectedOrder && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 overflow-y-auto">
+          <div className="bg-card border border-border/80 rounded-2xl w-full max-w-2xl shadow-xl overflow-hidden flex flex-col my-8 animate-in zoom-in-95 duration-200">
+            {/* Cabeçalho */}
+            <div className="flex items-center justify-between p-4 border-b border-border/40 bg-muted/30">
+              <div>
+                <span className="text-xs font-bold text-muted-foreground">OS #{selectedOrder.nr_sequencia}</span>
+                <h2 className="text-lg font-bold text-foreground line-clamp-1 mt-0.5">
+                  {selectedOrder.ds_dano_breve || 'Detalhes da OS'}
+                </h2>
+              </div>
+              <button
+                onClick={() => setSelectedOrder(null)}
+                className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground transition-all"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {/* Conteúdo */}
+            <div className="p-6 space-y-6 overflow-y-auto max-h-[70vh] scrollbar-thin">
+              {/* Informações Básicas */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="bg-muted/40 border border-border/40 rounded-xl p-3.5 space-y-2">
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Localização & Equipamento</h3>
+                  {selectedOrder.ds_localizacao && (
+                    <div className="flex items-center gap-2 text-sm text-foreground/90">
+                      <MapPin className="h-4 w-4 shrink-0 text-muted-foreground/60" />
+                      <span>{selectedOrder.ds_localizacao}</span>
+                    </div>
+                  )}
+                  {selectedOrder.ds_equipamento && (
+                    <div className="flex items-center gap-2 text-sm text-foreground/90">
+                      <Cpu className="h-4 w-4 shrink-0 text-muted-foreground/60" />
+                      <span>{selectedOrder.ds_equipamento}</span>
+                    </div>
+                  )}
+                </div>
+
+                <div className="bg-muted/40 border border-border/40 rounded-xl p-3.5 space-y-2">
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Pessoas Envolvidas</h3>
+                  {selectedOrder.nm_solicitante && (
+                    <div className="flex items-center gap-2 text-sm text-foreground/90">
+                      <User className="h-4 w-4 shrink-0 text-muted-foreground/60" />
+                      <span>Solicitante: {selectedOrder.nm_solicitante}</span>
+                    </div>
+                  )}
+                  {selectedOrder.nm_executor && (
+                    <div className="flex items-center gap-2 text-sm text-emerald-600 dark:text-emerald-400 font-medium">
+                      <UserCheck className="h-4 w-4 shrink-0" />
+                      <span>Executor: {selectedOrder.nm_executor}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Status & Prioridade */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-muted/20 border border-border/40 rounded-xl p-4">
+                <div className="flex flex-col">
+                  <span className="text-[10px] font-semibold text-muted-foreground uppercase">Prioridade</span>
+                  <div className="mt-1">{getPriorityBadge(selectedOrder.ie_prioridade)}</div>
+                </div>
+                <div className="flex flex-col">
+                  <span className="text-[10px] font-semibold text-muted-foreground uppercase">Estágio</span>
+                  <span className="text-sm font-bold text-foreground mt-1 uppercase truncate">
+                    {selectedOrder.ds_estagio || 'Não Iniciada'}
+                  </span>
+                </div>
+                <div className="flex flex-col">
+                  <span className="text-[10px] font-semibold text-muted-foreground uppercase">Abertura</span>
+                  <span className="text-xs text-foreground/80 mt-1.5">
+                    {formatDate(selectedOrder.dt_ordem_servico)}
+                  </span>
+                </div>
+                <div className="flex flex-col">
+                  <span className="text-[10px] font-semibold text-muted-foreground uppercase">Situação</span>
+                  <span className="text-xs font-semibold text-foreground/80 mt-1.5 uppercase truncate">
+                    {selectedOrder.ds_situacao || 'Sem situação'}
+                  </span>
+                </div>
+              </div>
+
+              {/* Dano Completo */}
+              {selectedOrder.ds_dano && (
+                <div className="space-y-2">
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                    <AlertTriangle className="h-4 w-4 text-amber-500" />
+                    Descrição do Dano / Problema
+                  </h3>
+                  <div className="bg-muted/40 border border-border/40 rounded-xl p-4 text-sm text-foreground/90 leading-relaxed whitespace-pre-wrap break-words">
+                    {formatSentenceCase(selectedOrder.ds_dano)}
+                  </div>
+                </div>
+              )}
+
+              {/* Histórico */}
+              <div className="space-y-3">
+                <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                  <RefreshCcw className="h-4 w-4 text-primary" />
+                  Histórico
+                </h3>
+
+                {loadingHistory ? (
+                  <div className="flex items-center justify-center p-8 gap-2">
+                    <RefreshCcw className="h-5 w-5 text-primary animate-spin" />
+                    <span className="text-sm text-muted-foreground">Buscando histórico...</span>
+                  </div>
+                ) : orderHistory.length === 0 ? (
+                  <div className="text-center py-6 text-sm text-muted-foreground border border-dashed border-border rounded-xl">
+                    Nenhum relato histórico encontrado para esta OS.
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {orderHistory.map((hist) => (
+                      <div
+                        key={hist.id}
+                        className="bg-card border border-border/60 rounded-xl p-4 space-y-2 shadow-sm"
+                      >
+                        <div className="flex items-center justify-between text-xs text-muted-foreground">
+                          <span className="font-semibold text-foreground/75">
+                            {hist.nm_usuario || 'Sistema'}
+                          </span>
+                          <span>{formatDate(hist.created_at)}</span>
+                        </div>
+                        <p className="text-sm text-foreground/90 whitespace-pre-wrap leading-relaxed break-words border-t border-border/40 pt-2">
+                          {hist.ds_relat_tecnico}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Rodapé */}
+            <div className="flex justify-end p-4 border-t border-border/40 bg-muted/30">
+              <button
+                onClick={() => setSelectedOrder(null)}
+                className="bg-muted hover:bg-muted/80 text-muted-foreground hover:text-foreground font-semibold px-4 py-2 rounded-lg text-sm transition-all border border-border/60"
+              >
+                Fechar
+              </button>
             </div>
           </div>
         </div>
