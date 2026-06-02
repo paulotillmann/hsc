@@ -225,7 +225,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 const { count, error: countError } = await supabase
                   .from('modules')
                   .select('*', { count: 'exact', head: true });
-                
+
                 if (!countError && count === 0) {
                   setUserModules(getDefaultModules(data.role === 'admin'));
                 } else {
@@ -306,21 +306,27 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
       return { error: 'Erro ao realizar login. Tente novamente.' };
     }
-    
-    // Check if user is blocked
+
+    // Check if user is blocked (envelopado com segurança)
     if (data?.user) {
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('is_blocked')
-        .eq('id', data.user.id)
-        .single();
-        
-      if (profile?.is_blocked) {
-        await supabase.auth.signOut();
-        return { error: 'Usuário bloqueado. Você está impedido de usar o sistema.' };
+      try {
+        const { data: profile, error: profileError } = await supabase
+          .from('profiles')
+          .select('is_blocked')
+          .eq('id', data.user.id)
+          .single();
+          
+        if (profileError) {
+          console.error('[AuthContext] Erro ao verificar bloqueio de usuário:', profileError.message);
+        } else if (profile?.is_blocked) {
+          await supabase.auth.signOut();
+          return { error: 'Usuário bloqueado. Você está impedido de usar o sistema.' };
+        }
+      } catch (err) {
+        console.error('[AuthContext] Exceção ao verificar bloqueio no signIn:', err);
       }
     }
-    
+
     return { error: null };
   };
 
