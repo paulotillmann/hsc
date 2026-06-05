@@ -52,6 +52,7 @@ interface OrdemServicoItem {
   ds_relat_tecnico: string | null;
   created_at: string;
   updated_at: string;
+  historico_ordem_servico?: { nr_sequencia: number }[] | null;
 }
 
 export default function OrdemServico() {
@@ -161,26 +162,27 @@ export default function OrdemServico() {
       setLoading(true);
       const { data, error: dbError } = await supabase
         .from('ordem_servico')
-        .select('*')
+        .select('*, historico_ordem_servico(nr_sequencia)')
         .gte('dt_ordem_servico', '2026-01-01T00:00:00Z')
         .lte('dt_ordem_servico', '2026-12-31T23:59:59.999Z')
         .order('dt_ordem_servico', { ascending: false });
 
       if (dbError) throw dbError;
-      setOrders(data || []);
 
-      // Buscar os históricos das ordens carregadas para identificar quais possuem histórico
-      if (data && data.length > 0) {
-        const nrSequencias = data.map(o => o.nr_sequencia);
-        const { data: histData, error: histError } = await supabase
-          .from('historico_ordem_servico')
-          .select('nr_sequencia')
-          .in('nr_sequencia', nrSequencias);
+      if (data) {
+        setOrders(data as OrdemServicoItem[]);
 
-        if (!histError && histData) {
-          const hasHistorySet = new Set(histData.map(h => h.nr_sequencia));
-          setOrdersWithHistory(hasHistorySet);
-        }
+        // Mapeia de forma extremamente rápida quais OS possuem histórico
+        const hasHistorySet = new Set<number>();
+        data.forEach((os: any) => {
+          if (os.historico_ordem_servico && os.historico_ordem_servico.length > 0) {
+            hasHistorySet.add(os.nr_sequencia);
+          }
+        });
+        setOrdersWithHistory(hasHistorySet);
+      } else {
+        setOrders([]);
+        setOrdersWithHistory(new Set());
       }
     } catch (err: any) {
       console.error('Erro ao carregar ordens de serviço:', err);
@@ -192,7 +194,7 @@ export default function OrdemServico() {
 
   // Referência para manter a OS selecionada atualizada no escopo das inscrições do Realtime
   const selectedOrderRef = React.useRef<OrdemServicoItem | null>(null);
-  
+
   useEffect(() => {
     selectedOrderRef.current = selectedOrder;
   }, [selectedOrder]);
@@ -256,7 +258,7 @@ export default function OrdemServico() {
 
   useEffect(() => {
     fetchOrders();
-    
+
     // Dispara uma sincronização imediata ao entrar na tela
     runBackgroundSync();
 
@@ -506,12 +508,12 @@ export default function OrdemServico() {
     return 'escalonado';
   };
 
-  // Converte a data do Tasy (que vem com 'Z' mas está no fuso de Brasília)
+  // Converte a data do Tasy (que vem com 'Z' ou offset de UTC mas está no fuso de Brasília)
   // para um objeto Date correto interpretando-a no fuso de Brasília (UTC-3).
   const parseTasyDate = (dateStr: string | null): Date | null => {
     if (!dateStr) return null;
-    // Substitui o sufixo 'Z' por '-03:00' para forçar a interpretação como horário de Brasília
-    const normalizedStr = dateStr.replace(/Z$/i, '-03:00');
+    // Substitui o sufixo 'Z', '+00:00' ou '+00' por '-03:00' para forçar a interpretação como horário de Brasília
+    const normalizedStr = dateStr.replace(/(Z|\+00:00|\+00)$/i, '-03:00');
     return new Date(normalizedStr);
   };
 
@@ -530,17 +532,17 @@ export default function OrdemServico() {
 
   // Variáveis para o Modal de Detalhes
   const orderColumn = selectedOrder ? getKanbanColumn(selectedOrder) : 'triagem';
-  const orderDtEntrada = selectedOrder 
-    ? (orderColumn === 'triagem' 
-        ? parseTasyDate(selectedOrder.dt_ordem_servico) 
-        : parseTasyDate(selectedOrder.dt_atualizacao || selectedOrder.updated_at))
+  const orderDtEntrada = selectedOrder
+    ? (orderColumn === 'triagem'
+      ? parseTasyDate(selectedOrder.dt_ordem_servico)
+      : parseTasyDate(selectedOrder.dt_atualizacao || selectedOrder.updated_at))
     : null;
-  const orderStageLabel = orderColumn === 'triagem' 
-    ? 'Triagem' 
-    : orderColumn === 'processo' 
-      ? 'Processo' 
-      : orderColumn === 'escalonado' 
-        ? 'Escalonado' 
+  const orderStageLabel = orderColumn === 'triagem'
+    ? 'Triagem'
+    : orderColumn === 'processo'
+      ? 'Processo'
+      : orderColumn === 'escalonado'
+        ? 'Escalonado'
         : 'Finalizado';
 
   // Formatação de prioridade
@@ -614,10 +616,15 @@ export default function OrdemServico() {
       total: 0
     };
 
+    const getLogTime = (logDateStr: string | null): number => {
+      if (!logDateStr) return 0;
+      const parsed = parseTasyDate(logDateStr);
+      return parsed ? parsed.getTime() : new Date(logDateStr).getTime();
+    };
+
     if (!logs || logs.length === 0) {
       if (!dtOrdemServico) return durations;
-      const parsedStart = parseTasyDate(dtOrdemServico);
-      const start = parsedStart ? parsedStart.getTime() : new Date(dtOrdemServico).getTime();
+      const start = getLogTime(dtOrdemServico);
       const end = new Date().getTime();
       const diff = end - start;
       if (currentEstagio === 'triagem') durations.triagem = diff;
@@ -631,17 +638,17 @@ export default function OrdemServico() {
 
     for (let i = 0; i < logs.length; i++) {
       const log = logs[i];
-      const start = new Date(log.dt_transicao).getTime();
-      
+      const start = getLogTime(log.dt_transicao);
+
       let end = now;
       if (i + 1 < logs.length) {
-        end = new Date(logs[i + 1].dt_transicao).getTime();
+        end = getLogTime(logs[i + 1].dt_transicao);
       } else if (log.estagio_kanban === 'finalizado') {
         end = start;
       }
 
       const diff = end - start;
-      
+
       if (log.estagio_kanban === 'triagem') {
         durations.triagem += diff;
       } else if (log.estagio_kanban === 'processo') {
@@ -653,9 +660,9 @@ export default function OrdemServico() {
 
     const firstLog = logs[0];
     const lastLog = logs[logs.length - 1];
-    const startTotal = new Date(firstLog.dt_transicao).getTime();
-    const endTotal = lastLog.estagio_kanban === 'finalizado' 
-      ? new Date(lastLog.dt_transicao).getTime() 
+    const startTotal = getLogTime(firstLog.dt_transicao);
+    const endTotal = lastLog.estagio_kanban === 'finalizado'
+      ? getLogTime(lastLog.dt_transicao)
       : now;
     durations.total = endTotal - startTotal;
 
@@ -664,16 +671,16 @@ export default function OrdemServico() {
 
   // Render do Card Kanban
   const renderCard = (os: OrdemServicoItem, columnId: 'triagem' | 'processo' | 'escalonado' | 'finalizado') => {
-    const dtEntrada = columnId === 'triagem' 
-      ? parseTasyDate(os.dt_ordem_servico) 
+    const dtEntrada = columnId === 'triagem'
+      ? parseTasyDate(os.dt_ordem_servico)
       : parseTasyDate(os.dt_atualizacao || os.updated_at);
 
-    const stageLabel = columnId === 'triagem' 
-      ? 'Triagem' 
-      : columnId === 'processo' 
-        ? 'Processo' 
-        : columnId === 'escalonado' 
-          ? 'Escalonado' 
+    const stageLabel = columnId === 'triagem'
+      ? 'Triagem'
+      : columnId === 'processo'
+        ? 'Processo'
+        : columnId === 'escalonado'
+          ? 'Escalonado'
           : 'Finalizado';
 
     return (
@@ -745,8 +752,8 @@ export default function OrdemServico() {
               <span>{formatDate(parseTasyDate(os.dt_ordem_servico))}</span>
             </div>
             {ordersWithHistory.has(os.nr_sequencia) && (
-              <div 
-                className="flex items-center gap-0.5 text-sky-600 dark:text-sky-400 bg-sky-500/10 dark:bg-sky-500/5 px-1 py-0.5 rounded font-semibold border border-sky-500/10 shrink-0" 
+              <div
+                className="flex items-center gap-0.5 text-sky-600 dark:text-sky-400 bg-sky-500/10 dark:bg-sky-500/5 px-1 py-0.5 rounded font-semibold border border-sky-500/10 shrink-0"
                 title="Possui histórico de relatos"
               >
                 <History className="h-3 w-3 shrink-0" />
@@ -769,123 +776,125 @@ export default function OrdemServico() {
 
   return (
     <div className="flex-1 space-y-4 min-h-[85vh] pb-4 w-full mx-auto px-1 pt-2 text-foreground transition-all">
-      {/* Cabeçalho do Módulo */}
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-3 border-b border-border/40">
-        <div className="flex flex-col min-w-0">
-          <h1 className="text-2xl font-bold tracking-tight text-foreground flex items-center gap-2">
-            <Wrench className="h-7 w-7 text-primary animate-pulse shrink-0" />
-            <span className="truncate">Ordem de Serviço</span>
-          </h1>
-          <span className="text-xs text-muted-foreground mt-0.5 truncate hidden sm:block">
-            Acompanhamento das ordens de serviço integradas com o n8n.
-          </span>
-        </div>
+      <div className="flex flex-col gap-3 pb-3 border-b border-border/40">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+          <div className="flex flex-col min-w-0">
+            <div className="flex items-center gap-3 flex-wrap">
+              <h1 className="text-2xl font-bold tracking-tight text-foreground flex items-center gap-2">
+                <Wrench className="h-7 w-7 text-primary animate-pulse shrink-0" />
+                <span className="truncate">Ordem de Serviço</span>
+              </h1>
 
-        {/* Filtros da página ao lado do título */}
-        <div className="flex flex-col sm:flex-row items-center gap-3 w-full lg:w-auto">
-          {/* Avatares dos Executores */}
-          <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap bg-muted/40 border border-border/60 px-2.5 py-1 rounded-xl">
-            <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider pl-0.5 select-none">Executores:</span>
-            <div className="flex items-center gap-1.5">
-              {sortedExecutors.map((exec) => {
-                const isSelected = selectedExecutor === exec.dbKey;
-                const initials = exec.displayName.substring(0, 2).toUpperCase();
-
-                return (
-                  <button
-                    key={exec.dbKey}
-                    onClick={() => setSelectedExecutor(isSelected ? null : exec.dbKey)}
-                    title={exec.fullName}
-                    className={`relative flex items-center justify-center h-8 w-8 rounded-full border overflow-hidden p-0 transition-all duration-200 bg-background shrink-0 ${isSelected
-                        ? 'border-primary ring-2 ring-primary/25 scale-105 shadow-sm'
-                        : 'border-border hover:border-muted-foreground/50 hover:scale-105'
-                      }`}
-                  >
-                    {exec.avatarUrl ? (
-                      <img
-                        src={exec.avatarUrl}
-                        alt={exec.displayName}
-                        className="h-full w-full rounded-full object-cover antialiased"
-                      />
-                    ) : (
-                      <div className={`h-full w-full rounded-full flex items-center justify-center text-[10px] font-bold ${isSelected ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'
-                        }`}>
-                        {initials}
-                      </div>
-                    )}
-                    {isSelected && (
-                      <span className="absolute -bottom-0.5 -right-0.5 flex h-3 w-3 items-center justify-center rounded-full bg-primary text-[8px] text-primary-foreground font-bold border border-background shadow-sm">
-                        ✓
+              {/* Indicador de Sincronização ao lado do texto Ordem de Serviço */}
+              {(isBackgroundSyncing || syncError || lastSyncTime) && (
+                <div className="flex items-center select-none shrink-0">
+                  {isBackgroundSyncing ? (
+                    <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-blue-50 dark:bg-blue-900/10 border border-blue-200/30 dark:border-blue-800/30 text-xs animate-in fade-in duration-200">
+                      <RefreshCcw className="h-3.5 w-3.5 animate-spin text-blue-500" />
+                      <span className="text-blue-600 dark:text-blue-400 font-bold uppercase tracking-wider">Sincronizando...</span>
+                    </div>
+                  ) : syncError ? (
+                    <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-red-50 dark:bg-red-900/10 border border-red-200/30 dark:border-red-800/30 text-xs animate-in fade-in duration-200">
+                      <span className="relative flex h-2 w-2">
+                        <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
                       </span>
-                    )}
-                  </button>
-                );
-              })}
-
-              {selectedExecutor && (
-                <button
-                  onClick={() => setSelectedExecutor(null)}
-                  className="text-[10px] text-muted-foreground hover:text-foreground font-semibold underline ml-1 whitespace-nowrap"
-                >
-                  Limpar
-                </button>
+                      <span className="text-red-600 dark:text-red-400 font-bold uppercase tracking-wider">Erro na sync</span>
+                    </div>
+                  ) : lastSyncTime ? (
+                    <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-50 dark:bg-emerald-900/10 border border-emerald-200/30 dark:border-emerald-800/30 text-xs animate-in fade-in duration-200" title={`Última sincronização: ${formatSyncTime(lastSyncTime)}`}>
+                      <span className="relative flex h-2 w-2">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                        <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                      </span>
+                      <span className="text-emerald-600 dark:text-emerald-400 font-bold uppercase tracking-wider">
+                        Sync {formatSyncTime(lastSyncTime)}
+                      </span>
+                    </div>
+                  ) : null}
+                </div>
               )}
             </div>
+            <span className="text-xs text-muted-foreground mt-0.5 truncate hidden sm:block">
+              Acompanhamento das ordens de serviço integradas com o n8n.
+            </span>
           </div>
 
-          {/* Busca e Período */}
-          <div className="flex items-center gap-2 w-full sm:w-auto">
-            <div className="relative w-full sm:w-48 lg:w-56">
-              <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
-              <input
-                type="text"
-                placeholder="Buscar chamado..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-8 pr-3 py-1.5 bg-muted/40 border border-border rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all text-foreground placeholder:text-muted-foreground"
-              />
+          {/* Filtros da página ao lado do título */}
+          <div className="flex flex-col sm:flex-row items-center gap-3 w-full lg:w-auto">
+            {/* Avatares dos Executores */}
+            <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap bg-muted/40 border border-border/60 px-2.5 py-1 rounded-xl">
+              <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider pl-0.5 select-none">Executores:</span>
+              <div className="flex items-center gap-1.5">
+                {sortedExecutors.map((exec) => {
+                  const isSelected = selectedExecutor === exec.dbKey;
+                  const initials = exec.displayName.substring(0, 2).toUpperCase();
+                  return (
+                    <button
+                      key={exec.dbKey}
+                      onClick={() => setSelectedExecutor(isSelected ? null : exec.dbKey)}
+                      title={exec.fullName}
+                      className={`relative flex items-center justify-center h-9 w-9 rounded-full border overflow-hidden p-0 transition-all duration-200 bg-background shrink-0 ${isSelected
+                        ? 'border-primary ring-2 ring-primary/25 scale-105 shadow-sm'
+                        : 'border-border hover:border-muted-foreground/50 hover:scale-105'
+                        }`}
+                    >
+                      {exec.avatarUrl ? (
+                        <img
+                          src={exec.avatarUrl}
+                          alt={exec.displayName}
+                          className="h-full w-full rounded-full object-cover"
+                        />
+                      ) : (
+                        <div className={`h-full w-full rounded-full flex items-center justify-center text-[10px] font-bold ${isSelected ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'
+                          }`}>
+                          {initials}
+                        </div>
+                      )}
+                      {isSelected && (
+                        <span className="absolute -bottom-0.5 -right-0.5 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-primary text-[8px] text-primary-foreground font-bold border border-background shadow-sm">
+                          ✓
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+
+                {selectedExecutor && (
+                  <button
+                    onClick={() => setSelectedExecutor(null)}
+                    className="text-[10px] text-muted-foreground hover:text-foreground font-semibold underline ml-1 whitespace-nowrap animate-in fade-in duration-200"
+                  >
+                    Limpar
+                  </button>
+                )}
+              </div>
             </div>
 
-            <select
-              value={dateFilter}
-              onChange={(e) => setDateFilter(e.target.value as any)}
-              className="py-1.5 px-2.5 bg-muted/40 border border-border rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-foreground font-semibold cursor-pointer shrink-0"
-            >
-              <option value="todas">Todas</option>
-              <option value="dia">Dia</option>
-              <option value="semana">Semana</option>
-              <option value="mes">Mês</option>
-            </select>
+            {/* Busca e Período */}
+            <div className="flex items-center gap-2 w-full sm:w-auto">
+              <div className="relative w-full sm:w-48 lg:w-56">
+                <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
+                <input
+                  type="text"
+                  placeholder="Buscar chamado..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-full pl-8 pr-3 py-1.5 bg-muted/40 border border-border rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all text-foreground placeholder:text-muted-foreground"
+                />
+              </div>
+
+              <select
+                value={dateFilter}
+                onChange={(e) => setDateFilter(e.target.value as any)}
+                className="py-1.5 px-2.5 bg-muted/40 border border-border rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-foreground font-semibold cursor-pointer shrink-0"
+              >
+                <option value="todas">Todas</option>
+                <option value="dia">Dia</option>
+                <option value="semana">Semana</option>
+                <option value="mes">Mês</option>
+              </select>
+            </div>
           </div>
-
-          {/* Indicador de Sincronização */}
-          {(isBackgroundSyncing || syncError || lastSyncTime) && (
-            <div className="flex items-center gap-1.5 select-none shrink-0">
-              {isBackgroundSyncing ? (
-                <div className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-blue-50 dark:bg-blue-900/10 border border-blue-200/30 dark:border-blue-800/30 text-[10px]">
-                  <RefreshCcw className="h-3 w-3 animate-spin text-blue-500" />
-                  <span className="text-blue-600 dark:text-blue-400 font-bold uppercase tracking-wider">Sincronizando...</span>
-                </div>
-              ) : syncError ? (
-                <div className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-red-50 dark:bg-red-900/10 border border-red-200/30 dark:border-red-800/30 text-[10px]">
-                  <span className="relative flex h-1.5 w-1.5">
-                    <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-red-500"></span>
-                  </span>
-                  <span className="text-red-600 dark:text-red-400 font-bold uppercase tracking-wider">Erro na sync</span>
-                </div>
-              ) : lastSyncTime ? (
-                <div className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-900/10 border border-emerald-200/30 dark:border-emerald-800/30 text-[10px]" title={`Última sincronização: ${formatSyncTime(lastSyncTime)}`}>
-                  <span className="relative flex h-1.5 w-1.5">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500"></span>
-                  </span>
-                  <span className="text-emerald-600 dark:text-emerald-400 font-bold uppercase tracking-wider">
-                    Sync {formatSyncTime(lastSyncTime)}
-                  </span>
-                </div>
-              ) : null}
-            </div>
-          )}
         </div>
       </div>
 
