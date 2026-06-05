@@ -186,7 +186,12 @@ export default function OrdemServico() {
       }
     } catch (err: any) {
       console.error('Erro ao carregar ordens de serviço:', err);
-      setError(`Erro ao carregar as ordens de serviço do banco de dados: ${err?.message || err?.details || JSON.stringify(err)}`);
+      const isAbortError = err?.name === 'AbortError' || err?.message?.includes('Lock broken');
+      if (!isAbortError) {
+        setError(`Erro ao carregar as ordens de serviço do banco de dados: ${err?.message || err?.details || JSON.stringify(err)}`);
+      } else {
+        console.warn('[FetchOrders] Consulta ao banco abortada por concorrência de locks. Novo carregamento ocorrerá automaticamente.');
+      }
     } finally {
       setLoading(false);
     }
@@ -198,6 +203,17 @@ export default function OrdemServico() {
   useEffect(() => {
     selectedOrderRef.current = selectedOrder;
   }, [selectedOrder]);
+
+  // Debounce para fetchOrders para evitar chamadas múltiplas simultâneas em eventos de sincronização em lote
+  const fetchTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
+  const triggerDebouncedFetch = React.useCallback(() => {
+    if (fetchTimeoutRef.current) {
+      clearTimeout(fetchTimeoutRef.current);
+    }
+    fetchTimeoutRef.current = setTimeout(() => {
+      fetchOrders();
+    }, 400); // 400ms de inatividade do Realtime
+  }, []);
 
   // Função auxiliar para atualizar o histórico e estágios da OS em exibição no modal
   const refreshSelectedOrderDetails = async (os: OrdemServicoItem) => {
@@ -257,10 +273,14 @@ export default function OrdemServico() {
   };
 
   useEffect(() => {
+    // Carrega dados iniciais do banco
     fetchOrders();
 
-    // Dispara uma sincronização imediata ao entrar na tela
-    runBackgroundSync();
+    // Atrasamos o início do sync inicial em background por 1 segundo
+    // para evitar concorrência no IndexedDB durante a renovação do token
+    const syncTimeout = setTimeout(() => {
+      runBackgroundSync();
+    }, 1000);
 
     // Configura o intervalo de 3 minutos para a sincronização periódica
     const syncInterval = setInterval(() => {
@@ -275,7 +295,7 @@ export default function OrdemServico() {
         { event: '*', schema: 'public', table: 'ordem_servico' },
         (payload) => {
           console.log('[Realtime] Alteração na tabela ordem_servico:', payload.eventType);
-          fetchOrders();
+          triggerDebouncedFetch();
 
           // Se a OS modificada for a selecionada, atualiza seus dados no modal
           if (payload.new && (payload.new as any).nr_sequencia) {
@@ -296,7 +316,7 @@ export default function OrdemServico() {
         { event: '*', schema: 'public', table: 'historico_ordem_servico' },
         (payload) => {
           console.log('[Realtime] Alteração na tabela historico_ordem_servico:', payload.eventType);
-          fetchOrders();
+          triggerDebouncedFetch();
 
           // Se o novo relato for da OS selecionada, atualiza o histórico dela no modal
           const newRecord = payload.new as any;
@@ -310,11 +330,15 @@ export default function OrdemServico() {
       .subscribe();
 
     return () => {
+      if (fetchTimeoutRef.current) {
+        clearTimeout(fetchTimeoutRef.current);
+      }
+      clearTimeout(syncTimeout);
       clearInterval(syncInterval);
       supabase.removeChannel(ordersChannel);
       supabase.removeChannel(historyChannel);
     };
-  }, []);
+  }, [triggerDebouncedFetch]);
 
   useEffect(() => {
     const loadExecutorAvatars = async () => {
