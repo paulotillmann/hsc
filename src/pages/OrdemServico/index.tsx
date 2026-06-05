@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Wrench,
   RefreshCcw,
@@ -18,7 +19,10 @@ import {
   X,
   History,
   ClipboardList,
-  Clock
+  Clock,
+  ArrowLeft,
+  Sun,
+  Moon
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { VisaoGeralCard } from '../../components/recepcao/VisaoGeralCard';
@@ -52,9 +56,28 @@ interface OrdemServicoItem {
   ds_relat_tecnico: string | null;
   created_at: string;
   updated_at: string;
+  historico_ordem_servico?: { nr_sequencia: number }[] | null;
 }
 
 export default function OrdemServico() {
+  const navigate = useNavigate();
+  const [isDarkMode, setIsDarkMode] = useState(() => {
+    return document.documentElement.classList.contains('dark');
+  });
+
+  const toggleTheme = () => {
+    const root = document.documentElement;
+    if (root.classList.contains('dark')) {
+      root.classList.remove('dark');
+      root.classList.add('light');
+      setIsDarkMode(false);
+    } else {
+      root.classList.add('dark');
+      root.classList.remove('light');
+      setIsDarkMode(true);
+    }
+  };
+
   const [orders, setOrders] = useState<OrdemServicoItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -161,30 +184,36 @@ export default function OrdemServico() {
       setLoading(true);
       const { data, error: dbError } = await supabase
         .from('ordem_servico')
-        .select('*')
+        .select('*, historico_ordem_servico(nr_sequencia)')
         .gte('dt_ordem_servico', '2026-01-01T00:00:00Z')
         .lte('dt_ordem_servico', '2026-12-31T23:59:59.999Z')
         .order('dt_ordem_servico', { ascending: false });
 
       if (dbError) throw dbError;
-      setOrders(data || []);
 
-      // Buscar os históricos das ordens carregadas para identificar quais possuem histórico
-      if (data && data.length > 0) {
-        const nrSequencias = data.map(o => o.nr_sequencia);
-        const { data: histData, error: histError } = await supabase
-          .from('historico_ordem_servico')
-          .select('nr_sequencia')
-          .in('nr_sequencia', nrSequencias);
+      if (data) {
+        setOrders(data as OrdemServicoItem[]);
 
-        if (!histError && histData) {
-          const hasHistorySet = new Set(histData.map(h => h.nr_sequencia));
-          setOrdersWithHistory(hasHistorySet);
-        }
+        // Mapeia de forma extremamente rápida quais OS possuem histórico
+        const hasHistorySet = new Set<number>();
+        data.forEach((os: any) => {
+          if (os.historico_ordem_servico && os.historico_ordem_servico.length > 0) {
+            hasHistorySet.add(os.nr_sequencia);
+          }
+        });
+        setOrdersWithHistory(hasHistorySet);
+      } else {
+        setOrders([]);
+        setOrdersWithHistory(new Set());
       }
     } catch (err: any) {
       console.error('Erro ao carregar ordens de serviço:', err);
-      setError('Erro ao carregar as ordens de serviço do banco de dados.');
+      const isAbortError = err?.name === 'AbortError' || err?.message?.includes('Lock broken');
+      if (!isAbortError) {
+        setError(`Erro ao carregar as ordens de serviço do banco de dados: ${err?.message || err?.details || JSON.stringify(err)}`);
+      } else {
+        console.warn('[FetchOrders] Consulta ao banco abortada por concorrência de locks. Novo carregamento ocorrerá automaticamente.');
+      }
     } finally {
       setLoading(false);
     }
@@ -192,10 +221,21 @@ export default function OrdemServico() {
 
   // Referência para manter a OS selecionada atualizada no escopo das inscrições do Realtime
   const selectedOrderRef = React.useRef<OrdemServicoItem | null>(null);
-  
+
   useEffect(() => {
     selectedOrderRef.current = selectedOrder;
   }, [selectedOrder]);
+
+  // Debounce para fetchOrders para evitar chamadas múltiplas simultâneas em eventos de sincronização em lote
+  const fetchTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
+  const triggerDebouncedFetch = React.useCallback(() => {
+    if (fetchTimeoutRef.current) {
+      clearTimeout(fetchTimeoutRef.current);
+    }
+    fetchTimeoutRef.current = setTimeout(() => {
+      fetchOrders();
+    }, 400); // 400ms de inatividade do Realtime
+  }, []);
 
   // Função auxiliar para atualizar o histórico e estágios da OS em exibição no modal
   const refreshSelectedOrderDetails = async (os: OrdemServicoItem) => {
@@ -255,10 +295,14 @@ export default function OrdemServico() {
   };
 
   useEffect(() => {
+    // Carrega dados iniciais do banco
     fetchOrders();
-    
-    // Dispara uma sincronização imediata ao entrar na tela
-    runBackgroundSync();
+
+    // Atrasamos o início do sync inicial em background por 1 segundo
+    // para evitar concorrência no IndexedDB durante a renovação do token
+    const syncTimeout = setTimeout(() => {
+      runBackgroundSync();
+    }, 1000);
 
     // Configura o intervalo de 3 minutos para a sincronização periódica
     const syncInterval = setInterval(() => {
@@ -273,7 +317,7 @@ export default function OrdemServico() {
         { event: '*', schema: 'public', table: 'ordem_servico' },
         (payload) => {
           console.log('[Realtime] Alteração na tabela ordem_servico:', payload.eventType);
-          fetchOrders();
+          triggerDebouncedFetch();
 
           // Se a OS modificada for a selecionada, atualiza seus dados no modal
           if (payload.new && (payload.new as any).nr_sequencia) {
@@ -294,7 +338,7 @@ export default function OrdemServico() {
         { event: '*', schema: 'public', table: 'historico_ordem_servico' },
         (payload) => {
           console.log('[Realtime] Alteração na tabela historico_ordem_servico:', payload.eventType);
-          fetchOrders();
+          triggerDebouncedFetch();
 
           // Se o novo relato for da OS selecionada, atualiza o histórico dela no modal
           const newRecord = payload.new as any;
@@ -308,11 +352,15 @@ export default function OrdemServico() {
       .subscribe();
 
     return () => {
+      if (fetchTimeoutRef.current) {
+        clearTimeout(fetchTimeoutRef.current);
+      }
+      clearTimeout(syncTimeout);
       clearInterval(syncInterval);
       supabase.removeChannel(ordersChannel);
       supabase.removeChannel(historyChannel);
     };
-  }, []);
+  }, [triggerDebouncedFetch]);
 
   useEffect(() => {
     const loadExecutorAvatars = async () => {
@@ -506,17 +554,41 @@ export default function OrdemServico() {
     return 'escalonado';
   };
 
+  // Converte a data do Tasy (que vem com 'Z' ou offset de UTC mas está no fuso de Brasília)
+  // para um objeto Date correto interpretando-a no fuso de Brasília (UTC-3).
+  const parseTasyDate = (dateStr: string | null): Date | null => {
+    if (!dateStr) return null;
+    // Substitui o sufixo 'Z', '+00:00' ou '+00' por '-03:00' para forçar a interpretação como horário de Brasília
+    const normalizedStr = dateStr.replace(/(Z|\+00:00|\+00)$/i, '-03:00');
+    return new Date(normalizedStr);
+  };
+
+  // Formação de data
+  const formatDate = (date: Date | string | null) => {
+    if (!date) return '';
+    const d = typeof date === 'string' ? new Date(date) : date;
+    return d.toLocaleDateString('pt-BR', {
+      day: '2-digit',
+      month: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      timeZone: 'America/Sao_Paulo'
+    }).replace(', ', ' - ');
+  };
+
   // Variáveis para o Modal de Detalhes
   const orderColumn = selectedOrder ? getKanbanColumn(selectedOrder) : 'triagem';
-  const orderDtEntrada = selectedOrder 
-    ? (orderColumn === 'triagem' ? selectedOrder.dt_ordem_servico : (selectedOrder.dt_atualizacao || selectedOrder.updated_at))
+  const orderDtEntrada = selectedOrder
+    ? (orderColumn === 'triagem'
+      ? parseTasyDate(selectedOrder.dt_ordem_servico)
+      : parseTasyDate(selectedOrder.dt_atualizacao || selectedOrder.updated_at))
     : null;
-  const orderStageLabel = orderColumn === 'triagem' 
-    ? 'Triagem' 
-    : orderColumn === 'processo' 
-      ? 'Processo' 
-      : orderColumn === 'escalonado' 
-        ? 'Escalonado' 
+  const orderStageLabel = orderColumn === 'triagem'
+    ? 'Triagem'
+    : orderColumn === 'processo'
+      ? 'Processo'
+      : orderColumn === 'escalonado'
+        ? 'Escalonado'
         : 'Finalizado';
 
   // Formatação de prioridade
@@ -541,18 +613,6 @@ export default function OrdemServico() {
         Baixa
       </span>
     );
-  };
-
-  // Formatação de data
-  const formatDate = (dateStr: string | null) => {
-    if (!dateStr) return '';
-    const date = new Date(dateStr);
-    return date.toLocaleDateString('pt-BR', {
-      day: '2-digit',
-      month: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
   };
 
   // Formatar texto para o padrão pt-br (Sentence Case) suavizando CAIXA ALTA
@@ -602,9 +662,15 @@ export default function OrdemServico() {
       total: 0
     };
 
+    const getLogTime = (logDateStr: string | null): number => {
+      if (!logDateStr) return 0;
+      const parsed = parseTasyDate(logDateStr);
+      return parsed ? parsed.getTime() : new Date(logDateStr).getTime();
+    };
+
     if (!logs || logs.length === 0) {
       if (!dtOrdemServico) return durations;
-      const start = new Date(dtOrdemServico).getTime();
+      const start = getLogTime(dtOrdemServico);
       const end = new Date().getTime();
       const diff = end - start;
       if (currentEstagio === 'triagem') durations.triagem = diff;
@@ -618,17 +684,17 @@ export default function OrdemServico() {
 
     for (let i = 0; i < logs.length; i++) {
       const log = logs[i];
-      const start = new Date(log.dt_transicao).getTime();
-      
+      const start = getLogTime(log.dt_transicao);
+
       let end = now;
       if (i + 1 < logs.length) {
-        end = new Date(logs[i + 1].dt_transicao).getTime();
+        end = getLogTime(logs[i + 1].dt_transicao);
       } else if (log.estagio_kanban === 'finalizado') {
         end = start;
       }
 
       const diff = end - start;
-      
+
       if (log.estagio_kanban === 'triagem') {
         durations.triagem += diff;
       } else if (log.estagio_kanban === 'processo') {
@@ -640,9 +706,9 @@ export default function OrdemServico() {
 
     const firstLog = logs[0];
     const lastLog = logs[logs.length - 1];
-    const startTotal = new Date(firstLog.dt_transicao).getTime();
-    const endTotal = lastLog.estagio_kanban === 'finalizado' 
-      ? new Date(lastLog.dt_transicao).getTime() 
+    const startTotal = getLogTime(firstLog.dt_transicao);
+    const endTotal = lastLog.estagio_kanban === 'finalizado'
+      ? getLogTime(lastLog.dt_transicao)
       : now;
     durations.total = endTotal - startTotal;
 
@@ -651,17 +717,42 @@ export default function OrdemServico() {
 
   // Render do Card Kanban
   const renderCard = (os: OrdemServicoItem, columnId: 'triagem' | 'processo' | 'escalonado' | 'finalizado') => {
-    const dtEntrada = columnId === 'triagem' 
-      ? os.dt_ordem_servico 
-      : (os.dt_atualizacao || os.updated_at);
+    const dtEntrada = columnId === 'triagem'
+      ? parseTasyDate(os.dt_ordem_servico)
+      : parseTasyDate(os.dt_atualizacao || os.updated_at);
 
-    const stageLabel = columnId === 'triagem' 
-      ? 'Triagem' 
-      : columnId === 'processo' 
-        ? 'Processo' 
-        : columnId === 'escalonado' 
-          ? 'Escalonado' 
+    const stageLabel = columnId === 'triagem'
+      ? 'Triagem'
+      : columnId === 'processo'
+        ? 'Processo'
+        : columnId === 'escalonado'
+          ? 'Escalonado'
           : 'Finalizado';
+
+    const getBadgeColors = (colId: 'triagem' | 'processo' | 'escalonado' | 'finalizado') => {
+      switch (colId) {
+        case 'triagem':
+          return {
+            container: 'text-slate-700 dark:text-slate-400 bg-slate-500/5 border-slate-500/10',
+            clock: 'text-slate-500'
+          };
+        case 'processo':
+          return {
+            container: 'text-sky-700 dark:text-sky-400 bg-sky-500/5 border-sky-500/10',
+            clock: 'text-sky-500'
+          };
+        case 'escalonado':
+          return {
+            container: 'text-amber-700 dark:text-amber-400 bg-amber-500/5 border-amber-500/10',
+            clock: 'text-amber-500'
+          };
+        case 'finalizado':
+          return {
+            container: 'text-emerald-700 dark:text-emerald-400 bg-emerald-500/5 border-emerald-500/10',
+            clock: 'text-emerald-500'
+          };
+      }
+    };
 
     return (
       <div
@@ -670,10 +761,12 @@ export default function OrdemServico() {
         className="bg-card border border-border/80 rounded-xl p-4 shadow-sm hover:shadow-md transition-all duration-200 hover:-translate-y-0.5 flex flex-col gap-3 group cursor-pointer"
       >
         <div className="flex items-center justify-between gap-2">
-          <span className="text-xs font-bold text-muted-foreground group-hover:text-primary transition-colors">
+          <span className="text-sm font-bold text-muted-foreground group-hover:text-primary transition-colors truncate">
             OS #{os.nr_sequencia}
           </span>
-          {getPriorityBadge(os.ie_prioridade)}
+          <div className="flex items-center gap-1.5 shrink-0">
+            {getPriorityBadge(os.ie_prioridade)}
+          </div>
         </div>
 
         <h3 className="text-sm font-semibold text-foreground leading-snug line-clamp-2 uppercase">
@@ -681,10 +774,39 @@ export default function OrdemServico() {
         </h3>
 
         <div className="flex flex-col gap-1.5 text-sm text-foreground/90 mt-1">
-          {os.ds_localizacao && (
-            <div className="flex items-center gap-1.5">
-              <MapPin className="h-4 w-4 shrink-0 text-muted-foreground/80" />
-              <span className="truncate">{os.ds_localizacao}</span>
+          {(os.ds_localizacao || os.nm_executor) && (
+            <div className="flex items-center justify-between gap-1.5 w-full">
+              {os.ds_localizacao ? (
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <MapPin className="h-4 w-4 shrink-0 text-muted-foreground/80" />
+                  <span className="truncate">{os.ds_localizacao}</span>
+                </div>
+              ) : (
+                <div />
+              )}
+              {os.nm_executor && (() => {
+                const exec = executors.find(e => e.dbKey.toLowerCase() === os.nm_executor.trim().toLowerCase());
+                const displayName = exec ? exec.displayName : os.nm_executor;
+                const fullName = exec ? exec.fullName : os.nm_executor;
+                const avatarUrl = exec ? exec.avatarUrl : null;
+                const initials = displayName.substring(0, 2).toUpperCase();
+
+                return (
+                  <div className="shrink-0" title={`Executor: ${fullName}`}>
+                    {avatarUrl ? (
+                      <img
+                        src={avatarUrl}
+                        alt={displayName}
+                        className="h-9 w-9 rounded-full object-cover border border-emerald-500/30 dark:border-emerald-500/40 shadow-sm"
+                      />
+                    ) : (
+                      <div className="h-9 w-9 rounded-full bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 flex items-center justify-center text-sm font-bold border border-emerald-500/30 dark:border-emerald-500/40 shadow-sm">
+                        {initials}
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
             </div>
           )}
           {os.ds_equipamento && (
@@ -705,40 +827,34 @@ export default function OrdemServico() {
               <span className="break-words whitespace-normal" title={os.ds_dano}>{formatSentenceCase(os.ds_dano)}</span>
             </div>
           )}
-          {os.nm_executor && (
-            <div className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400 font-medium bg-emerald-500/5 px-1.5 py-0.5 rounded border border-emerald-500/10 w-fit max-w-full">
-              <UserCheck className="h-3.5 w-3.5 shrink-0" />
-              <span className="truncate">Exec: {os.nm_executor}</span>
-            </div>
-          )}
-          {dtEntrada && (
-            <div className="flex items-center gap-1.5 text-[11px] font-semibold text-sky-700 dark:text-sky-400 bg-sky-500/5 px-2 py-0.5 rounded border border-sky-500/10 w-fit max-w-full" title="Data/Hora de entrada no estágio atual">
-              <Clock className="h-3.5 w-3.5 shrink-0 text-sky-500" />
-              <span className="truncate">{stageLabel}: {formatDate(dtEntrada)}</span>
-            </div>
-          )}
+          {dtEntrada && (() => {
+            const colors = getBadgeColors(columnId);
+            return (
+              <div className={`flex items-center gap-1.5 text-[11px] font-semibold ${colors.container} px-2 py-0.5 rounded border w-fit max-w-full`} title="Data/Hora de entrada no estágio atual">
+                <Clock className={`h-3.5 w-3.5 shrink-0 ${colors.clock}`} />
+                <span className="truncate">{stageLabel}: {formatDate(dtEntrada)}</span>
+              </div>
+            );
+          })()}
         </div>
 
         <div className="flex items-center justify-between border-t border-border/40 pt-2.5 mt-1 text-[10px] text-muted-foreground">
-          <div className="flex items-center gap-2">
-            <div className="flex items-center gap-1.5 text-sm font-semibold text-foreground/90 dark:text-foreground/95 bg-muted px-2 py-0.5 rounded" title="Data de abertura do chamado">
-              <Calendar className="h-3.5 w-3.5 text-foreground/70 dark:text-foreground/80" />
-              <span>{formatDate(os.dt_ordem_servico)}</span>
-            </div>
-            {ordersWithHistory.has(os.nr_sequencia) && (
-              <div 
-                className="flex items-center gap-0.5 text-sky-600 dark:text-sky-400 bg-sky-500/10 dark:bg-sky-500/5 px-1 py-0.5 rounded font-semibold border border-sky-500/10 shrink-0" 
-                title="Possui histórico de relatos"
-              >
-                <History className="h-3 w-3 shrink-0" />
-                <span className="text-[8px] uppercase tracking-wider font-bold">Histórico</span>
-              </div>
-            )}
+          <div className="flex items-center gap-1.5 text-sm font-semibold text-foreground/90 dark:text-foreground/95 bg-muted px-2 py-0.5 rounded" title="Data de abertura do chamado">
+            <Calendar className="h-3.5 w-3.5 text-foreground/70 dark:text-foreground/80" />
+            <span>{formatDate(parseTasyDate(os.dt_ordem_servico))}</span>
           </div>
           {(os.ds_estagio || os.ds_situacao) && (
-            <span className="font-semibold uppercase tracking-wider text-[9px] bg-muted px-1.5 py-0.5 rounded">
-              {os.ds_estagio || os.ds_situacao}
-            </span>
+            <div className="flex items-center gap-1.5 shrink-0">
+              {ordersWithHistory.has(os.nr_sequencia) && (
+                <History
+                  className="h-4 w-4 text-sky-500 dark:text-sky-400 shrink-0"
+                  title="Possui histórico de relatos"
+                />
+              )}
+              <span className="font-semibold uppercase tracking-wider text-[9px] bg-muted px-1.5 py-0.5 rounded">
+                {os.ds_estagio || os.ds_situacao}
+              </span>
+            </div>
           )}
         </div>
       </div>
@@ -749,49 +865,142 @@ export default function OrdemServico() {
   const sortedExecutors = [...executors].sort((a, b) => a.displayName.localeCompare(b.displayName));
 
   return (
-    <div className="flex-1 space-y-4 min-h-[85vh] pb-4 w-full mx-auto px-1 pt-2 text-foreground transition-all">
-      {/* Cabeçalho do Módulo */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight text-foreground flex items-center gap-2">
-            <Wrench className="h-8 w-8 text-primary animate-pulse" />
-            Ordem de Serviço
-          </h1>
-          <div className="flex flex-wrap items-center gap-2 mt-1 text-xs select-none">
-            <span className="text-muted-foreground">
-              Acompanhamento das ordens de serviço integradas com o n8n.
-            </span>
+    <div className="h-screen w-full flex flex-col p-4 overflow-hidden text-foreground bg-background transition-all gap-4">
+      <div className="flex flex-col gap-3 pb-3 border-b border-border/40">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+          <div className="flex flex-col min-w-0">
+            <div className="flex items-center gap-3 flex-wrap">
+              <button
+                onClick={() => navigate(-1)}
+                className="p-1.5 rounded-lg border border-border bg-card hover:bg-muted text-muted-foreground hover:text-foreground transition-all shrink-0 flex items-center justify-center shadow-sm"
+                title="Voltar"
+              >
+                <ArrowLeft className="h-5 w-5" />
+              </button>
+              <h1 className="text-2xl font-bold tracking-tight text-foreground flex items-center gap-2">
+                <Wrench className="h-7 w-7 text-primary animate-pulse shrink-0" />
+                <span className="truncate">Ordem de Serviço</span>
+              </h1>
+
+              {/* Indicador de Sincronização e Alternador de Tema agrupados */}
+              <div className="flex items-center gap-2 shrink-0 select-none">
+                {(isBackgroundSyncing || syncError || lastSyncTime) && (
+                  <>
+                    {isBackgroundSyncing ? (
+                      <div className="flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-blue-50 dark:bg-blue-900/10 border border-blue-200/30 dark:border-blue-800/30 text-[10px] animate-in fade-in duration-200">
+                        <RefreshCcw className="h-2.5 w-2.5 animate-spin text-blue-500" />
+                        <span className="text-blue-600 dark:text-blue-400 font-semibold uppercase tracking-wider">Sincronizando...</span>
+                      </div>
+                    ) : syncError ? (
+                      <div className="flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-red-50 dark:bg-red-900/10 border border-red-200/30 dark:border-red-800/30 text-[10px] animate-in fade-in duration-200">
+                        <span className="relative flex h-1.5 w-1.5">
+                          <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-red-500"></span>
+                        </span>
+                        <span className="text-red-600 dark:text-red-400 font-semibold uppercase tracking-wider">Erro na sync</span>
+                      </div>
+                    ) : lastSyncTime ? (
+                      <div className="flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-emerald-50 dark:bg-emerald-900/10 border border-emerald-200/30 dark:border-emerald-800/30 text-[10px] animate-in fade-in duration-200" title={`Última sincronização: ${formatSyncTime(lastSyncTime)}`}>
+                        <span className="relative flex h-1.5 w-1.5">
+                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                          <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500"></span>
+                        </span>
+                        <span className="text-emerald-600 dark:text-emerald-400 font-semibold uppercase tracking-wider">
+                          Sync {formatSyncTime(lastSyncTime)}
+                        </span>
+                      </div>
+                    ) : null}
+                  </>
+                )}
+
+                {/* Alternador de Tema ao lado do Sync */}
+                <button
+                  onClick={toggleTheme}
+                  className="p-1 rounded-md border border-border bg-card hover:bg-muted text-foreground transition-colors shadow-sm flex items-center justify-center h-[22px] w-[22px]"
+                  title="Alternar Tema"
+                >
+                  {isDarkMode ? <Sun className="h-3 w-3 text-amber-500" /> : <Moon className="h-3 w-3 text-slate-600" />}
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Filtros da página ao lado do título */}
+          <div className="flex flex-col sm:flex-row items-center gap-3 w-full lg:w-auto">
+            {/* Avatares dos Executores */}
+            <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap bg-muted/40 border border-border/60 px-2.5 py-1 rounded-xl">
+              <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider pl-0.5 select-none">Executores:</span>
+              <div className="flex items-center gap-1.5">
+                {sortedExecutors.map((exec) => {
+                  const isSelected = selectedExecutor === exec.dbKey;
+                  const initials = exec.displayName.substring(0, 2).toUpperCase();
+                  return (
+                    <button
+                      key={exec.dbKey}
+                      onClick={() => setSelectedExecutor(isSelected ? null : exec.dbKey)}
+                      title={exec.fullName}
+                      className={`relative flex items-center justify-center h-9 w-9 rounded-full border overflow-hidden p-0 transition-all duration-200 bg-background shrink-0 ${isSelected
+                        ? 'border-primary ring-2 ring-primary/25 scale-105 shadow-sm'
+                        : 'border-border hover:border-muted-foreground/50 hover:scale-105'
+                        }`}
+                    >
+                      {exec.avatarUrl ? (
+                        <img
+                          src={exec.avatarUrl}
+                          alt={exec.displayName}
+                          className="h-full w-full rounded-full object-cover"
+                        />
+                      ) : (
+                        <div className={`h-full w-full rounded-full flex items-center justify-center text-[10px] font-bold ${isSelected ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'
+                          }`}>
+                          {initials}
+                        </div>
+                      )}
+                      {isSelected && (
+                        <span className="absolute -bottom-0.5 -right-0.5 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-primary text-[8px] text-primary-foreground font-bold border border-background shadow-sm">
+                          ✓
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+
+                {selectedExecutor && (
+                  <button
+                    onClick={() => setSelectedExecutor(null)}
+                    className="text-[10px] text-muted-foreground hover:text-foreground font-semibold underline ml-1 whitespace-nowrap animate-in fade-in duration-200"
+                  >
+                    Limpar
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Busca e Período */}
+            <div className="flex items-center gap-2 w-full sm:w-auto">
+              <div className="relative w-full sm:w-48 lg:w-56">
+                <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
+                <input
+                  type="text"
+                  placeholder="Buscar chamado..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-full pl-8 pr-3 py-1.5 bg-muted/40 border border-border rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all text-foreground placeholder:text-muted-foreground"
+                />
+              </div>
+
+              <select
+                value={dateFilter}
+                onChange={(e) => setDateFilter(e.target.value as any)}
+                className="py-1.5 px-2.5 bg-muted/40 border border-border rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-foreground font-semibold cursor-pointer shrink-0"
+              >
+                <option value="todas">Todas</option>
+                <option value="dia">Dia</option>
+                <option value="semana">Semana</option>
+                <option value="mes">Mês</option>
+              </select>
+            </div>
           </div>
         </div>
-
-        {/* Indicador de Sincronização à direita */}
-        {(isBackgroundSyncing || syncError || lastSyncTime) && (
-          <div className="flex items-center gap-1.5 select-none shrink-0">
-            {isBackgroundSyncing ? (
-              <div className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-blue-50 dark:bg-blue-900/20 border border-blue-200/40 dark:border-blue-800/40 text-xs">
-                <RefreshCcw className="h-3 w-3 animate-spin text-blue-500" />
-                <span className="text-blue-600 dark:text-blue-400 font-medium">Sincronizando...</span>
-              </div>
-            ) : syncError ? (
-              <div className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-red-50 dark:bg-red-900/20 border border-red-200/40 dark:border-red-800/40 text-xs">
-                <span className="relative flex h-1.5 w-1.5">
-                  <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-red-500"></span>
-                </span>
-                <span className="text-red-600 dark:text-red-400 font-medium">Erro na sync</span>
-              </div>
-            ) : lastSyncTime ? (
-              <div className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200/40 dark:border-emerald-800/40 text-xs">
-                <span className="relative flex h-1.5 w-1.5">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                  <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500"></span>
-                </span>
-                <span className="text-emerald-600 dark:text-emerald-400 font-medium">
-                  Sync {formatSyncTime(lastSyncTime)}
-                </span>
-              </div>
-            ) : null}
-          </div>
-        )}
       </div>
 
       {error && (
@@ -845,96 +1054,16 @@ export default function OrdemServico() {
         />
       </div>
 
-      {/* Filtros e Busca */}
-      <div className="flex flex-col md:flex-row gap-4 items-center justify-between bg-card border border-border/80 p-3.5 rounded-xl shadow-sm w-full">
-        {/* Avatares dos Executores (Esquerda) */}
-        <div className="flex items-center gap-3 w-full md:w-auto flex-wrap">
-          <span className="text-xs font-semibold text-muted-foreground whitespace-nowrap">Executores:</span>
-          <div className="flex items-center gap-2">
-            {sortedExecutors.map((exec) => {
-              const isSelected = selectedExecutor === exec.dbKey;
-              const initials = exec.displayName.substring(0, 2).toUpperCase();
 
-              return (
-                <button
-                  key={exec.dbKey}
-                  onClick={() => setSelectedExecutor(isSelected ? null : exec.dbKey)}
-                  title={exec.fullName}
-                  className={`relative flex items-center justify-center h-10 w-10 rounded-full border overflow-hidden p-0 transition-all duration-200 bg-background ${isSelected
-                      ? 'border-primary ring-2 ring-primary/30 scale-110 shadow-sm'
-                      : 'border-border hover:border-muted-foreground/50 hover:scale-105'
-                    }`}
-                >
-                  {exec.avatarUrl ? (
-                    <img
-                      src={exec.avatarUrl}
-                      alt={exec.displayName}
-                      className="h-full w-full rounded-full object-cover antialiased"
-                    />
-                  ) : (
-                    <div className={`h-full w-full rounded-full flex items-center justify-center text-xs font-bold ${isSelected ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'
-                      }`}>
-                      {initials}
-                    </div>
-                  )}
-                  {isSelected && (
-                    <span className="absolute -bottom-0.5 -right-0.5 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-primary text-[9px] text-primary-foreground font-bold border border-background shadow-sm">
-                      ✓
-                    </span>
-                  )}
-                </button>
-              );
-            })}
-
-            {selectedExecutor && (
-              <button
-                onClick={() => setSelectedExecutor(null)}
-                className="text-[10px] text-muted-foreground hover:text-foreground font-medium underline ml-1 whitespace-nowrap"
-              >
-                Limpar
-              </button>
-            )}
-          </div>
-        </div>
-
-        {/* Busca e Período (Direita) */}
-        <div className="flex flex-col sm:flex-row items-center gap-3 w-full md:w-auto justify-end">
-          <div className="relative w-full sm:w-64">
-            <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-            <input
-              type="text"
-              placeholder="Buscar por OS, solicitante..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-9 pr-4 py-2 bg-muted/40 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all text-foreground placeholder:text-muted-foreground"
-            />
-          </div>
-
-          {/* Filtro de Período */}
-          <div className="flex items-center gap-2 w-full sm:w-auto shrink-0">
-            <Calendar className="h-4 w-4 text-muted-foreground shrink-0 hidden sm:block" />
-            <select
-              value={dateFilter}
-              onChange={(e) => setDateFilter(e.target.value as any)}
-              className="w-full sm:w-32 py-2 px-3 bg-muted/40 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-foreground"
-            >
-              <option value="todas">Todas</option>
-              <option value="dia">Dia</option>
-              <option value="semana">Semana</option>
-              <option value="mes">Mês</option>
-            </select>
-          </div>
-        </div>
-      </div>
 
       {/* Layout Kanban */}
       {loading ? (
-        <div className="flex flex-col items-center justify-center min-h-[40vh] gap-3">
+        <div className="flex-1 flex flex-col items-center justify-center gap-3">
           <RefreshCcw className="h-8 w-8 text-primary animate-spin" />
           <p className="text-sm text-muted-foreground">Carregando ordens de serviço...</p>
         </div>
       ) : filteredOrders.length === 0 ? (
-        <div className="bg-card border border-border/80 shadow-sm rounded-xl p-8 text-center flex flex-col items-center justify-center min-h-[40vh] gap-4">
+        <div className="flex-1 bg-card border border-border/80 shadow-sm rounded-xl p-8 text-center flex flex-col items-center justify-center gap-4">
           <div className="h-16 w-16 rounded-full bg-muted flex items-center justify-center text-muted-foreground">
             <Search className="h-8 w-8" />
           </div>
@@ -946,9 +1075,9 @@ export default function OrdemServico() {
           </div>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 items-start overflow-x-auto pb-4">
+        <div className="flex-1 min-h-0 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 pb-2">
           {/* Coluna 1: Triagem */}
-          <div className="bg-slate-50 dark:bg-slate-900/30 border border-slate-200/60 dark:border-slate-800/40 rounded-xl p-3 flex flex-col h-[calc(100vh-340px)] min-h-[450px]">
+          <div className="bg-slate-50 dark:bg-slate-900/30 border border-slate-200/60 dark:border-slate-800/40 rounded-xl p-3 flex flex-col h-full min-h-0">
             <div className="flex items-center justify-between pb-2 border-b border-border/40 mb-3 shrink-0">
               <div className="flex items-center gap-2">
                 <div className="h-2 w-2 rounded-full bg-slate-400" />
@@ -968,7 +1097,7 @@ export default function OrdemServico() {
           </div>
 
           {/* Coluna 2: Em Processo */}
-          <div className="bg-sky-50/40 dark:bg-sky-950/5 border border-sky-200/40 dark:border-sky-900/10 rounded-xl p-3 flex flex-col h-[calc(100vh-340px)] min-h-[450px]">
+          <div className="bg-sky-50/40 dark:bg-sky-950/5 border border-sky-200/40 dark:border-sky-900/10 rounded-xl p-3 flex flex-col h-full min-h-0">
             <div className="flex items-center justify-between pb-2 border-b border-border/40 mb-3 shrink-0">
               <div className="flex items-center gap-2">
                 <div className="h-2 w-2 rounded-full bg-sky-500 animate-pulse" />
@@ -988,7 +1117,7 @@ export default function OrdemServico() {
           </div>
 
           {/* Coluna 3: Escalonado */}
-          <div className="bg-amber-50/30 dark:bg-amber-950/5 border border-amber-200/40 dark:border-amber-900/10 rounded-xl p-3 flex flex-col h-[calc(100vh-340px)] min-h-[450px]">
+          <div className="bg-amber-50/30 dark:bg-amber-950/5 border border-amber-200/40 dark:border-amber-900/10 rounded-xl p-3 flex flex-col h-full min-h-0">
             <div className="flex items-center justify-between pb-2 border-b border-border/40 mb-3 shrink-0">
               <div className="flex items-center gap-2">
                 <div className="h-2 w-2 rounded-full bg-amber-500" />
@@ -1008,7 +1137,7 @@ export default function OrdemServico() {
           </div>
 
           {/* Coluna 4: Finalizado */}
-          <div className="bg-emerald-50/20 dark:bg-emerald-950/5 border border-emerald-200/30 dark:border-emerald-900/10 rounded-xl p-3 flex flex-col h-[calc(100vh-340px)] min-h-[450px]">
+          <div className="bg-emerald-50/20 dark:bg-emerald-950/5 border border-emerald-200/30 dark:border-emerald-900/10 rounded-xl p-3 flex flex-col h-full min-h-0">
             <div className="flex items-center justify-between pb-2 border-b border-border/40 mb-3 shrink-0">
               <div className="flex items-center gap-2">
                 <div className="h-2 w-2 rounded-full bg-emerald-500" />
@@ -1101,7 +1230,7 @@ export default function OrdemServico() {
                 <div className="flex flex-col">
                   <span className="text-[10px] font-semibold text-muted-foreground uppercase">Abertura</span>
                   <span className="text-xs text-foreground/80 mt-1.5">
-                    {formatDate(selectedOrder.dt_ordem_servico)}
+                    {formatDate(parseTasyDate(selectedOrder.dt_ordem_servico))}
                   </span>
                 </div>
                 {orderDtEntrada && (

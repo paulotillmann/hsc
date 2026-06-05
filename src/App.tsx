@@ -13,6 +13,7 @@ import PainelTV from './pages/Senhas/PainelTV';
 import PainelAtendente from './pages/Senhas/PainelAtendente';
 import PacientesInternados from './pages/PacientesInternados';
 import CentroCirurgico from './pages/CentroCirurgico';
+import OrdemServico from './pages/OrdemServico';
 import EscutaLanding from './pages/EscutaSantaCasa/EscutaLanding';
 import NovaDenuncia from './pages/EscutaSantaCasa/NovaDenuncia';
 const App: React.FC = () => {
@@ -51,6 +52,9 @@ const App: React.FC = () => {
 
             {/* Rota de Centro Cirúrgico (Sem Layout) */}
             <Route path="/centro-cirurgico" element={<CentroCirurgico />} />
+
+            {/* Rota de Ordem de Serviço (Sem Layout) */}
+            <Route path="/ordem-servico" element={<OrdemServico />} />
 
             <Route element={<Layout />}>
               {/* Perfil: rota pública para qualquer usuário autenticado */}
