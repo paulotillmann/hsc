@@ -729,6 +729,31 @@ export default function OrdemServico() {
           ? 'Escalonado'
           : 'Finalizado';
 
+    const getBadgeColors = (colId: 'triagem' | 'processo' | 'escalonado' | 'finalizado') => {
+      switch (colId) {
+        case 'triagem':
+          return {
+            container: 'text-slate-700 dark:text-slate-400 bg-slate-500/5 border-slate-500/10',
+            clock: 'text-slate-500'
+          };
+        case 'processo':
+          return {
+            container: 'text-sky-700 dark:text-sky-400 bg-sky-500/5 border-sky-500/10',
+            clock: 'text-sky-500'
+          };
+        case 'escalonado':
+          return {
+            container: 'text-amber-700 dark:text-amber-400 bg-amber-500/5 border-amber-500/10',
+            clock: 'text-amber-500'
+          };
+        case 'finalizado':
+          return {
+            container: 'text-emerald-700 dark:text-emerald-400 bg-emerald-500/5 border-emerald-500/10',
+            clock: 'text-emerald-500'
+          };
+      }
+    };
+
     return (
       <div
         key={os.id}
@@ -802,12 +827,15 @@ export default function OrdemServico() {
               <span className="break-words whitespace-normal" title={os.ds_dano}>{formatSentenceCase(os.ds_dano)}</span>
             </div>
           )}
-          {dtEntrada && (
-            <div className="flex items-center gap-1.5 text-[11px] font-semibold text-sky-700 dark:text-sky-400 bg-sky-500/5 px-2 py-0.5 rounded border border-sky-500/10 w-fit max-w-full" title="Data/Hora de entrada no estágio atual">
-              <Clock className="h-3.5 w-3.5 shrink-0 text-sky-500" />
-              <span className="truncate">{stageLabel}: {formatDate(dtEntrada)}</span>
-            </div>
-          )}
+          {dtEntrada && (() => {
+            const colors = getBadgeColors(columnId);
+            return (
+              <div className={`flex items-center gap-1.5 text-[11px] font-semibold ${colors.container} px-2 py-0.5 rounded border w-fit max-w-full`} title="Data/Hora de entrada no estágio atual">
+                <Clock className={`h-3.5 w-3.5 shrink-0 ${colors.clock}`} />
+                <span className="truncate">{stageLabel}: {formatDate(dtEntrada)}</span>
+              </div>
+            );
+          })()}
         </div>
 
         <div className="flex items-center justify-between border-t border-border/40 pt-2.5 mt-1 text-[10px] text-muted-foreground">
