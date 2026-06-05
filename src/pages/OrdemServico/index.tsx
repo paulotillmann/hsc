@@ -167,7 +167,23 @@ export default function OrdemServico() {
         .order('dt_ordem_servico', { ascending: false });
 
       if (dbError) throw dbError;
-      setOrders(data || []);
+
+      // Normaliza as datas do Tasy (soma 3 horas para corrigir o fuso "falso UTC" gravado pelo n8n)
+      const adjustTasyDate = (dateStr: string | null): string | null => {
+        if (!dateStr) return null;
+        const date = new Date(dateStr);
+        date.setHours(date.getHours() + 3);
+        return date.toISOString();
+      };
+
+      const normalizedData = (data || []).map(os => ({
+        ...os,
+        dt_ordem_servico: adjustTasyDate(os.dt_ordem_servico),
+        dt_atualizacao: adjustTasyDate(os.dt_atualizacao),
+        updated_at: adjustTasyDate(os.updated_at)
+      }));
+
+      setOrders(normalizedData);
 
       // Buscar os históricos das ordens carregadas para identificar quais possuem histórico
       if (data && data.length > 0) {
@@ -277,7 +293,21 @@ export default function OrdemServico() {
 
           // Se a OS modificada for a selecionada, atualiza seus dados no modal
           if (payload.new && (payload.new as any).nr_sequencia) {
-            const updatedOS = payload.new as OrdemServicoItem;
+            const adjustTasyDate = (dateStr: string | null): string | null => {
+              if (!dateStr) return null;
+              const date = new Date(dateStr);
+              date.setHours(date.getHours() + 3);
+              return date.toISOString();
+            };
+
+            const rawOS = payload.new as any;
+            const updatedOS: OrdemServicoItem = {
+              ...rawOS,
+              dt_ordem_servico: adjustTasyDate(rawOS.dt_ordem_servico),
+              dt_atualizacao: adjustTasyDate(rawOS.dt_atualizacao),
+              updated_at: adjustTasyDate(rawOS.updated_at)
+            };
+
             if (selectedOrderRef.current && selectedOrderRef.current.nr_sequencia === updatedOS.nr_sequencia) {
               setSelectedOrder(updatedOS);
             }
