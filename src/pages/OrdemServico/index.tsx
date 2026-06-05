@@ -846,10 +846,11 @@ export default function OrdemServico() {
           {(os.ds_estagio || os.ds_situacao) && (
             <div className="flex items-center gap-1.5 shrink-0">
               {ordersWithHistory.has(os.nr_sequencia) && (
-                <History
-                  className="h-4 w-4 text-sky-500 dark:text-sky-400 shrink-0"
-                  title="Possui histórico de relatos"
-                />
+                <span title="Possui histórico de relatos" className="inline-flex shrink-0">
+                  <History
+                    className="h-4 w-4 text-sky-500 dark:text-sky-400 shrink-0"
+                  />
+                </span>
               )}
               <span className="font-semibold uppercase tracking-wider text-[9px] bg-muted px-1.5 py-0.5 rounded">
                 {os.ds_estagio || os.ds_situacao}
@@ -1085,7 +1086,7 @@ export default function OrdemServico() {
               </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto space-y-3 pr-1 scrollbar-thin scrollbar-thumb-muted-foreground/20 hover:scrollbar-thumb-muted-foreground/45 transition-colors">
+            <div className="flex-1 overflow-y-auto space-y-3 pr-1 custom-scrollbar transition-colors">
               {triagemItems.length === 0 ? (
                 <div className="text-center py-8 text-xs text-muted-foreground border border-dashed rounded-lg">
                   Sem chamados na triagem
@@ -1105,7 +1106,7 @@ export default function OrdemServico() {
               </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto space-y-3 pr-1 scrollbar-thin scrollbar-thumb-muted-foreground/20 hover:scrollbar-thumb-muted-foreground/45 transition-colors">
+            <div className="flex-1 overflow-y-auto space-y-3 pr-1 custom-scrollbar transition-colors">
               {processoItems.length === 0 ? (
                 <div className="text-center py-8 text-xs text-muted-foreground border border-dashed rounded-lg">
                   Sem chamados em processo
@@ -1125,7 +1126,7 @@ export default function OrdemServico() {
               </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto space-y-3 pr-1 scrollbar-thin scrollbar-thumb-muted-foreground/20 hover:scrollbar-thumb-muted-foreground/45 transition-colors">
+            <div className="flex-1 overflow-y-auto space-y-3 pr-1 custom-scrollbar transition-colors">
               {escalonadoItems.length === 0 ? (
                 <div className="text-center py-8 text-xs text-muted-foreground border border-dashed rounded-lg">
                   Sem chamados escalonados
@@ -1145,7 +1146,7 @@ export default function OrdemServico() {
               </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto space-y-3 pr-1 scrollbar-thin scrollbar-thumb-muted-foreground/20 hover:scrollbar-thumb-muted-foreground/45 transition-colors">
+            <div className="flex-1 overflow-y-auto space-y-3 pr-1 custom-scrollbar transition-colors">
               {finalizadoItems.length === 0 ? (
                 <div className="text-center py-8 text-xs text-muted-foreground border border-dashed rounded-lg">
                   Nenhum chamado finalizado
@@ -1179,7 +1180,7 @@ export default function OrdemServico() {
             </div>
 
             {/* Conteúdo */}
-            <div className="p-6 space-y-6 overflow-y-auto max-h-[70vh] scrollbar-thin">
+            <div className="p-6 space-y-6 overflow-y-auto max-h-[70vh] custom-scrollbar">
               {/* Informações Básicas */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="bg-muted/40 border border-border/40 rounded-xl p-3.5 space-y-2">
