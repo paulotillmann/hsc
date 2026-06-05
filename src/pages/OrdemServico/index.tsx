@@ -694,10 +694,22 @@ export default function OrdemServico() {
         </h3>
 
         <div className="flex flex-col gap-1.5 text-sm text-foreground/90 mt-1">
-          {os.ds_localizacao && (
-            <div className="flex items-center gap-1.5">
-              <MapPin className="h-4 w-4 shrink-0 text-muted-foreground/80" />
-              <span className="truncate">{os.ds_localizacao}</span>
+          {(os.ds_localizacao || os.nm_executor) && (
+            <div className="flex items-center justify-between gap-1.5 w-full">
+              {os.ds_localizacao ? (
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <MapPin className="h-4 w-4 shrink-0 text-muted-foreground/80" />
+                  <span className="truncate">{os.ds_localizacao}</span>
+                </div>
+              ) : (
+                <div />
+              )}
+              {os.nm_executor && (
+                <div className="flex items-center gap-1 text-[11px] text-emerald-600 dark:text-emerald-400 font-medium bg-emerald-500/5 px-1.5 py-0.5 rounded border border-emerald-500/10 shrink-0 max-w-[50%]" title={os.nm_executor}>
+                  <UserCheck className="h-3.5 w-3.5 shrink-0" />
+                  <span className="truncate">Exec: {os.nm_executor}</span>
+                </div>
+              )}
             </div>
           )}
           {os.ds_equipamento && (
@@ -716,12 +728,6 @@ export default function OrdemServico() {
             <div className="flex items-start gap-1.5">
               <AlertTriangle className="h-4 w-4 shrink-0 text-muted-foreground/80 mt-0.5" />
               <span className="break-words whitespace-normal" title={os.ds_dano}>{formatSentenceCase(os.ds_dano)}</span>
-            </div>
-          )}
-          {os.nm_executor && (
-            <div className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400 font-medium bg-emerald-500/5 px-1.5 py-0.5 rounded border border-emerald-500/10 w-fit max-w-full">
-              <UserCheck className="h-3.5 w-3.5 shrink-0" />
-              <span className="truncate">Exec: {os.nm_executor}</span>
             </div>
           )}
           {dtEntrada && (
