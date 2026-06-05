@@ -106,8 +106,30 @@ Deno.serve(async (req: Request) => {
       throw new Error(`Erro ao consultar o n8n: HTTP ${n8nResponse.status} - ${n8nResponse.statusText}`);
     }
 
-    const rawData = await n8nResponse.json();
-    console.log(`[Sync Cirurgias] Webhook retornado com sucesso. Dados obtidos: ${Array.isArray(rawData) ? rawData.length : 0} registros.`);
+    const responseText = await n8nResponse.text();
+    console.log(`[Sync Cirurgias] Resposta do webhook recebida. Comprimento do corpo: ${responseText.length} bytes.`);
+
+    if (!responseText || responseText.trim() === '') {
+      console.log('[Sync Cirurgias] Webhook do n8n retornou resposta vazia. Sincronização ignorada.');
+      return new Response(
+        JSON.stringify({
+          success: true,
+          message: 'Webhook do n8n retornou resposta vazia. Nenhuma cirurgia sincronizada.',
+          upserted: 0,
+          historico_upserted: 0
+        }),
+        { status: 200, headers: corsHeaders }
+      );
+    }
+
+    let rawData;
+    try {
+      rawData = JSON.parse(responseText);
+    } catch (e) {
+      throw new Error(`A resposta do n8n não é um JSON válido: ${responseText.substring(0, 200)}`);
+    }
+
+    console.log(`[Sync Cirurgias] Webhook analisado com sucesso. Dados obtidos: ${Array.isArray(rawData) ? rawData.length : 0} registros.`);
 
     if (!Array.isArray(rawData)) {
       throw new Error('A resposta do n8n não retornou um array válido de cirurgias.');
