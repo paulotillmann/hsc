@@ -543,7 +543,7 @@ export default function OrdemServico() {
     );
   };
 
-  // Formatação de data
+  // Formação de data
   const formatDate = (dateStr: string | null) => {
     if (!dateStr) return '';
     const date = new Date(dateStr);
@@ -551,7 +551,8 @@ export default function OrdemServico() {
       day: '2-digit',
       month: '2-digit',
       hour: '2-digit',
-      minute: '2-digit'
+      minute: '2-digit',
+      timeZone: 'America/Sao_Paulo'
     });
   };
 
