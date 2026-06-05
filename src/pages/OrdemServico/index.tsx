@@ -186,7 +186,7 @@ export default function OrdemServico() {
       }
     } catch (err: any) {
       console.error('Erro ao carregar ordens de serviço:', err);
-      setError('Erro ao carregar as ordens de serviço do banco de dados.');
+      setError(`Erro ao carregar as ordens de serviço do banco de dados: ${err?.message || err?.details || JSON.stringify(err)}`);
     } finally {
       setLoading(false);
     }
@@ -527,7 +527,7 @@ export default function OrdemServico() {
       hour: '2-digit',
       minute: '2-digit',
       timeZone: 'America/Sao_Paulo'
-    });
+    }).replace(', ', ' - ');
   };
 
   // Variáveis para o Modal de Detalhes
