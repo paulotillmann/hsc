@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Wrench,
   RefreshCcw,
@@ -18,7 +19,10 @@ import {
   X,
   History,
   ClipboardList,
-  Clock
+  Clock,
+  ArrowLeft,
+  Sun,
+  Moon
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { VisaoGeralCard } from '../../components/recepcao/VisaoGeralCard';
@@ -56,6 +60,24 @@ interface OrdemServicoItem {
 }
 
 export default function OrdemServico() {
+  const navigate = useNavigate();
+  const [isDarkMode, setIsDarkMode] = useState(() => {
+    return document.documentElement.classList.contains('dark');
+  });
+
+  const toggleTheme = () => {
+    const root = document.documentElement;
+    if (root.classList.contains('dark')) {
+      root.classList.remove('dark');
+      root.classList.add('light');
+      setIsDarkMode(false);
+    } else {
+      root.classList.add('dark');
+      root.classList.remove('light');
+      setIsDarkMode(true);
+    }
+  };
+
   const [orders, setOrders] = useState<OrdemServicoItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -714,19 +736,19 @@ export default function OrdemServico() {
         className="bg-card border border-border/80 rounded-xl p-4 shadow-sm hover:shadow-md transition-all duration-200 hover:-translate-y-0.5 flex flex-col gap-3 group cursor-pointer"
       >
         <div className="flex items-center justify-between gap-2">
-          <span className="text-xs font-bold text-muted-foreground group-hover:text-primary transition-colors">
-            OS #{os.nr_sequencia}
-          </span>
+          <div className="flex items-center gap-1.5 min-w-0">
+            <span className="text-sm font-bold text-muted-foreground group-hover:text-primary transition-colors truncate">
+              OS #{os.nr_sequencia}
+            </span>
+          </div>
           <div className="flex items-center gap-1.5 shrink-0">
-            {getPriorityBadge(os.ie_prioridade)}
             {ordersWithHistory.has(os.nr_sequencia) && (
-              <div
-                className="inline-flex items-center justify-center h-[22px] w-[22px] rounded-full bg-sky-50 dark:bg-sky-950/20 text-sky-600 dark:text-sky-400 border border-sky-200/40"
+              <History
+                className="h-[18px] w-[18px] text-sky-500 dark:text-sky-400 shrink-0"
                 title="Possui histórico de relatos"
-              >
-                <History className="h-3.5 w-3.5 shrink-0" />
-              </div>
+              />
             )}
+            {getPriorityBadge(os.ie_prioridade)}
           </div>
         </div>
 
@@ -745,12 +767,29 @@ export default function OrdemServico() {
               ) : (
                 <div />
               )}
-              {os.nm_executor && (
-                <div className="flex items-center gap-1 text-[11px] text-emerald-600 dark:text-emerald-400 font-medium bg-emerald-500/5 px-1.5 py-0.5 rounded border border-emerald-500/10 shrink-0 max-w-[50%]" title={os.nm_executor}>
-                  <UserCheck className="h-3.5 w-3.5 shrink-0" />
-                  <span className="truncate">Exec: {os.nm_executor}</span>
-                </div>
-              )}
+              {os.nm_executor && (() => {
+                const exec = executors.find(e => e.dbKey.toLowerCase() === os.nm_executor.trim().toLowerCase());
+                const displayName = exec ? exec.displayName : os.nm_executor;
+                const fullName = exec ? exec.fullName : os.nm_executor;
+                const avatarUrl = exec ? exec.avatarUrl : null;
+                const initials = displayName.substring(0, 2).toUpperCase();
+
+                return (
+                  <div className="shrink-0" title={`Executor: ${fullName}`}>
+                    {avatarUrl ? (
+                      <img
+                        src={avatarUrl}
+                        alt={displayName}
+                        className="h-9 w-9 rounded-full object-cover border border-emerald-500/30 dark:border-emerald-500/40 shadow-sm"
+                      />
+                    ) : (
+                      <div className="h-9 w-9 rounded-full bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 flex items-center justify-center text-sm font-bold border border-emerald-500/30 dark:border-emerald-500/40 shadow-sm">
+                        {initials}
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
             </div>
           )}
           {os.ds_equipamento && (
@@ -798,11 +837,18 @@ export default function OrdemServico() {
   const sortedExecutors = [...executors].sort((a, b) => a.displayName.localeCompare(b.displayName));
 
   return (
-    <div className="flex-1 space-y-4 min-h-[85vh] pb-4 w-full mx-auto px-1 pt-2 text-foreground transition-all">
+    <div className="h-screen w-full flex flex-col p-4 overflow-hidden text-foreground bg-background transition-all gap-4">
       <div className="flex flex-col gap-3 pb-3 border-b border-border/40">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
           <div className="flex flex-col min-w-0">
             <div className="flex items-center gap-3 flex-wrap">
+              <button
+                onClick={() => navigate(-1)}
+                className="p-1.5 rounded-lg border border-border bg-card hover:bg-muted text-muted-foreground hover:text-foreground transition-all shrink-0 flex items-center justify-center shadow-sm"
+                title="Voltar"
+              >
+                <ArrowLeft className="h-5 w-5" />
+              </button>
               <h1 className="text-2xl font-bold tracking-tight text-foreground flex items-center gap-2">
                 <Wrench className="h-7 w-7 text-primary animate-pulse shrink-0" />
                 <span className="truncate">Ordem de Serviço</span>
@@ -837,9 +883,18 @@ export default function OrdemServico() {
                 </div>
               )}
             </div>
-            <span className="text-xs text-muted-foreground mt-0.5 truncate hidden sm:block">
-              Acompanhamento das ordens de serviço integradas com o n8n.
-            </span>
+            <div className="flex items-center gap-2 mt-0.5">
+              <span className="text-xs text-muted-foreground truncate hidden sm:block">
+                Acompanhamento das ordens de serviço integradas com o n8n.
+              </span>
+              <button
+                onClick={toggleTheme}
+                className="p-1 rounded-lg border border-border bg-card hover:bg-muted text-foreground transition-colors shadow-sm flex items-center justify-center h-6 w-6 shrink-0"
+                title="Alternar Tema"
+              >
+                {isDarkMode ? <Sun className="h-3.5 w-3.5 text-amber-500" /> : <Moon className="h-3.5 w-3.5 text-slate-600" />}
+              </button>
+            </div>
           </div>
 
           {/* Filtros da página ao lado do título */}
@@ -976,12 +1031,12 @@ export default function OrdemServico() {
 
       {/* Layout Kanban */}
       {loading ? (
-        <div className="flex flex-col items-center justify-center min-h-[40vh] gap-3">
+        <div className="flex-1 flex flex-col items-center justify-center gap-3">
           <RefreshCcw className="h-8 w-8 text-primary animate-spin" />
           <p className="text-sm text-muted-foreground">Carregando ordens de serviço...</p>
         </div>
       ) : filteredOrders.length === 0 ? (
-        <div className="bg-card border border-border/80 shadow-sm rounded-xl p-8 text-center flex flex-col items-center justify-center min-h-[40vh] gap-4">
+        <div className="flex-1 bg-card border border-border/80 shadow-sm rounded-xl p-8 text-center flex flex-col items-center justify-center gap-4">
           <div className="h-16 w-16 rounded-full bg-muted flex items-center justify-center text-muted-foreground">
             <Search className="h-8 w-8" />
           </div>
@@ -993,9 +1048,9 @@ export default function OrdemServico() {
           </div>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 items-start overflow-x-auto pb-4">
+        <div className="flex-1 min-h-0 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 pb-2">
           {/* Coluna 1: Triagem */}
-          <div className="bg-slate-50 dark:bg-slate-900/30 border border-slate-200/60 dark:border-slate-800/40 rounded-xl p-3 flex flex-col h-[calc(100vh-340px)] min-h-[450px]">
+          <div className="bg-slate-50 dark:bg-slate-900/30 border border-slate-200/60 dark:border-slate-800/40 rounded-xl p-3 flex flex-col h-full min-h-0">
             <div className="flex items-center justify-between pb-2 border-b border-border/40 mb-3 shrink-0">
               <div className="flex items-center gap-2">
                 <div className="h-2 w-2 rounded-full bg-slate-400" />
@@ -1015,7 +1070,7 @@ export default function OrdemServico() {
           </div>
 
           {/* Coluna 2: Em Processo */}
-          <div className="bg-sky-50/40 dark:bg-sky-950/5 border border-sky-200/40 dark:border-sky-900/10 rounded-xl p-3 flex flex-col h-[calc(100vh-340px)] min-h-[450px]">
+          <div className="bg-sky-50/40 dark:bg-sky-950/5 border border-sky-200/40 dark:border-sky-900/10 rounded-xl p-3 flex flex-col h-full min-h-0">
             <div className="flex items-center justify-between pb-2 border-b border-border/40 mb-3 shrink-0">
               <div className="flex items-center gap-2">
                 <div className="h-2 w-2 rounded-full bg-sky-500 animate-pulse" />
@@ -1035,7 +1090,7 @@ export default function OrdemServico() {
           </div>
 
           {/* Coluna 3: Escalonado */}
-          <div className="bg-amber-50/30 dark:bg-amber-950/5 border border-amber-200/40 dark:border-amber-900/10 rounded-xl p-3 flex flex-col h-[calc(100vh-340px)] min-h-[450px]">
+          <div className="bg-amber-50/30 dark:bg-amber-950/5 border border-amber-200/40 dark:border-amber-900/10 rounded-xl p-3 flex flex-col h-full min-h-0">
             <div className="flex items-center justify-between pb-2 border-b border-border/40 mb-3 shrink-0">
               <div className="flex items-center gap-2">
                 <div className="h-2 w-2 rounded-full bg-amber-500" />
@@ -1055,7 +1110,7 @@ export default function OrdemServico() {
           </div>
 
           {/* Coluna 4: Finalizado */}
-          <div className="bg-emerald-50/20 dark:bg-emerald-950/5 border border-emerald-200/30 dark:border-emerald-900/10 rounded-xl p-3 flex flex-col h-[calc(100vh-340px)] min-h-[450px]">
+          <div className="bg-emerald-50/20 dark:bg-emerald-950/5 border border-emerald-200/30 dark:border-emerald-900/10 rounded-xl p-3 flex flex-col h-full min-h-0">
             <div className="flex items-center justify-between pb-2 border-b border-border/40 mb-3 shrink-0">
               <div className="flex items-center gap-2">
                 <div className="h-2 w-2 rounded-full bg-emerald-500" />

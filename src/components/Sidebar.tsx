@@ -379,6 +379,7 @@ const Sidebar: React.FC = () => {
                   {hasOrdemServicoAccess && (
                     <NavLink
                       to="/ordem-servico"
+                      target="_blank"
                       className={({ isActive }) => 
                         `text-sm px-3 py-2 rounded-md transition-colors ${
                           isActive 
