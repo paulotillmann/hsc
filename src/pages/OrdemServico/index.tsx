@@ -736,18 +736,10 @@ export default function OrdemServico() {
         className="bg-card border border-border/80 rounded-xl p-4 shadow-sm hover:shadow-md transition-all duration-200 hover:-translate-y-0.5 flex flex-col gap-3 group cursor-pointer"
       >
         <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-1.5 min-w-0">
-            <span className="text-sm font-bold text-muted-foreground group-hover:text-primary transition-colors truncate">
-              OS #{os.nr_sequencia}
-            </span>
-          </div>
+          <span className="text-sm font-bold text-muted-foreground group-hover:text-primary transition-colors truncate">
+            OS #{os.nr_sequencia}
+          </span>
           <div className="flex items-center gap-1.5 shrink-0">
-            {ordersWithHistory.has(os.nr_sequencia) && (
-              <History
-                className="h-[18px] w-[18px] text-sky-500 dark:text-sky-400 shrink-0"
-                title="Possui histórico de relatos"
-              />
-            )}
             {getPriorityBadge(os.ie_prioridade)}
           </div>
         </div>
@@ -824,9 +816,17 @@ export default function OrdemServico() {
             <span>{formatDate(parseTasyDate(os.dt_ordem_servico))}</span>
           </div>
           {(os.ds_estagio || os.ds_situacao) && (
-            <span className="font-semibold uppercase tracking-wider text-[9px] bg-muted px-1.5 py-0.5 rounded">
-              {os.ds_estagio || os.ds_situacao}
-            </span>
+            <div className="flex items-center gap-1.5 shrink-0">
+              {ordersWithHistory.has(os.nr_sequencia) && (
+                <History
+                  className="h-4 w-4 text-sky-500 dark:text-sky-400 shrink-0"
+                  title="Possui histórico de relatos"
+                />
+              )}
+              <span className="font-semibold uppercase tracking-wider text-[9px] bg-muted px-1.5 py-0.5 rounded">
+                {os.ds_estagio || os.ds_situacao}
+              </span>
+            </div>
           )}
         </div>
       </div>
