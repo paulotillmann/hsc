@@ -75,3 +75,60 @@
     display: none; /* Chrome, Safari and Opera */
   }
 }
+
+@media print {
+  /* Hide sidebar and navigation */
+  aside, 
+  nav, 
+  header,
+  .print-hidden,
+  button,
+  .print\:hidden {
+    display: none !important;
+  }
+  
+  /* Make main layout full width */
+  main {
+    padding: 0 !important;
+    margin: 0 !important;
+    overflow: visible !important;
+    width: 100% !important;
+    max-width: none !important;
+    background: white !important;
+    color: black !important;
+  }
+  
+  /* Force light colors and remove dark backgrounds */
+  body, html {
+    background: white !important;
+    color: black !important;
+  }
+
+  .bg-card, 
+  .bg-background, 
+  .bg-muted,
+  .bg-muted\/20,
+  .bg-muted\/50 {
+    background-color: white !important;
+    background: white !important;
+    color: black !important;
+  }
+  
+  /* Reset border colors to visible black/grey for print */
+  .border,
+  .border-b,
+  .border-t,
+  .divide-y > * {
+    border-color: #cbd5e1 !important;
+  }
+
+  /* Table styling specifically for print */
+  table {
+    border-collapse: collapse !important;
+    width: 100% !important;
+  }
+
+  tr {
+    page-break-inside: avoid !important;
+  }
+}
