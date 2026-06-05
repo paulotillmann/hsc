@@ -882,46 +882,45 @@ export default function OrdemServico() {
                 <span className="truncate">Ordem de Serviço</span>
               </h1>
 
-              {/* Indicador de Sincronização ao lado do texto Ordem de Serviço */}
-              {(isBackgroundSyncing || syncError || lastSyncTime) && (
-                <div className="flex items-center select-none shrink-0">
-                  {isBackgroundSyncing ? (
-                    <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-blue-50 dark:bg-blue-900/10 border border-blue-200/30 dark:border-blue-800/30 text-xs animate-in fade-in duration-200">
-                      <RefreshCcw className="h-3.5 w-3.5 animate-spin text-blue-500" />
-                      <span className="text-blue-600 dark:text-blue-400 font-bold uppercase tracking-wider">Sincronizando...</span>
-                    </div>
-                  ) : syncError ? (
-                    <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-red-50 dark:bg-red-900/10 border border-red-200/30 dark:border-red-800/30 text-xs animate-in fade-in duration-200">
-                      <span className="relative flex h-2 w-2">
-                        <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
-                      </span>
-                      <span className="text-red-600 dark:text-red-400 font-bold uppercase tracking-wider">Erro na sync</span>
-                    </div>
-                  ) : lastSyncTime ? (
-                    <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-50 dark:bg-emerald-900/10 border border-emerald-200/30 dark:border-emerald-800/30 text-xs animate-in fade-in duration-200" title={`Última sincronização: ${formatSyncTime(lastSyncTime)}`}>
-                      <span className="relative flex h-2 w-2">
-                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                        <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-                      </span>
-                      <span className="text-emerald-600 dark:text-emerald-400 font-bold uppercase tracking-wider">
-                        Sync {formatSyncTime(lastSyncTime)}
-                      </span>
-                    </div>
-                  ) : null}
-                </div>
-              )}
-            </div>
-            <div className="flex items-center gap-2 mt-0.5">
-              <span className="text-xs text-muted-foreground truncate hidden sm:block">
-                Acompanhamento das ordens de serviço integradas com o n8n.
-              </span>
-              <button
-                onClick={toggleTheme}
-                className="p-1 rounded-lg border border-border bg-card hover:bg-muted text-foreground transition-colors shadow-sm flex items-center justify-center h-6 w-6 shrink-0"
-                title="Alternar Tema"
-              >
-                {isDarkMode ? <Sun className="h-3.5 w-3.5 text-amber-500" /> : <Moon className="h-3.5 w-3.5 text-slate-600" />}
-              </button>
+              {/* Indicador de Sincronização e Alternador de Tema agrupados */}
+              <div className="flex items-center gap-2 shrink-0 select-none">
+                {(isBackgroundSyncing || syncError || lastSyncTime) && (
+                  <>
+                    {isBackgroundSyncing ? (
+                      <div className="flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-blue-50 dark:bg-blue-900/10 border border-blue-200/30 dark:border-blue-800/30 text-[10px] animate-in fade-in duration-200">
+                        <RefreshCcw className="h-2.5 w-2.5 animate-spin text-blue-500" />
+                        <span className="text-blue-600 dark:text-blue-400 font-semibold uppercase tracking-wider">Sincronizando...</span>
+                      </div>
+                    ) : syncError ? (
+                      <div className="flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-red-50 dark:bg-red-900/10 border border-red-200/30 dark:border-red-800/30 text-[10px] animate-in fade-in duration-200">
+                        <span className="relative flex h-1.5 w-1.5">
+                          <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-red-500"></span>
+                        </span>
+                        <span className="text-red-600 dark:text-red-400 font-semibold uppercase tracking-wider">Erro na sync</span>
+                      </div>
+                    ) : lastSyncTime ? (
+                      <div className="flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-emerald-50 dark:bg-emerald-900/10 border border-emerald-200/30 dark:border-emerald-800/30 text-[10px] animate-in fade-in duration-200" title={`Última sincronização: ${formatSyncTime(lastSyncTime)}`}>
+                        <span className="relative flex h-1.5 w-1.5">
+                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                          <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500"></span>
+                        </span>
+                        <span className="text-emerald-600 dark:text-emerald-400 font-semibold uppercase tracking-wider">
+                          Sync {formatSyncTime(lastSyncTime)}
+                        </span>
+                      </div>
+                    ) : null}
+                  </>
+                )}
+
+                {/* Alternador de Tema ao lado do Sync */}
+                <button
+                  onClick={toggleTheme}
+                  className="p-1 rounded-md border border-border bg-card hover:bg-muted text-foreground transition-colors shadow-sm flex items-center justify-center h-[22px] w-[22px]"
+                  title="Alternar Tema"
+                >
+                  {isDarkMode ? <Sun className="h-3 w-3 text-amber-500" /> : <Moon className="h-3 w-3 text-slate-600" />}
+                </button>
+              </div>
             </div>
           </div>
 
