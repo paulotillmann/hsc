@@ -21,7 +21,7 @@ const Sidebar: React.FC = () => {
     if (window.location.pathname.startsWith('/pacientes-internados') || window.location.pathname.startsWith('/centro-cirurgico')) return 'assistencial';
     if (window.location.pathname.startsWith('/gestao-pendencias')) return 'faturamento';
     if (window.location.pathname.startsWith('/gestao-escuta-santa-casa')) return 'gestao-escuta-santa-casa';
-    if (window.location.pathname.startsWith('/plantao-ti')) return 'tecnologia-informacao';
+    if (window.location.pathname.startsWith('/plantao-ti') || window.location.pathname.startsWith('/ordem-servico')) return 'tecnologia-informacao';
     if (window.location.pathname.startsWith('/dashboard') || window.location.pathname.startsWith('/holerites') || window.location.pathname.startsWith('/informes')) return 'recursos-humanos';
     return null;
   });
@@ -54,7 +54,7 @@ const Sidebar: React.FC = () => {
       setExpandedMenu('faturamento');
     } else if (location.pathname.startsWith('/gestao-escuta-santa-casa')) {
       setExpandedMenu('gestao-escuta-santa-casa');
-    } else if (location.pathname.startsWith('/plantao-ti')) {
+    } else if (location.pathname.startsWith('/plantao-ti') || location.pathname.startsWith('/ordem-servico')) {
       setExpandedMenu('tecnologia-informacao');
     } else if (location.pathname.startsWith('/dashboard') || location.pathname.startsWith('/holerites') || location.pathname.startsWith('/informes')) {
       setExpandedMenu('recursos-humanos');
@@ -325,8 +325,9 @@ const Sidebar: React.FC = () => {
         {/* Categoria T.I (Agrupador) */}
         {(() => {
           const hasPlantaoTiAccess = userModules.some(m => m.slug === 'plantao-ti');
-          const showTI = hasPlantaoTiAccess;
-          const isTIActive = location.pathname.startsWith('/plantao-ti');
+          const hasOrdemServicoAccess = userModules.some(m => m.slug === 'ordem-servico');
+          const showTI = hasPlantaoTiAccess || hasOrdemServicoAccess;
+          const isTIActive = location.pathname.startsWith('/plantao-ti') || location.pathname.startsWith('/ordem-servico');
 
           if (!showTI) return null;
 
@@ -334,7 +335,7 @@ const Sidebar: React.FC = () => {
             <div className="flex flex-col">
               {isCollapsed ? (
                 <NavLink
-                  to="/plantao-ti"
+                  to={hasPlantaoTiAccess ? "/plantao-ti" : "/ordem-servico"}
                   title="T.I"
                   className={navLinkClass(isTIActive)}
                 >
@@ -348,7 +349,7 @@ const Sidebar: React.FC = () => {
                   className={`flex items-center rounded-md text-sm transition-all duration-200 justify-start gap-3 px-3 py-2 w-full ${
                     isTIActive
                       ? 'bg-primary text-primary-foreground shadow-sm hover:shadow-md hover:shadow-primary/20 font-medium'
-                      : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                      : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
                   }`}
                 >
                   <Cpu className="h-5 w-5 flex-shrink-0" />
@@ -373,6 +374,20 @@ const Sidebar: React.FC = () => {
                       }
                     >
                        Plantão TI
+                    </NavLink>
+                  )}
+                  {hasOrdemServicoAccess && (
+                    <NavLink
+                      to="/ordem-servico"
+                      className={({ isActive }) => 
+                        `text-sm px-3 py-2 rounded-md transition-colors ${
+                          isActive 
+                            ? 'bg-primary text-primary-foreground shadow-sm font-medium' 
+                            : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                        }`
+                      }
+                    >
+                       Ordem de Serviço
                     </NavLink>
                   )}
                 </div>
@@ -476,7 +491,7 @@ const Sidebar: React.FC = () => {
         })()}
 
         {userModules
-          .filter(m => m.slug !== 'configuracoes' && m.slug !== 'pacientes-internados' && m.slug !== 'centro-cirurgico' && m.slug !== 'plantao-ti' && m.slug !== 'dashboard' && m.slug !== 'holerites' && m.slug !== 'informes' && m.slug !== 'notificacoes' && m.slug !== 'taxa-ocupacao') // Configurações fica na área inferior, e assistenciais, TI, RH, notificações e taxas ficam agrupados
+          .filter(m => m.slug !== 'configuracoes' && m.slug !== 'pacientes-internados' && m.slug !== 'centro-cirurgico' && m.slug !== 'plantao-ti' && m.slug !== 'ordem-servico' && m.slug !== 'dashboard' && m.slug !== 'holerites' && m.slug !== 'informes' && m.slug !== 'notificacoes' && m.slug !== 'taxa-ocupacao') // Configurações fica na área inferior, e assistenciais, TI, RH, notificações e taxas ficam agrupados
           .map(module => {
 
             if (module.slug === 'recepcao') {

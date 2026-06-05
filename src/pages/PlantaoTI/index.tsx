@@ -740,6 +740,7 @@ export default function PlantaoTI() {
                   const isToday = hojeStr === slot.dateStr;
                   const feriadoInfo = feriadosDoAno[slot.dateStr];
                   const hasFeriado = !!feriadoInfo;
+                  const temOcorrenciaDia = diaEscalas.some(e => e.ocorrencias && e.ocorrencias.length > 0);
 
                   // Estilos de destaque para feriados e pontos facultativos
                   let feriadoClasses = '';
@@ -781,11 +782,18 @@ export default function PlantaoTI() {
                         <div className="flex items-center gap-1.5 ml-auto shrink-0">
                           {feriadoInfo && (
                             <span
-                              className={`text-[8.5px] px-1.5 py-0.5 rounded font-bold leading-tight text-right break-words max-w-[70px] bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20`}
+                              className={`text-[10px] px-1.5 py-0.5 rounded font-bold leading-tight text-right break-words max-w-[70px] bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20`}
                               title={feriadoInfo.name}
                             >
                               {feriadoInfo.name}
                             </span>
+                          )}
+
+                          {temOcorrenciaDia && (
+                            <FileText 
+                              className="h-4.5 w-4.5 text-blue-500 dark:text-blue-400 shrink-0" 
+                              title="Há ocorrências registradas neste dia" 
+                            />
                           )}
 
                           {isAdmin && (
@@ -799,7 +807,7 @@ export default function PlantaoTI() {
                               title="Adicionar plantonista"
                               type="button"
                             >
-                              <Plus className="h-3 w-3" strokeWidth={3} />
+                              <Plus className="h-4.5 w-4.5" strokeWidth={3} />
                             </button>
                           )}
                         </div>
@@ -809,16 +817,25 @@ export default function PlantaoTI() {
                       <div className="flex-1 mt-1.5 space-y-1 overflow-y-auto max-h-[50px] pr-0.5 scrollbar-thin">
                         {diaEscalas.map(escala => {
                           const estilo = getColaboradorEstilo(escala.profiles?.full_name);
+                          const temOcorrenciaPlantonista = escala.ocorrencias && escala.ocorrencias.length > 0;
                           return (
                             <div
                               key={escala.id}
-                              className={`flex items-center gap-1 px-1 py-0.5 rounded text-[9px] font-medium border ${estilo.bg} ${estilo.border}`}
+                              className={`flex items-center justify-between gap-1 px-1 py-0.5 rounded text-[11px] font-medium border ${estilo.bg} ${estilo.border}`}
                               title={escala.profiles?.full_name || ''}
                             >
-                              <span className={`h-1.5 w-1.5 rounded-full flex-shrink-0 ${estilo.bullet}`} />
-                              <span className={`truncate ${estilo.text}`}>
-                                {obterPrimeiroNome(escala.profiles?.full_name)}
-                              </span>
+                              <div className="flex items-center gap-1 min-w-0">
+                                <span className={`h-2.5 w-2.5 rounded-full flex-shrink-0 ${estilo.bullet}`} />
+                                <span className={`truncate ${estilo.text}`}>
+                                  {obterPrimeiroNome(escala.profiles?.full_name)}
+                                </span>
+                              </div>
+                              {temOcorrenciaPlantonista && (
+                                <FileText 
+                                  className="h-3.5 w-3.5 text-blue-500 dark:text-blue-400 shrink-0" 
+                                  title={`${escala.ocorrencias.length} ocorrência(s) registrada(s)`}
+                                />
+                              )}
                             </div>
                           );
                         })}
@@ -952,12 +969,12 @@ export default function PlantaoTI() {
                       } ${estilo.border}`}
                     >
                       <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                        <span className={`h-2 w-2 flex-shrink-0 rounded-full ${estilo.bullet}`} />
+                        <span className={`h-2.5 w-2.5 flex-shrink-0 rounded-full ${estilo.bullet}`} />
                         <div className="min-w-0 flex-1 flex flex-col justify-center">
-                          <p className="text-sm font-semibold text-foreground truncate">
+                          <p className="text-base font-semibold text-foreground truncate">
                             {escala.profiles?.full_name || 'Usuário Sem Nome'}
                           </p>
-                          <p className="text-[10px] text-muted-foreground truncate">
+                          <p className="text-xs text-muted-foreground truncate">
                             {escala.profiles?.email || ''}
                           </p>
                         </div>
@@ -968,13 +985,13 @@ export default function PlantaoTI() {
                                 className="flex items-center gap-1.5 px-2 py-1 rounded bg-blue-500/10 text-blue-600 dark:text-blue-400 text-xs font-bold" 
                                 title={`${escala.ocorrencias?.length || 0} ocorrência(s) registrada(s)`}
                               >
-                                <FileText className="h-5 w-5" />
+                                <FileText className="h-6 w-6" />
                                 <span>{escala.ocorrencias?.length || 0}</span>
                               </span>
                             )}
                             {ePresencial && (
                               <span className="p-1 rounded bg-amber-500/10 text-amber-600 dark:text-amber-400" title="Houve atendimento presencial">
-                                <MapPin className="h-5 w-5" />
+                                <MapPin className="h-6 w-6" />
                               </span>
                             )}
                           </div>
@@ -994,7 +1011,7 @@ export default function PlantaoTI() {
                             className="p-1.5 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors disabled:opacity-50"
                             title="Remover plantonista"
                           >
-                            <Trash2 className="h-4 w-4" />
+                            <Trash2 className="h-5 w-5" />
                           </button>
                         )}
                       </div>
@@ -1046,7 +1063,7 @@ export default function PlantaoTI() {
                 {showOcorrenciaForm ? (
                   <form onSubmit={handleSaveOcorrencia} className="space-y-3.5">
                     <div className="relative">
-                      <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider block mb-1">
+                      <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider block mb-1">
                         Nome do Solicitante
                       </label>
                       <div className="relative">
@@ -1107,7 +1124,7 @@ export default function PlantaoTI() {
                     </div>
 
                     <div>
-                      <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider block mb-1">
+                      <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider block mb-1">
                         Setor Solicitante
                       </label>
                       <div className="relative">
@@ -1129,7 +1146,7 @@ export default function PlantaoTI() {
                     </div>
 
                     <div>
-                      <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider block mb-1">
+                      <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider block mb-1">
                         Breve Descrição do Plantão
                       </label>
                       <textarea
@@ -1198,21 +1215,21 @@ export default function PlantaoTI() {
                           >
                             <div className="min-w-0 flex-1 space-y-1">
                               <div className="flex items-center gap-2">
-                                <h4 className="text-xs font-bold text-foreground truncate">
+                                <h4 className="text-sm font-bold text-foreground truncate">
                                   {ocorrencia.nome_solicitante}
                                 </h4>
-                                <span className="text-[10px] text-muted-foreground/80">
+                                <span className="text-xs text-muted-foreground/80">
                                   ({ocorrencia.setor_solicitante})
                                 </span>
                               </div>
-                              <p className="text-xs text-muted-foreground line-clamp-1">
+                              <p className="text-sm text-muted-foreground line-clamp-1">
                                 {ocorrencia.descricao_plantao}
                               </p>
                             </div>
                             <div className="flex items-center gap-1.5 shrink-0 self-center">
                               {ocorrencia.atendimento_presencial && (
                                 <span className="p-1 rounded bg-amber-500/10 text-amber-600 dark:text-amber-400" title="Atendimento presencial">
-                                  <MapPin className="h-4 w-4" />
+                                  <MapPin className="h-5 w-5" />
                                 </span>
                               )}
 
@@ -1226,7 +1243,7 @@ export default function PlantaoTI() {
                                   className="p-1.5 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors disabled:opacity-50"
                                   title="Excluir ocorrência"
                                 >
-                                  <Trash2 className="h-4 w-4" />
+                                  <Trash2 className="h-5 w-5" />
                                 </button>
                               )}
                             </div>
@@ -1254,7 +1271,7 @@ export default function PlantaoTI() {
                     <Coins className="h-5 w-5" />
                   </div>
                   <div>
-                    <h3 className="text-sm font-bold text-foreground">Ganhos do Mês (Estimado)</h3>
+                    <h3 className="text-sm font-bold text-foreground">Ganhos do Mês de {MESES[currentMonth]} de {currentYear} (Estimado)</h3>
                     <p className="text-[10px] text-muted-foreground">
                       Valores a serem recebidos por cada plantonista.
                     </p>
@@ -1273,16 +1290,16 @@ export default function PlantaoTI() {
                       >
                         <div className="flex justify-between items-start">
                           <div className="min-w-0 flex-1 flex items-center gap-2">
-                            <span className={`h-2 w-2 rounded-full flex-shrink-0 ${estilo.bullet}`} />
-                            <span className="text-xs font-bold text-foreground truncate">
+                            <span className={`h-2.5 w-2.5 rounded-full flex-shrink-0 ${estilo.bullet}`} />
+                            <span className="text-sm font-bold text-foreground truncate">
                               {pl.nome} {pl.isSelf && "(Você)"}
                             </span>
                           </div>
-                          <span className="text-xs font-extrabold text-emerald-600 dark:text-emerald-400 shrink-0 ml-2">
+                          <span className="text-sm font-extrabold text-emerald-600 dark:text-emerald-400 shrink-0 ml-2">
                             R$ {pl.total.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                           </span>
                         </div>
-                        <div className="flex flex-col text-[10px] text-muted-foreground pl-4 space-y-0.5 border-t border-border/10 pt-1.5 mt-0.5">
+                        <div className="flex flex-col text-xs text-muted-foreground pl-4 space-y-0.5 border-t border-border/10 pt-1.5 mt-0.5">
                           <div className="flex justify-between gap-2">
                             <span>Dias Úteis (R$100): <strong>{pl.diasUteisNormais}x</strong></span>
                             {pl.diasUteisReduzidos > 0 && (
@@ -1417,24 +1434,24 @@ export default function PlantaoTI() {
               <div className="p-5 space-y-4">
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <h4 className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Solicitante</h4>
-                    <p className="text-sm font-semibold text-foreground mt-0.5">{viewingOcorrencia.nome_solicitante}</p>
+                    <h4 className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Solicitante</h4>
+                    <p className="text-base font-semibold text-foreground mt-0.5">{viewingOcorrencia.nome_solicitante}</p>
                   </div>
                   <div>
-                    <h4 className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Setor</h4>
-                    <p className="text-sm font-semibold text-foreground mt-0.5">{viewingOcorrencia.setor_solicitante}</p>
+                    <h4 className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Setor</h4>
+                    <p className="text-base font-semibold text-foreground mt-0.5">{viewingOcorrencia.setor_solicitante}</p>
                   </div>
                 </div>
 
                 <div>
-                  <h4 className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Atendimento</h4>
+                  <h4 className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Atendimento</h4>
                   <div className="mt-1">
                     {viewingOcorrencia.atendimento_presencial ? (
-                      <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
-                        <MapPin className="h-3 w-3" /> Presencial
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-sm font-semibold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
+                        <MapPin className="h-4 w-4" /> Presencial
                       </span>
                     ) : (
-                      <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-muted text-muted-foreground border border-border">
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-sm font-semibold bg-muted text-muted-foreground border border-border">
                         Remoto / Telefone
                       </span>
                     )}
@@ -1442,7 +1459,7 @@ export default function PlantaoTI() {
                 </div>
 
                 <div>
-                  <h4 className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Descrição do Ocorrido</h4>
+                  <h4 className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Descrição do Ocorrido</h4>
                   <div className="mt-1 p-3 rounded-lg bg-muted/40 border border-border/60 text-sm text-foreground leading-relaxed whitespace-pre-wrap max-h-[180px] overflow-y-auto scrollbar-thin">
                     {viewingOcorrencia.descricao_plantao}
                   </div>
