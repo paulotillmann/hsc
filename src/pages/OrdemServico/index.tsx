@@ -693,7 +693,17 @@ export default function OrdemServico() {
           <span className="text-xs font-bold text-muted-foreground group-hover:text-primary transition-colors">
             OS #{os.nr_sequencia}
           </span>
-          {getPriorityBadge(os.ie_prioridade)}
+          <div className="flex items-center gap-1.5 shrink-0">
+            {getPriorityBadge(os.ie_prioridade)}
+            {ordersWithHistory.has(os.nr_sequencia) && (
+              <div
+                className="inline-flex items-center justify-center h-[22px] w-[22px] rounded-full bg-sky-50 dark:bg-sky-950/20 text-sky-600 dark:text-sky-400 border border-sky-200/40"
+                title="Possui histórico de relatos"
+              >
+                <History className="h-3.5 w-3.5 shrink-0" />
+              </div>
+            )}
+          </div>
         </div>
 
         <h3 className="text-sm font-semibold text-foreground leading-snug line-clamp-2 uppercase">
@@ -746,20 +756,9 @@ export default function OrdemServico() {
         </div>
 
         <div className="flex items-center justify-between border-t border-border/40 pt-2.5 mt-1 text-[10px] text-muted-foreground">
-          <div className="flex items-center gap-2">
-            <div className="flex items-center gap-1.5 text-sm font-semibold text-foreground/90 dark:text-foreground/95 bg-muted px-2 py-0.5 rounded" title="Data de abertura do chamado">
-              <Calendar className="h-3.5 w-3.5 text-foreground/70 dark:text-foreground/80" />
-              <span>{formatDate(parseTasyDate(os.dt_ordem_servico))}</span>
-            </div>
-            {ordersWithHistory.has(os.nr_sequencia) && (
-              <div
-                className="flex items-center gap-0.5 text-sky-600 dark:text-sky-400 bg-sky-500/10 dark:bg-sky-500/5 px-1 py-0.5 rounded font-semibold border border-sky-500/10 shrink-0"
-                title="Possui histórico de relatos"
-              >
-                <History className="h-3 w-3 shrink-0" />
-                <span className="text-[8px] uppercase tracking-wider font-bold">Histórico</span>
-              </div>
-            )}
+          <div className="flex items-center gap-1.5 text-sm font-semibold text-foreground/90 dark:text-foreground/95 bg-muted px-2 py-0.5 rounded" title="Data de abertura do chamado">
+            <Calendar className="h-3.5 w-3.5 text-foreground/70 dark:text-foreground/80" />
+            <span>{formatDate(parseTasyDate(os.dt_ordem_servico))}</span>
           </div>
           {(os.ds_estagio || os.ds_situacao) && (
             <span className="font-semibold uppercase tracking-wider text-[9px] bg-muted px-1.5 py-0.5 rounded">
