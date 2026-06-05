@@ -167,23 +167,7 @@ export default function OrdemServico() {
         .order('dt_ordem_servico', { ascending: false });
 
       if (dbError) throw dbError;
-
-      // Normaliza as datas do Tasy (soma 3 horas para corrigir o fuso "falso UTC" gravado pelo n8n)
-      const adjustTasyDate = (dateStr: string | null): string | null => {
-        if (!dateStr) return null;
-        const date = new Date(dateStr);
-        date.setHours(date.getHours() + 3);
-        return date.toISOString();
-      };
-
-      const normalizedData = (data || []).map(os => ({
-        ...os,
-        dt_ordem_servico: adjustTasyDate(os.dt_ordem_servico),
-        dt_atualizacao: adjustTasyDate(os.dt_atualizacao),
-        updated_at: adjustTasyDate(os.updated_at)
-      }));
-
-      setOrders(normalizedData);
+      setOrders(data || []);
 
       // Buscar os históricos das ordens carregadas para identificar quais possuem histórico
       if (data && data.length > 0) {
@@ -293,21 +277,7 @@ export default function OrdemServico() {
 
           // Se a OS modificada for a selecionada, atualiza seus dados no modal
           if (payload.new && (payload.new as any).nr_sequencia) {
-            const adjustTasyDate = (dateStr: string | null): string | null => {
-              if (!dateStr) return null;
-              const date = new Date(dateStr);
-              date.setHours(date.getHours() + 3);
-              return date.toISOString();
-            };
-
-            const rawOS = payload.new as any;
-            const updatedOS: OrdemServicoItem = {
-              ...rawOS,
-              dt_ordem_servico: adjustTasyDate(rawOS.dt_ordem_servico),
-              dt_atualizacao: adjustTasyDate(rawOS.dt_atualizacao),
-              updated_at: adjustTasyDate(rawOS.updated_at)
-            };
-
+            const updatedOS = payload.new as OrdemServicoItem;
             if (selectedOrderRef.current && selectedOrderRef.current.nr_sequencia === updatedOS.nr_sequencia) {
               setSelectedOrder(updatedOS);
             }
@@ -536,10 +506,34 @@ export default function OrdemServico() {
     return 'escalonado';
   };
 
+  // Converte a data do Tasy (que vem com 'Z' mas está no fuso de Brasília)
+  // para um objeto Date correto interpretando-a no fuso de Brasília (UTC-3).
+  const parseTasyDate = (dateStr: string | null): Date | null => {
+    if (!dateStr) return null;
+    // Substitui o sufixo 'Z' por '-03:00' para forçar a interpretação como horário de Brasília
+    const normalizedStr = dateStr.replace(/Z$/i, '-03:00');
+    return new Date(normalizedStr);
+  };
+
+  // Formação de data
+  const formatDate = (date: Date | string | null) => {
+    if (!date) return '';
+    const d = typeof date === 'string' ? new Date(date) : date;
+    return d.toLocaleDateString('pt-BR', {
+      day: '2-digit',
+      month: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      timeZone: 'America/Sao_Paulo'
+    });
+  };
+
   // Variáveis para o Modal de Detalhes
   const orderColumn = selectedOrder ? getKanbanColumn(selectedOrder) : 'triagem';
   const orderDtEntrada = selectedOrder 
-    ? (orderColumn === 'triagem' ? selectedOrder.dt_ordem_servico : (selectedOrder.dt_atualizacao || selectedOrder.updated_at))
+    ? (orderColumn === 'triagem' 
+        ? parseTasyDate(selectedOrder.dt_ordem_servico) 
+        : parseTasyDate(selectedOrder.dt_atualizacao || selectedOrder.updated_at))
     : null;
   const orderStageLabel = orderColumn === 'triagem' 
     ? 'Triagem' 
@@ -571,19 +565,6 @@ export default function OrdemServico() {
         Baixa
       </span>
     );
-  };
-
-  // Formação de data
-  const formatDate = (dateStr: string | null) => {
-    if (!dateStr) return '';
-    const date = new Date(dateStr);
-    return date.toLocaleDateString('pt-BR', {
-      day: '2-digit',
-      month: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-      timeZone: 'America/Sao_Paulo'
-    });
   };
 
   // Formatar texto para o padrão pt-br (Sentence Case) suavizando CAIXA ALTA
@@ -635,7 +616,8 @@ export default function OrdemServico() {
 
     if (!logs || logs.length === 0) {
       if (!dtOrdemServico) return durations;
-      const start = new Date(dtOrdemServico).getTime();
+      const parsedStart = parseTasyDate(dtOrdemServico);
+      const start = parsedStart ? parsedStart.getTime() : new Date(dtOrdemServico).getTime();
       const end = new Date().getTime();
       const diff = end - start;
       if (currentEstagio === 'triagem') durations.triagem = diff;
@@ -683,8 +665,8 @@ export default function OrdemServico() {
   // Render do Card Kanban
   const renderCard = (os: OrdemServicoItem, columnId: 'triagem' | 'processo' | 'escalonado' | 'finalizado') => {
     const dtEntrada = columnId === 'triagem' 
-      ? os.dt_ordem_servico 
-      : (os.dt_atualizacao || os.updated_at);
+      ? parseTasyDate(os.dt_ordem_servico) 
+      : parseTasyDate(os.dt_atualizacao || os.updated_at);
 
     const stageLabel = columnId === 'triagem' 
       ? 'Triagem' 
@@ -754,7 +736,7 @@ export default function OrdemServico() {
           <div className="flex items-center gap-2">
             <div className="flex items-center gap-1.5 text-sm font-semibold text-foreground/90 dark:text-foreground/95 bg-muted px-2 py-0.5 rounded" title="Data de abertura do chamado">
               <Calendar className="h-3.5 w-3.5 text-foreground/70 dark:text-foreground/80" />
-              <span>{formatDate(os.dt_ordem_servico)}</span>
+              <span>{formatDate(parseTasyDate(os.dt_ordem_servico))}</span>
             </div>
             {ordersWithHistory.has(os.nr_sequencia) && (
               <div 
@@ -1132,7 +1114,7 @@ export default function OrdemServico() {
                 <div className="flex flex-col">
                   <span className="text-[10px] font-semibold text-muted-foreground uppercase">Abertura</span>
                   <span className="text-xs text-foreground/80 mt-1.5">
-                    {formatDate(selectedOrder.dt_ordem_servico)}
+                    {formatDate(parseTasyDate(selectedOrder.dt_ordem_servico))}
                   </span>
                 </div>
                 {orderDtEntrada && (
