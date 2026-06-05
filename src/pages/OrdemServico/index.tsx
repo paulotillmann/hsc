@@ -770,47 +770,123 @@ export default function OrdemServico() {
   return (
     <div className="flex-1 space-y-4 min-h-[85vh] pb-4 w-full mx-auto px-1 pt-2 text-foreground transition-all">
       {/* Cabeçalho do Módulo */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-3 border-b border-border/40">
+        <div className="flex flex-col min-w-0">
           <h1 className="text-2xl font-bold tracking-tight text-foreground flex items-center gap-2">
-            <Wrench className="h-8 w-8 text-primary animate-pulse" />
-            Ordem de Serviço
+            <Wrench className="h-7 w-7 text-primary animate-pulse shrink-0" />
+            <span className="truncate">Ordem de Serviço</span>
           </h1>
-          <div className="flex flex-wrap items-center gap-2 mt-1 text-xs select-none">
-            <span className="text-muted-foreground">
-              Acompanhamento das ordens de serviço integradas com o n8n.
-            </span>
-          </div>
+          <span className="text-xs text-muted-foreground mt-0.5 truncate hidden sm:block">
+            Acompanhamento das ordens de serviço integradas com o n8n.
+          </span>
         </div>
 
-        {/* Indicador de Sincronização à direita */}
-        {(isBackgroundSyncing || syncError || lastSyncTime) && (
-          <div className="flex items-center gap-1.5 select-none shrink-0">
-            {isBackgroundSyncing ? (
-              <div className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-blue-50 dark:bg-blue-900/20 border border-blue-200/40 dark:border-blue-800/40 text-xs">
-                <RefreshCcw className="h-3 w-3 animate-spin text-blue-500" />
-                <span className="text-blue-600 dark:text-blue-400 font-medium">Sincronizando...</span>
-              </div>
-            ) : syncError ? (
-              <div className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-red-50 dark:bg-red-900/20 border border-red-200/40 dark:border-red-800/40 text-xs">
-                <span className="relative flex h-1.5 w-1.5">
-                  <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-red-500"></span>
-                </span>
-                <span className="text-red-600 dark:text-red-400 font-medium">Erro na sync</span>
-              </div>
-            ) : lastSyncTime ? (
-              <div className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200/40 dark:border-emerald-800/40 text-xs">
-                <span className="relative flex h-1.5 w-1.5">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                  <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500"></span>
-                </span>
-                <span className="text-emerald-600 dark:text-emerald-400 font-medium">
-                  Sync {formatSyncTime(lastSyncTime)}
-                </span>
-              </div>
-            ) : null}
+        {/* Filtros da página ao lado do título */}
+        <div className="flex flex-col sm:flex-row items-center gap-3 w-full lg:w-auto">
+          {/* Avatares dos Executores */}
+          <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap bg-muted/40 border border-border/60 px-2.5 py-1 rounded-xl">
+            <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider pl-0.5 select-none">Executores:</span>
+            <div className="flex items-center gap-1.5">
+              {sortedExecutors.map((exec) => {
+                const isSelected = selectedExecutor === exec.dbKey;
+                const initials = exec.displayName.substring(0, 2).toUpperCase();
+
+                return (
+                  <button
+                    key={exec.dbKey}
+                    onClick={() => setSelectedExecutor(isSelected ? null : exec.dbKey)}
+                    title={exec.fullName}
+                    className={`relative flex items-center justify-center h-8 w-8 rounded-full border overflow-hidden p-0 transition-all duration-200 bg-background shrink-0 ${isSelected
+                        ? 'border-primary ring-2 ring-primary/25 scale-105 shadow-sm'
+                        : 'border-border hover:border-muted-foreground/50 hover:scale-105'
+                      }`}
+                  >
+                    {exec.avatarUrl ? (
+                      <img
+                        src={exec.avatarUrl}
+                        alt={exec.displayName}
+                        className="h-full w-full rounded-full object-cover antialiased"
+                      />
+                    ) : (
+                      <div className={`h-full w-full rounded-full flex items-center justify-center text-[10px] font-bold ${isSelected ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'
+                        }`}>
+                        {initials}
+                      </div>
+                    )}
+                    {isSelected && (
+                      <span className="absolute -bottom-0.5 -right-0.5 flex h-3 w-3 items-center justify-center rounded-full bg-primary text-[8px] text-primary-foreground font-bold border border-background shadow-sm">
+                        ✓
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+
+              {selectedExecutor && (
+                <button
+                  onClick={() => setSelectedExecutor(null)}
+                  className="text-[10px] text-muted-foreground hover:text-foreground font-semibold underline ml-1 whitespace-nowrap"
+                >
+                  Limpar
+                </button>
+              )}
+            </div>
           </div>
-        )}
+
+          {/* Busca e Período */}
+          <div className="flex items-center gap-2 w-full sm:w-auto">
+            <div className="relative w-full sm:w-48 lg:w-56">
+              <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
+              <input
+                type="text"
+                placeholder="Buscar chamado..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full pl-8 pr-3 py-1.5 bg-muted/40 border border-border rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all text-foreground placeholder:text-muted-foreground"
+              />
+            </div>
+
+            <select
+              value={dateFilter}
+              onChange={(e) => setDateFilter(e.target.value as any)}
+              className="py-1.5 px-2.5 bg-muted/40 border border-border rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-foreground font-semibold cursor-pointer shrink-0"
+            >
+              <option value="todas">Todas</option>
+              <option value="dia">Dia</option>
+              <option value="semana">Semana</option>
+              <option value="mes">Mês</option>
+            </select>
+          </div>
+
+          {/* Indicador de Sincronização */}
+          {(isBackgroundSyncing || syncError || lastSyncTime) && (
+            <div className="flex items-center gap-1.5 select-none shrink-0">
+              {isBackgroundSyncing ? (
+                <div className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-blue-50 dark:bg-blue-900/10 border border-blue-200/30 dark:border-blue-800/30 text-[10px]">
+                  <RefreshCcw className="h-3 w-3 animate-spin text-blue-500" />
+                  <span className="text-blue-600 dark:text-blue-400 font-bold uppercase tracking-wider">Sincronizando...</span>
+                </div>
+              ) : syncError ? (
+                <div className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-red-50 dark:bg-red-900/10 border border-red-200/30 dark:border-red-800/30 text-[10px]">
+                  <span className="relative flex h-1.5 w-1.5">
+                    <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-red-500"></span>
+                  </span>
+                  <span className="text-red-600 dark:text-red-400 font-bold uppercase tracking-wider">Erro na sync</span>
+                </div>
+              ) : lastSyncTime ? (
+                <div className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-900/10 border border-emerald-200/30 dark:border-emerald-800/30 text-[10px]" title={`Última sincronização: ${formatSyncTime(lastSyncTime)}`}>
+                  <span className="relative flex h-1.5 w-1.5">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500"></span>
+                  </span>
+                  <span className="text-emerald-600 dark:text-emerald-400 font-bold uppercase tracking-wider">
+                    Sync {formatSyncTime(lastSyncTime)}
+                  </span>
+                </div>
+              ) : null}
+            </div>
+          )}
+        </div>
       </div>
 
       {error && (
@@ -864,87 +940,7 @@ export default function OrdemServico() {
         />
       </div>
 
-      {/* Filtros e Busca */}
-      <div className="flex flex-col md:flex-row gap-4 items-center justify-between bg-card border border-border/80 p-3.5 rounded-xl shadow-sm w-full">
-        {/* Avatares dos Executores (Esquerda) */}
-        <div className="flex items-center gap-3 w-full md:w-auto flex-wrap">
-          <span className="text-xs font-semibold text-muted-foreground whitespace-nowrap">Executores:</span>
-          <div className="flex items-center gap-2">
-            {sortedExecutors.map((exec) => {
-              const isSelected = selectedExecutor === exec.dbKey;
-              const initials = exec.displayName.substring(0, 2).toUpperCase();
 
-              return (
-                <button
-                  key={exec.dbKey}
-                  onClick={() => setSelectedExecutor(isSelected ? null : exec.dbKey)}
-                  title={exec.fullName}
-                  className={`relative flex items-center justify-center h-10 w-10 rounded-full border overflow-hidden p-0 transition-all duration-200 bg-background ${isSelected
-                      ? 'border-primary ring-2 ring-primary/30 scale-110 shadow-sm'
-                      : 'border-border hover:border-muted-foreground/50 hover:scale-105'
-                    }`}
-                >
-                  {exec.avatarUrl ? (
-                    <img
-                      src={exec.avatarUrl}
-                      alt={exec.displayName}
-                      className="h-full w-full rounded-full object-cover antialiased"
-                    />
-                  ) : (
-                    <div className={`h-full w-full rounded-full flex items-center justify-center text-xs font-bold ${isSelected ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'
-                      }`}>
-                      {initials}
-                    </div>
-                  )}
-                  {isSelected && (
-                    <span className="absolute -bottom-0.5 -right-0.5 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-primary text-[9px] text-primary-foreground font-bold border border-background shadow-sm">
-                      ✓
-                    </span>
-                  )}
-                </button>
-              );
-            })}
-
-            {selectedExecutor && (
-              <button
-                onClick={() => setSelectedExecutor(null)}
-                className="text-[10px] text-muted-foreground hover:text-foreground font-medium underline ml-1 whitespace-nowrap"
-              >
-                Limpar
-              </button>
-            )}
-          </div>
-        </div>
-
-        {/* Busca e Período (Direita) */}
-        <div className="flex flex-col sm:flex-row items-center gap-3 w-full md:w-auto justify-end">
-          <div className="relative w-full sm:w-64">
-            <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-            <input
-              type="text"
-              placeholder="Buscar por OS, solicitante..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-9 pr-4 py-2 bg-muted/40 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all text-foreground placeholder:text-muted-foreground"
-            />
-          </div>
-
-          {/* Filtro de Período */}
-          <div className="flex items-center gap-2 w-full sm:w-auto shrink-0">
-            <Calendar className="h-4 w-4 text-muted-foreground shrink-0 hidden sm:block" />
-            <select
-              value={dateFilter}
-              onChange={(e) => setDateFilter(e.target.value as any)}
-              className="w-full sm:w-32 py-2 px-3 bg-muted/40 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-foreground"
-            >
-              <option value="todas">Todas</option>
-              <option value="dia">Dia</option>
-              <option value="semana">Semana</option>
-              <option value="mes">Mês</option>
-            </select>
-          </div>
-        </div>
-      </div>
 
       {/* Layout Kanban */}
       {loading ? (
