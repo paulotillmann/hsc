@@ -247,6 +247,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       sessionStorage.removeItem('hsc_gestao_pendencias_sync_time');
       sessionStorage.removeItem('hsc_gestao_pendencias_is_demo');
       sessionStorage.removeItem('hsc_gestao_pendencias_sync_status');
+      
+      sessionStorage.removeItem('hsc_faturamentos_cache_data');
+      sessionStorage.removeItem('hsc_faturamentos_cache_time');
+      sessionStorage.removeItem('hsc_faturamentos_cache_is_demo');
+      sessionStorage.removeItem('hsc_faturamentos_cache_status');
+      sessionStorage.removeItem('hsc_faturamentos_cache_from');
+      sessionStorage.removeItem('hsc_faturamentos_cache_to');
     } catch (e) {
       console.error('Erro ao limpar cache na saída:', e);
     }
