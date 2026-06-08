@@ -14,6 +14,7 @@ import {
   generateMesAnoOptions,
   updateHoleriteEmail,
   syncEmailsWithN8n,
+  updateEmailEnviadoEm,
   HoleriteRecord,
   HoleriteUploadProgress,
   SyncProgress,
@@ -51,7 +52,7 @@ const Holerites: React.FC = () => {
   // ── Filtro / Paginação / Ordenação ──
   const [filter, setFilter] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 8;
+  const itemsPerPage = 12;
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc' | null>(null);
 
   // ── Mês/Ano de referência (filtro de listagem) ──
@@ -562,21 +563,53 @@ const Holerites: React.FC = () => {
 
                 {/* SUCESSO */}
                 {uploadProgress?.stage === 'done' && (
-                  <>
-                    <CheckCircle2 className="h-16 w-16 text-green-500 mb-2" />
-                    <h4 className="text-lg font-bold text-green-600">Concluído!</h4>
-                    <p className="text-sm text-muted-foreground">{uploadProgress.message}</p>
-                  </>
+                  <div className="w-full flex flex-col items-center gap-3">
+                    {uploadProgress.skippedPages && uploadProgress.skippedPages.length > 0 ? (
+                      <>
+                        <AlertCircle className="h-16 w-16 text-yellow-500 mb-2" />
+                        <h4 className="text-lg font-bold text-yellow-600">Importação com Alertas</h4>
+                        <p className="text-sm text-muted-foreground text-center">
+                          {uploadProgress.message}
+                        </p>
+                        <div className="w-full text-left bg-yellow-500/5 dark:bg-yellow-500/10 border border-yellow-500/20 rounded-lg p-3 text-xs max-h-40 overflow-y-auto space-y-1 mt-2">
+                          <p className="font-bold text-yellow-700 dark:text-yellow-400 mb-1">Páginas não importadas ({uploadProgress.skippedPages.length}):</p>
+                          {uploadProgress.skippedPages.map(sp => (
+                            <div key={sp.page} className="text-muted-foreground border-b border-border/50 pb-1 last:border-0 last:pb-0">
+                              <strong>Página {sp.page}:</strong> {sp.reason}
+                              {sp.nome && <span className="block text-foreground/80 mt-0.5">Funcionário: {sp.nome}</span>}
+                            </div>
+                          ))}
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <CheckCircle2 className="h-16 w-16 text-green-500 mb-2" />
+                        <h4 className="text-lg font-bold text-green-600">Concluído!</h4>
+                        <p className="text-sm text-muted-foreground">{uploadProgress.message}</p>
+                      </>
+                    )}
+                  </div>
                 )}
 
                 {/* INTERROMPIDO */}
                 {uploadProgress?.stage === 'interrupted' && (
-                  <>
+                  <div className="w-full flex flex-col items-center gap-3">
                     <AlertCircle className="h-16 w-16 text-yellow-500 mb-2" />
                     <h4 className="text-lg font-bold text-yellow-600">Processo Interrompido</h4>
                     <p className="text-sm text-muted-foreground font-medium">{uploadProgress.message}</p>
+                    {uploadProgress.skippedPages && uploadProgress.skippedPages.length > 0 && (
+                      <div className="w-full text-left bg-yellow-500/5 dark:bg-yellow-500/10 border border-yellow-500/20 rounded-lg p-3 text-xs max-h-40 overflow-y-auto space-y-1 mt-2">
+                        <p className="font-bold text-yellow-700 dark:text-yellow-400 mb-1">Páginas não importadas até a interrupção ({uploadProgress.skippedPages.length}):</p>
+                        {uploadProgress.skippedPages.map(sp => (
+                          <div key={sp.page} className="text-muted-foreground border-b border-border/50 pb-1 last:border-0 last:pb-0">
+                            <strong>Página {sp.page}:</strong> {sp.reason}
+                            {sp.nome && <span className="block text-foreground/80 mt-0.5">Funcionário: {sp.nome}</span>}
+                          </div>
+                        ))}
+                      </div>
+                    )}
                     <p className="text-xs text-muted-foreground mt-2">Você pode fechar esta janela agora.</p>
-                  </>
+                  </div>
                 )}
               </div>
             </motion.div>

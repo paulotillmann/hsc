@@ -58,6 +58,7 @@ export interface HoleriteUploadProgress {
   percent: number;
   message: string;
   error?: string;
+  skippedPages?: { page: number; reason: string; cpf?: string; nome?: string }[];
 }
 
 export interface SyncProgress {
@@ -110,8 +111,8 @@ function extractDadosHolerite(text: string): ExtractedData {
   const mesAnoMatch = text.match(/ARAGUARI[^]*?(\d{2}\/\d{4})/);
 
   // Nome: texto em MAIÚSCULAS após o número de cadastro (ex: "964 ADENIR RODRIGUES 322205")
-  // O padrão busca: número_cadastro (3-4 dígitos) + NOME EM CAPS + código CBO (6 dígitos)
-  const nomeMatch = text.match(/\b(?:FL\s*)?\d{3,4}\s+([A-ZÀÁÂÃÇÉÊÍÓÔÕÚ][A-ZÀÁÂÃÇÉÊÍÓÔÕÚ\s]+?)\s+\d{6}\b/);
+  // O padrão busca: número_cadastro (1-4 dígitos) + NOME EM CAPS + código CBO (6 dígitos)
+  const nomeMatch = text.match(/\b(?:FL\s*)?\d{1,4}\s+([A-ZÀÁÂÃÇÉÊÍÓÔÕÚ][A-ZÀÁÂÃÇÉÊÍÓÔÕÚ\s]+?)\s+\d{6}\b/);
 
   // Total Líquido: valor numérico que aparece antes da string "Total Líquido" (ex: "3.784,61 Total Líquido")
   const totalMatch = text.match(/([\d.,]+)\s+Total Líquido/);
@@ -185,6 +186,7 @@ export async function uploadHoleritePDF(
   onProgress({ stage: 'extracting', current: 0, total: totalPages, percent: 5, message: 'Analisando colaboradores...' });
 
   const results: HoleriteRecord[] = [];
+  const skippedPages: { page: number; reason: string; cpf?: string; nome?: string }[] = [];
 
   // ── Loop: 1 página = 1 colaborador ──
   for (let pageNum = 1; pageNum <= totalPages; pageNum++) {
@@ -196,6 +198,7 @@ export async function uploadHoleritePDF(
         total: totalPages,
         percent: 100,
         message: `Importação interrompida. ${results.length} de ${totalPages} foram salvos.`,
+        skippedPages,
       });
       return results;
     }
@@ -209,6 +212,17 @@ export async function uploadHoleritePDF(
 
     if (!cpf || !nomeCompleto || !mesAno) {
       console.warn(`[Holerite] Página ${pageNum}: dados incompletos, pulando.`);
+      const reasons: string[] = [];
+      if (!cpf) reasons.push('CPF não encontrado');
+      if (!nomeCompleto) reasons.push('Nome não encontrado');
+      if (!mesAno) reasons.push('Mês/Ano não encontrado');
+      
+      skippedPages.push({
+        page: pageNum,
+        reason: reasons.join(', '),
+        cpf: cpf || undefined,
+        nome: nomeCompleto || undefined,
+      });
       continue;
     }
 
@@ -318,6 +332,7 @@ export async function uploadHoleritePDF(
     total: totalPages,
     percent: 100,
     message: `${results.length} holerites importados com sucesso!`,
+    skippedPages,
   });
 
   return results;
