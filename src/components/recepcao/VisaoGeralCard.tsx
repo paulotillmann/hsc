@@ -8,6 +8,7 @@ interface VisaoGeralCardProps {
   subtext: string;
   subtextColorClass?: string; // e.g. text-blue-400, text-emerald-400, text-purple-400
   isLoading?: boolean;
+  extraHeader?: React.ReactNode;
 }
 
 export const VisaoGeralCard: React.FC<VisaoGeralCardProps> = ({
@@ -17,6 +18,7 @@ export const VisaoGeralCard: React.FC<VisaoGeralCardProps> = ({
   subtext,
   subtextColorClass = 'text-slate-400',
   isLoading = false,
+  extraHeader,
 }) => {
   return (
     <div className="relative overflow-hidden bg-card border border-border rounded-2xl p-5 flex flex-col justify-between min-h-[135px] hover:border-border/80 hover:shadow-md hover:shadow-slate-200/50 dark:hover:shadow-black/20 transition-all duration-300 group">
@@ -26,9 +28,12 @@ export const VisaoGeralCard: React.FC<VisaoGeralCardProps> = ({
       </div>
 
       <div className="flex flex-col">
-        <span className="text-[16px] font-bold text-foreground uppercase tracking-wider">
-          {title}
-        </span>
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-[16px] font-bold text-foreground uppercase tracking-wider">
+            {title}
+          </span>
+          {extraHeader}
+        </div>
         
         {isLoading ? (
           <div className="h-9 w-20 bg-muted animate-pulse rounded-lg mt-3" />
