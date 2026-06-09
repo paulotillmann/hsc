@@ -104,19 +104,52 @@ interface ExtractedData {
  * Por isso usamos a PRIMEIRA ocorrência de cada campo.
  */
 function extractDadosHolerite(text: string): ExtractedData {
-  // CPF: "CPF: XXX.XXX.XXX-XX"
-  const cpfMatch = text.match(/CPF:\s*([\d]{3}\.[\d]{3}\.[\d]{3}-[\d]{2})/);
+  // 1. CPF: "CPF: XXX.XXX.XXX-XX" (com tolerância a falhas de pontuação/espaços no OCR)
+  let cpf: string | null = null;
+  const cpfRawMatch = text.match(/CPF:\s*([\d\s.-]+)/i);
+  if (cpfRawMatch) {
+    const cleaned = cpfRawMatch[1].replace(/\D/g, '');
+    if (cleaned.length >= 11) {
+      const digits = cleaned.slice(0, 11);
+      cpf = `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6, 9)}-${digits.slice(9)}`;
+    }
+  }
 
-  // Mês/Ano: primeiro "MM/YYYY" no texto (aparece logo após "ARAGUARI - MG")
-  const mesAnoMatch = text.match(/ARAGUARI[^]*?(\d{2}\/\d{4})/);
+  // 2. Mês/Ano: MM/YYYY ou MMYYYY
+  let mesAno: string | null = null;
+  const mesAnoMatch = text.match(/\b(0[1-9]|1[0-2])\/?(20\d{2})\b/);
+  if (mesAnoMatch) {
+    mesAno = `${mesAnoMatch[1]}/${mesAnoMatch[2]}`;
+  }
 
-  // Nome: texto em MAIÚSCULAS após o número de cadastro (ex: "964 ADENIR RODRIGUES 322205")
-  // O padrão busca: número_cadastro (1-4 dígitos) + NOME EM CAPS + código CBO (6 dígitos)
-  const nomeMatch = text.match(/\b(?:FL\s*)?\d{1,4}\s+([A-ZÀÁÂÃÇÉÊÍÓÔÕÚ][A-ZÀÁÂÃÇÉÊÍÓÔÕÚ\s]+?)\s+\d{6}\b/);
+  // 3. Nome
+  let nomeCompleto: string | null = null;
+  // Tenta padrão: cadastro (1-5 dígitos) + NOME + CBO (6 dígitos)
+  const nomeMatch = text.match(/\b(?:FL\s*)?\d{1,5}\s+([A-ZÀÁÂÃÇÉÊÍÓÔÕÚ][A-ZÀÁÂÃÇÉÊÍÓÔÕÚ\s]+?)\s+\d{6}\b/);
+  if (nomeMatch) {
+    nomeCompleto = nomeMatch[1].trim();
+  } else {
+    // Fallback: busca por "Nome do Funcionário" (com tolerância a grafia do OCR) e analisa as linhas subsequentes
+    const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+    const idx = lines.findIndex(l => /Nome do Funcion/i.test(l));
+    if (idx !== -1) {
+      for (let j = idx + 1; j < Math.min(idx + 5, lines.length); j++) {
+        const line = lines[j];
+        if (/^[A-ZÀÁÂÃÇÉÊÍÓÔÕÚ\s]{6,}$/.test(line) && 
+            line.split(/\s+/).length >= 2 &&
+            !/Cadastro|CBO|Empresa|Local|Departamento|FL|ANALISTA|ASSISTENTE|AUXILIAR|TECNICO|TECNICA|GERENTE|DIRETOR|COORDENADOR|RECEPCIONISTA|MOTORISTA/i.test(line)) {
+          nomeCompleto = line;
+          break;
+        }
+      }
+    }
+  }
 
-  // Total Líquido: valor numérico que aparece antes da string "Total Líquido" (ex: "3.784,61 Total Líquido")
-  const totalMatch = text.match(/([\d.,]+)\s+Total Líquido/);
+  // 4. Total Líquido (prioriza valor após "Total Líquido", depois valor antes)
   let totalLiquido: number | null = null;
+  const totalMatchAfter = text.match(/Total\s+L[\s\S]{1,8}?do\s+([\d.,]+)/i);
+  const totalMatchBefore = text.match(/([\d.,]+)\s+Total\s+L[\s\S]{1,8}?do/i);
+  const totalMatch = totalMatchAfter || totalMatchBefore;
   if (totalMatch) {
     const rawValue = totalMatch[1].replace(/\./g, '').replace(',', '.');
     const parsed = parseFloat(rawValue);
@@ -124,9 +157,9 @@ function extractDadosHolerite(text: string): ExtractedData {
   }
 
   return {
-    cpf:          cpfMatch   ? cpfMatch[1]          : null,
-    nomeCompleto: nomeMatch  ? nomeMatch[1].trim()  : null,
-    mesAno:       mesAnoMatch ? mesAnoMatch[1]       : null,
+    cpf,
+    nomeCompleto,
+    mesAno,
     totalLiquido,
   };
 }
@@ -134,6 +167,34 @@ function extractDadosHolerite(text: string): ExtractedData {
 async function getPageText(page: any): Promise<string> {
   const content = await page.getTextContent();
   return content.items.map((item: any) => item.str).join(' ');
+}
+
+/**
+ * Renderiza apenas os 45% superiores da página em um canvas e executa OCR com Tesseract.js.
+ */
+async function recognizePageTextWithOcr(page: any): Promise<string> {
+  const viewport = page.getViewport({ scale: 2.0 }); // 2.0x DPI para maior clareza
+  const canvas = document.createElement('canvas');
+  canvas.width = viewport.width;
+  canvas.height = viewport.height * 0.45; // Corta nos 45% superiores (reduz tempo e ruído)
+  const context = canvas.getContext('2d');
+  if (!context) throw new Error('Não foi possível obter o contexto 2D do canvas.');
+
+  await page.render({
+    canvasContext: context,
+    viewport: viewport,
+  }).promise;
+
+  // Carrega tesseract.js dinamicamente (lazy loading)
+  // @ts-ignore
+  const { createWorker } = await import('tesseract.js');
+  const worker = await createWorker('por');
+  await worker.setParameters({
+    tessedit_pageseg_mode: '11' as any, // PSM 11 (Sparse text, works best for tables)
+  });
+  const { data: { text } } = await worker.recognize(canvas);
+  await worker.terminate();
+  return text;
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -206,7 +267,33 @@ export async function uploadHoleritePDF(
     // ── 1. Extrair texto da página ──
     const page = await pdfDoc.getPage(pageNum);
     const text = await getPageText(page);
-    const { cpf, nomeCompleto, mesAno, totalLiquido } = extractDadosHolerite(text);
+    let { cpf, nomeCompleto, mesAno, totalLiquido } = extractDadosHolerite(text);
+
+    // Fallback: se os dados obrigatórios estiverem ausentes, tenta OCR
+    if (!cpf || !nomeCompleto || !mesAno) {
+      console.log(`[Holerite] Página ${pageNum} sem texto selecionável. Tentando OCR como fallback...`);
+      try {
+        const pctProgress = 5 + Math.round((pageNum / totalPages) * 40);
+        onProgress({
+          stage: 'extracting',
+          current: pageNum,
+          total: totalPages,
+          percent: pctProgress,
+          message: `Processando OCR: Página ${pageNum}...`,
+        });
+        const ocrText = await recognizePageTextWithOcr(page);
+        console.log(`[Holerite] OCR concluído para Página ${pageNum}`);
+        const ocrData = extractDadosHolerite(ocrText);
+        if (ocrData.cpf && ocrData.nomeCompleto && ocrData.mesAno) {
+          cpf = ocrData.cpf;
+          nomeCompleto = ocrData.nomeCompleto;
+          mesAno = ocrData.mesAno;
+          totalLiquido = ocrData.totalLiquido;
+        }
+      } catch (ocrErr: any) {
+        console.error(`[Holerite] Erro ao executar OCR na página ${pageNum}:`, ocrErr);
+      }
+    }
 
     console.log(`[Holerite] Página ${pageNum}: CPF=${cpf}, Nome=${nomeCompleto}, MêsAno=${mesAno}, Total=${totalLiquido}`);
 

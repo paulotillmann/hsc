@@ -53,6 +53,7 @@ const Holerites: React.FC = () => {
   const [filter, setFilter] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 12;
+  const [sortField, setSortField] = useState<'nome_completo' | 'total_liquido'>('nome_completo');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc' | null>(null);
 
   // ── Mês/Ano de referência (filtro de listagem) ──
@@ -110,15 +111,23 @@ const Holerites: React.FC = () => {
 
   if (sortDirection !== null) {
     filteredData = [...filteredData].sort((a, b) => {
-      const nA = a.nome_completo.toLowerCase();
-      const nB = b.nome_completo.toLowerCase();
-      if (nA < nB) return sortDirection === 'asc' ? -1 : 1;
-      if (nA > nB) return sortDirection === 'asc' ? 1 : -1;
-      return 0;
+      if (sortField === 'nome_completo') {
+        const nA = a.nome_completo.toLowerCase();
+        const nB = b.nome_completo.toLowerCase();
+        if (nA < nB) return sortDirection === 'asc' ? -1 : 1;
+        if (nA > nB) return sortDirection === 'asc' ? 1 : -1;
+        return 0;
+      } else {
+        const vA = a.total_liquido ?? 0;
+        const vB = b.total_liquido ?? 0;
+        if (vA < vB) return sortDirection === 'asc' ? -1 : 1;
+        if (vA > vB) return sortDirection === 'asc' ? 1 : -1;
+        return 0;
+      }
     });
   }
 
-  useEffect(() => { setCurrentPage(1); }, [filter, sortDirection, filterMesAno]);
+  useEffect(() => { setCurrentPage(1); }, [filter, sortDirection, sortField, filterMesAno]);
 
   const totalPages    = Math.ceil(filteredData.length / itemsPerPage) || 1;
   const paginatedData = filteredData.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
@@ -132,8 +141,13 @@ const Holerites: React.FC = () => {
   // ─────────────────────────────────────────────────────────────
   // ACTIONS
   // ─────────────────────────────────────────────────────────────
-  const handleSortNome = () => {
-    setSortDirection(d => d === null ? 'asc' : d === 'asc' ? 'desc' : null);
+  const handleSort = (field: 'nome_completo' | 'total_liquido') => {
+    if (sortField === field) {
+      setSortDirection(d => d === null ? 'asc' : d === 'asc' ? 'desc' : null);
+    } else {
+      setSortField(field);
+      setSortDirection('asc');
+    }
   };
 
   const handleSelectAll = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -320,19 +334,29 @@ const Holerites: React.FC = () => {
                 </th>
                 <th className="px-6 py-4 font-semibold">
                   <button
-                    onClick={handleSortNome}
+                    onClick={() => handleSort('nome_completo')}
                     className="flex items-center gap-2 hover:text-foreground transition-colors outline-none uppercase font-semibold"
                   >
                     Nome Completo
-                    {sortDirection === 'asc'  && <ArrowUp   className="w-4 h-4" />}
-                    {sortDirection === 'desc' && <ArrowDown className="w-4 h-4" />}
-                    {sortDirection === null   && <ArrowUpDown className="w-4 h-4 opacity-50" />}
+                    {sortField === 'nome_completo' && sortDirection === 'asc'  && <ArrowUp   className="w-4 h-4" />}
+                    {sortField === 'nome_completo' && sortDirection === 'desc' && <ArrowDown className="w-4 h-4" />}
+                    {(sortField !== 'nome_completo' || sortDirection === null)   && <ArrowUpDown className="w-4 h-4 opacity-50" />}
                   </button>
                 </th>
                 <th className="px-6 py-4 font-semibold w-56">E-mail</th>
                 <th className="px-6 py-4 font-semibold w-40">CPF</th>
                 <th className="px-6 py-4 font-semibold w-28 text-center">Mês/Ano</th>
-                <th className="px-6 py-4 font-semibold w-36 text-right">Total Líquido</th>
+                <th className="px-6 py-4 font-semibold w-36 text-right">
+                  <button
+                    onClick={() => handleSort('total_liquido')}
+                    className="w-full flex justify-end items-center gap-2 hover:text-foreground transition-colors outline-none uppercase font-semibold"
+                  >
+                    Total Líquido
+                    {sortField === 'total_liquido' && sortDirection === 'asc'  && <ArrowUp   className="w-4 h-4" />}
+                    {sortField === 'total_liquido' && sortDirection === 'desc' && <ArrowDown className="w-4 h-4" />}
+                    {(sortField !== 'total_liquido' || sortDirection === null)   && <ArrowUpDown className="w-4 h-4 opacity-50" />}
+                  </button>
+                </th>
                 <th className="px-6 py-4 font-semibold w-44">Último E-mail</th>
                 <th className="px-6 py-4 font-semibold w-40 text-right">Ação</th>
               </tr>
