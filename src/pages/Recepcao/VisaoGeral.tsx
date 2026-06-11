@@ -10,11 +10,13 @@ import {
   Calendar, 
   RefreshCw,
   PieChart as PieIcon,
-  BarChart3
+  BarChart3,
+  FileText
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { buscarPacientes } from '../../services/pacienteService';
 import { VisaoGeralCard } from '../../components/recepcao/VisaoGeralCard';
+import RelatorioVisitasModal from '../../components/recepcao/RelatorioVisitasModal';
 import { 
   BarChart, 
   Bar, 
@@ -32,6 +34,7 @@ import {
 export default function VisaoGeral() {
   const [loading, setLoading] = useState(true);
   const [loadingCharts, setLoadingCharts] = useState(true);
+  const [isReportModalOpen, setIsReportModalOpen] = useState(false);
 
   // Dynamic Theme Detection for Recharts Tooltips
   const [isDark, setIsDark] = useState(() => document.documentElement.classList.contains('dark'));
@@ -277,13 +280,23 @@ export default function VisaoGeral() {
           </p>
         </div>
         
-        <button
-          onClick={handleRefresh}
-          className="inline-flex items-center justify-center rounded-xl text-sm font-semibold transition-all border border-border bg-card hover:bg-muted text-foreground px-4 py-2.5 shadow-md flex-shrink-0 cursor-pointer gap-2"
-        >
-          <RefreshCw className={`h-4 w-4 ${loading || loadingCharts ? 'animate-spin' : ''}`} />
-          Atualizar Dados
-        </button>
+        <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto">
+          <button
+            onClick={() => setIsReportModalOpen(true)}
+            className="inline-flex items-center justify-center rounded-xl text-sm font-semibold transition-all border border-border bg-card hover:bg-muted text-foreground px-4 py-2.5 shadow-md cursor-pointer gap-2"
+          >
+            <FileText className="h-4 w-4 text-[#8a1515] dark:text-[#f43f5e]" />
+            Relatório PDF
+          </button>
+
+          <button
+            onClick={handleRefresh}
+            className="inline-flex items-center justify-center rounded-xl text-sm font-semibold transition-all border border-border bg-card hover:bg-muted text-foreground px-4 py-2.5 shadow-md flex-shrink-0 cursor-pointer gap-2"
+          >
+            <RefreshCw className={`h-4 w-4 ${loading || loadingCharts ? 'animate-spin' : ''}`} />
+            Atualizar Dados
+          </button>
+        </div>
       </div>
 
       {/* KPIs GRID (Layout inspirado no Anexo 1 - Suporta modo Claro e Escuro) */}
@@ -539,6 +552,11 @@ export default function VisaoGeral() {
         </div>
 
       </div>
+
+      <RelatorioVisitasModal 
+        isOpen={isReportModalOpen} 
+        onClose={() => setIsReportModalOpen(false)} 
+      />
     </div>
   );
 }

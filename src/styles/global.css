@@ -166,3 +166,9 @@
     page-break-inside: avoid !important;
   }
 }
+
+/* Make calendar picker icon white in dark mode across the system */
+.dark input[type="date"]::-webkit-calendar-picker-indicator {
+  filter: invert(1);
+  cursor: pointer;
+}

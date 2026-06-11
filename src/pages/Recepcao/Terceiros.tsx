@@ -332,31 +332,7 @@ export default function Terceiros() {
           <p className="text-sm text-muted-foreground">Gerenciamento de terceiros cadastrados no sistema</p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
-          {isAdmin && (
-            <>
-              <button
-                onClick={handleOpenSync}
-                className="inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors focus-visible:outline-none border border-border bg-background hover:bg-muted text-foreground px-4 py-2 shadow-sm"
-              >
-                <RefreshCw className="mr-2 h-4 w-4" />
-                Sincronizar Terceiros
-              </button>
-              <button
-                onClick={handleOpenSyncVisitas}
-                className="inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors focus-visible:outline-none border border-border bg-background hover:bg-muted text-foreground px-4 py-2 shadow-sm"
-              >
-                <RefreshCw className="mr-2 h-4 w-4" />
-                Sincronizar Visitas
-              </button>
-              <button
-                onClick={handleOpenResolverFk}
-                className="inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors focus-visible:outline-none border border-border bg-background hover:bg-muted text-foreground px-4 py-2 shadow-sm"
-              >
-                <Link2 className="mr-2 h-4 w-4" />
-                Resolver FK
-              </button>
-            </>
-          )}
+
           <button
             onClick={() => setSaidaQRCodeModalOpen(true)}
             className="inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors bg-amber-600 text-white hover:bg-amber-700 px-4 py-2 shadow-sm"
