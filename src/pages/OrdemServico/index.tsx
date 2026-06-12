@@ -192,9 +192,11 @@ export default function OrdemServico() {
       estagioLower.includes('encerrad');
 
     const isTriagem = !isFinalizado && estagio === '';
+    const isEmProcesso = !isFinalizado && (estagioLower === 'iniciada' || estagioLower === 'em desenvolvimento');
+    const isEscalonado = !isFinalizado && !isTriagem && !isEmProcesso;
 
-    // Filtros de Data (ano e período) - ignorados se a OS estiver em triagem
-    if (!isTriagem) {
+    // Filtros de Data (ano e período) - ignorados se a OS estiver em triagem ou escalonada
+    if (!isTriagem && !isEscalonado) {
       // Define a data alvo baseada no contexto (conclusão/atualização para resolvidos/em andamento)
       const targetDateStr = isFinalizado 
         ? (os.dt_atualizacao || os.updated_at)
@@ -1363,10 +1365,10 @@ export default function OrdemServico() {
                 onChange={(e) => setDateFilter(e.target.value as any)}
                 className="py-1.5 px-2.5 bg-muted/40 border border-border rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-foreground font-semibold cursor-pointer shrink-0"
               >
-                <option value="todas">Todas</option>
-                <option value="dia">Dia</option>
-                <option value="semana">Semana</option>
-                <option value="mes">Mês</option>
+                <option value="todas" className="bg-card text-foreground">Todas</option>
+                <option value="dia" className="bg-card text-foreground">Dia</option>
+                <option value="semana" className="bg-card text-foreground">Semana</option>
+                <option value="mes" className="bg-card text-foreground">Mês</option>
               </select>
             </div>
           </div>
