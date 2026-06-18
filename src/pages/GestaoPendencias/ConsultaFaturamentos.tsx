@@ -65,10 +65,13 @@ const formatCompactCurrency = (value: number) => {
 const parseReferenceMonth = (str: string): Date | null => {
   if (!str) return null;
   
-  // Formato: YYYY-MM-DD (de input date)
-  if (/^\d{4}-\d{2}-\d{2}$/.test(str)) {
-    const [year, month] = str.split('-').map(Number);
-    return new Date(year, month - 1, 1);
+  // Formato: data ISO completa ou contendo YYYY-MM-DD (ex: 2026-04-08T00:00:00.000Z ou 2026-04-30)
+  const matchIsoDate = str.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (matchIsoDate) {
+    const year = Number(matchIsoDate[1]);
+    const month = Number(matchIsoDate[2]);
+    const day = Number(matchIsoDate[3]);
+    return new Date(year, month - 1, day);
   }
   
   // Formato: YYYY-MM
@@ -83,14 +86,40 @@ const parseReferenceMonth = (str: string): Date | null => {
     return new Date(year, month - 1, 1);
   }
   
-  // Formato: data ISO
+  // Formato: data ISO geral ou qualquer string parseável por Date
   const parsed = Date.parse(str);
   if (!isNaN(parsed)) {
     const d = new Date(parsed);
-    return new Date(d.getFullYear(), d.getMonth(), 1);
+    // Para evitar shifting de timezone (ex: 2026-04-08T00:00:00.000Z interpretada no fuso local como dia 07),
+    // se contiver Z ou T (formato ISO UTC), usamos UTC.
+    if (str.includes('Z') || str.includes('T')) {
+      return new Date(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
+    }
+    return new Date(d.getFullYear(), d.getMonth(), d.getDate());
   }
   
   return null;
+};
+
+// Formata a data de referência para exibição na grid (ex: ISO -> DD/MM/YYYY, MM/YYYY -> MM/YYYY)
+const formatReferenceDate = (str: string): string => {
+  if (!str) return '-';
+  
+  // Se já for formato MM/YYYY
+  if (/^\d{2}\/\d{4}$/.test(str)) {
+    return str;
+  }
+  
+  // Se for data ISO ou YYYY-MM-DD
+  const matchIsoDate = str.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (matchIsoDate) {
+    const year = matchIsoDate[1];
+    const month = matchIsoDate[2];
+    const day = matchIsoDate[3];
+    return `${day}/${month}/${year}`;
+  }
+  
+  return str;
 };
 
 // Auxiliar para obter a data padrão de consulta (último dia do mês retrasado até o último dia do mês anterior)
@@ -812,8 +841,8 @@ const ConsultaFaturamentos: React.FC = () => {
                         <td className="px-6 py-4 font-medium max-w-[280px] truncate">
                           {item.convenio}
                         </td>
-                        <td className="px-6 py-4 text-muted-foreground">
-                          {item.dtMesanoReferencia || '-'}
+                        <td className="px-6 py-4 text-muted-foreground font-mono">
+                          {formatReferenceDate(item.dtMesanoReferencia)}
                         </td>
                         <td className="px-6 py-4 text-center">
                           <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold border ${
