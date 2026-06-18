@@ -520,13 +520,12 @@ export default function GestaoPendencias() {
     // KPIs
     doc.setFontSize(12);
     doc.setTextColor(0);
-    doc.text('Resumo Financeiro e Operacional', 14, currentY + 5);
+    doc.text('Resumo Operacional', 14, currentY + 5);
     
     autoTable(doc, {
       startY: currentY + 10,
-      head: [['Valor Total', 'Total Pendências', 'Atendimentos Pendentes']],
+      head: [['Total Pendências', 'Atendimentos Pendentes']],
       body: [[
-        formatCurrency(kpis.valorTotal),
         kpis.totalPendencias.toString(),
         kpis.atendimentosPendentes.toString()
       ]],
@@ -536,9 +535,9 @@ export default function GestaoPendencias() {
 
     // Ranking Profissionais
     const finalY = (doc as any).lastAutoTable.finalY || 50;
-    doc.text('Top 10 Usuários com Pendências', 14, finalY + 15);
+    doc.text('Ranking de Usuários com Pendências', 14, finalY + 15);
     
-    const rankingBody = rankingProfissionais.slice(0, 10).map((r, idx) => [
+    const rankingBody = rankingProfissionais.map((r, idx) => [
       `${idx + 1}º`, r.nome, r.count.toString()
     ]);
 
@@ -893,21 +892,8 @@ export default function GestaoPendencias() {
       {/* ── SEÇÃO SUPERIOR: KPIS & DATA DA PENDÊNCIA (CONVERGÊNCIA POWER BI) ── */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-stretch">
         
-        {/* KPI 1: VALOR TOTAL */}
-        <div className="lg:col-span-3 bg-card text-card-foreground p-5 rounded-xl border border-border/80 shadow-sm flex flex-col justify-center">
-          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Valor Total</p>
-          <div className="flex items-baseline gap-2 mt-1">
-            <h3 className="text-3xl font-bold tracking-tight text-foreground">
-              {loading ? '...' : formatCompactCurrency(kpis.valorTotal)}
-            </h3>
-            <span className="text-xs text-muted-foreground font-medium">
-              ({formatCurrency(kpis.valorTotal)})
-            </span>
-          </div>
-        </div>
-
-        {/* KPI 2: QUANTIDADE DE PENDÊNCIAS */}
-        <div className="lg:col-span-3 bg-card text-card-foreground p-5 rounded-xl border border-border/80 shadow-sm flex flex-col justify-center">
+        {/* KPI 1: QUANTIDADE DE PENDÊNCIAS */}
+        <div className="lg:col-span-4 bg-card text-card-foreground p-5 rounded-xl border border-border/80 shadow-sm flex flex-col justify-center">
           <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Quantidade de Pendências</p>
           <div className="flex items-baseline gap-2 mt-1">
             <h3 className="text-3xl font-bold tracking-tight text-foreground">
@@ -917,8 +903,8 @@ export default function GestaoPendencias() {
           </div>
         </div>
 
-        {/* KPI 3: ATENDIMENTOS PENDENTES */}
-        <div className="lg:col-span-3 bg-card text-card-foreground p-5 rounded-xl border border-border/80 shadow-sm flex flex-col justify-center">
+        {/* KPI 2: ATENDIMENTOS PENDENTES */}
+        <div className="lg:col-span-4 bg-card text-card-foreground p-5 rounded-xl border border-border/80 shadow-sm flex flex-col justify-center">
           <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Atendimentos Pendentes</p>
           <h3 className="text-3xl font-bold tracking-tight text-foreground mt-1">
             {loading ? '...' : kpis.atendimentosPendentes}
@@ -926,7 +912,7 @@ export default function GestaoPendencias() {
         </div>
 
         {/* CONSULTA POR PERÍODO (COMPLIANCE COM EXIGÊNCIA) */}
-        <div className="lg:col-span-3 bg-card text-card-foreground p-5 rounded-xl border border-border-strong bg-primary/5 shadow-sm flex flex-col justify-center">
+        <div className="lg:col-span-4 bg-card text-card-foreground p-5 rounded-xl border border-border-strong bg-primary/5 shadow-sm flex flex-col justify-center">
           <p className="text-xs font-bold text-primary uppercase tracking-wider flex items-center gap-1">
             <Calendar className="h-3.5 w-3.5" />
             Data da Pendência (Período)
@@ -986,13 +972,12 @@ export default function GestaoPendencias() {
                     <th scope="col" className="h-11 px-4 py-2 text-left font-bold uppercase tracking-wider text-xs">Tipo de Pendência</th>
                     <th scope="col" className="h-11 px-4 py-2 text-left font-bold uppercase tracking-wider text-xs">Setor</th>
                     <th scope="col" className="h-11 px-4 py-2 text-left font-bold uppercase tracking-wider text-xs">Descrição</th>
-                    <th scope="col" className="h-11 px-4 py-2 text-left font-bold uppercase tracking-wider text-xs">Estágio / Valor</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
                   {loading ? (
                     <tr>
-                      <td colSpan={7} className="h-44 text-center">
+                      <td colSpan={6} className="h-44 text-center">
                         <div className="flex flex-col items-center justify-center gap-2">
                           <div className="h-6 w-6 rounded-full border-2 border-primary border-t-transparent animate-spin" />
                           <span className="text-muted-foreground text-xs">Atualizando lista de pendências...</span>
@@ -1001,7 +986,7 @@ export default function GestaoPendencias() {
                     </tr>
                   ) : filteredPendencias.length === 0 ? (
                     <tr>
-                      <td colSpan={7} className="h-44 text-center text-muted-foreground">
+                      <td colSpan={6} className="h-44 text-center text-muted-foreground">
                         Nenhuma pendência encontrada no intervalo selecionado.
                       </td>
                     </tr>
@@ -1040,22 +1025,6 @@ export default function GestaoPendencias() {
                         {/* Descrição */}
                         <td className="px-4 py-3.5 text-xs text-muted-foreground max-w-xs whitespace-normal break-words" title={item.descricao}>
                           {item.descricao}
-                        </td>
-
-                        {/* Estágio / Valor */}
-                        <td className="px-4 py-3.5 whitespace-nowrap">
-                          <div className="flex flex-col gap-1 text-xs">
-                            <span className={`inline-flex items-center justify-center rounded px-1.5 py-0.5 text-[10px] font-bold w-max ${
-                              item.estagio === 'Liberado' 
-                                ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20' 
-                                : 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20'
-                            }`}>
-                              {item.estagio}
-                            </span>
-                            <span className="font-mono text-foreground font-semibold">
-                              {formatCurrency(item.valor)}
-                            </span>
-                          </div>
                         </td>
                       </tr>
                     ))
@@ -1131,7 +1100,7 @@ export default function GestaoPendencias() {
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         
         {/* WIDGET 1: RANKING DE PROFISSIONAIS POR QUANTIDADE (ESQUERDA) */}
-        <div className="lg:col-span-4 bg-card rounded-xl border border-border shadow-sm p-5 space-y-4">
+        <div className="lg:col-span-6 bg-card rounded-xl border border-border shadow-sm p-5 space-y-4">
           <div className="border-b border-border/80 pb-3">
             <h4 className="text-sm font-bold text-foreground flex items-center gap-2">
               <Users className="h-4 w-4 text-primary" />
@@ -1175,43 +1144,8 @@ export default function GestaoPendencias() {
           </div>
         </div>
 
-        {/* WIDGET 2: GRÁFICO VALOR POR ESTÁGIO */}
-        <div className="lg:col-span-4 bg-card rounded-xl border border-border shadow-sm p-5 space-y-4">
-          <div className="border-b border-border/80 pb-3">
-            <h4 className="text-sm font-bold text-foreground flex items-center gap-2">
-              <DollarSign className="h-4 w-4 text-primary" />
-              Valor por Estágio
-            </h4>
-            <p className="text-xs text-muted-foreground mt-0.5">Soma financeira pendente acumulada por estágio</p>
-          </div>
-
-          <div className="space-y-5 py-2">
-            {chartValorPorEstagio.map(item => (
-              <div key={item.estagio} className="space-y-1.5">
-                <div className="flex justify-between items-center text-xs">
-                  <span className="font-semibold text-foreground/80">{item.estagio}</span>
-                  <span className="font-bold text-foreground font-mono">{formatCompactCurrency(item.valor)}</span>
-                </div>
-                
-                {/* Barra de Progresso Horizontal */}
-                <div className="h-7 w-full bg-muted rounded-md overflow-hidden relative border border-border/40">
-                  <motion.div
-                    initial={{ width: 0 }}
-                    animate={{ width: `${item.percentage}%` }}
-                    transition={{ duration: 0.8, ease: 'easeOut' }}
-                    className="h-full bg-primary/95 flex items-center pl-3"
-                  />
-                  <div className="absolute inset-0 flex items-center pl-3 text-[10px] font-bold text-white mix-blend-difference">
-                    {item.percentage.toFixed(1)}% do valor total
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-
         {/* WIDGET 3: GRÁFICO QTD DE PENDÊNCIAS POR TIPO (DIREITA) */}
-        <div className="lg:col-span-4 bg-card rounded-xl border border-border shadow-sm p-5 space-y-4">
+        <div className="lg:col-span-6 bg-card rounded-xl border border-border shadow-sm p-5 space-y-4">
           <div className="border-b border-border/80 pb-3">
             <h4 className="text-sm font-bold text-foreground flex items-center gap-2">
               <TrendingUp className="h-4 w-4 text-primary" />
