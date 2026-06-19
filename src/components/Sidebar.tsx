@@ -21,7 +21,7 @@ const Sidebar: React.FC = () => {
     if (window.location.pathname.startsWith('/pronto-atendimento') || window.location.pathname.startsWith('/pacientes-internados') || window.location.pathname.startsWith('/centro-cirurgico')) return 'assistencial';
     if (window.location.pathname.startsWith('/gestao-pendencias')) return 'faturamento';
     if (window.location.pathname.startsWith('/gestao-escuta-santa-casa')) return 'gestao-escuta-santa-casa';
-    if (window.location.pathname.startsWith('/plantao-ti') || window.location.pathname.startsWith('/ordem-servico')) return 'tecnologia-informacao';
+    if (window.location.pathname.startsWith('/plantao-ti') || window.location.pathname.startsWith('/ordem-servico') || window.location.pathname.startsWith('/ordem-servico-mobile')) return 'tecnologia-informacao';
     if (window.location.pathname.startsWith('/dashboard') || window.location.pathname.startsWith('/holerites') || window.location.pathname.startsWith('/informes')) return 'recursos-humanos';
     return null;
   });
@@ -54,7 +54,7 @@ const Sidebar: React.FC = () => {
       setExpandedMenu('faturamento');
     } else if (location.pathname.startsWith('/gestao-escuta-santa-casa')) {
       setExpandedMenu('gestao-escuta-santa-casa');
-    } else if (location.pathname.startsWith('/plantao-ti') || location.pathname.startsWith('/ordem-servico')) {
+    } else if (location.pathname.startsWith('/plantao-ti') || location.pathname.startsWith('/ordem-servico') || location.pathname.startsWith('/ordem-servico-mobile')) {
       setExpandedMenu('tecnologia-informacao');
     } else if (location.pathname.startsWith('/dashboard') || location.pathname.startsWith('/holerites') || location.pathname.startsWith('/informes')) {
       setExpandedMenu('recursos-humanos');
@@ -338,7 +338,7 @@ const Sidebar: React.FC = () => {
           const hasPlantaoTiAccess = userModules.some(m => m.slug === 'plantao-ti');
           const hasOrdemServicoAccess = userModules.some(m => m.slug === 'ordem-servico');
           const showTI = hasPlantaoTiAccess || hasOrdemServicoAccess;
-          const isTIActive = location.pathname.startsWith('/plantao-ti') || location.pathname.startsWith('/ordem-servico');
+          const isTIActive = location.pathname.startsWith('/plantao-ti') || location.pathname.startsWith('/ordem-servico') || location.pathname.startsWith('/ordem-servico-mobile');
 
           if (!showTI) return null;
 
@@ -386,17 +386,30 @@ const Sidebar: React.FC = () => {
                     </NavLink>
                   )}
                   {hasOrdemServicoAccess && (
-                    <NavLink
-                      to="/ordem-servico"
-                      className={({ isActive }) =>
-                        `text-sm px-3 py-2 rounded-md transition-colors ${isActive
-                          ? 'bg-primary text-primary-foreground shadow-sm font-medium'
-                          : 'text-muted-foreground hover:bg-muted hover:text-foreground'
-                        }`
-                      }
-                    >
-                      Ordem de Serviço
-                    </NavLink>
+                    <>
+                      <NavLink
+                        to="/ordem-servico"
+                        className={({ isActive }) =>
+                          `text-sm px-3 py-2 rounded-md transition-colors ${isActive
+                            ? 'bg-primary text-primary-foreground shadow-sm font-medium'
+                            : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                          }`
+                        }
+                      >
+                        Ordem de Serviço
+                      </NavLink>
+                      <NavLink
+                        to="/ordem-servico-mobile"
+                        className={({ isActive }) =>
+                          `text-sm px-3 py-2 rounded-md transition-colors ${isActive
+                            ? 'bg-primary text-primary-foreground shadow-sm font-medium'
+                            : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                          }`
+                        }
+                      >
+                        Ordem de Serviço (Móbile)
+                      </NavLink>
+                    </>
                   )}
                 </div>
               )}
