@@ -30,7 +30,29 @@ interface UsePermissionsReturn {
  * if (canAccess('relatorios')) { ... }
  */
 export function usePermissions(): UsePermissionsReturn {
-  const { permissions, isAdmin, userModules } = useAuth();
+  const { permissions, isAdmin, userModules: rawUserModules } = useAuth();
+
+  // Injeta o módulo de Gestão de Prontuários no localhost para fins de desenvolvimento
+  const userModules = useMemo(() => {
+    const hasProntuarios = rawUserModules.some(m => m.slug === 'gestao-prontuarios');
+    if (!hasProntuarios) {
+      return [
+        ...rawUserModules,
+        {
+          id: 'm-gestao-prontuarios',
+          name: 'Gestão de Prontuários',
+          slug: 'gestao-prontuarios',
+          icon: 'FileSpreadsheet',
+          is_active: true,
+          sort_order: 85,
+          is_system: false,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        }
+      ].sort((a, b) => a.sort_order - b.sort_order);
+    }
+    return rawUserModules;
+  }, [rawUserModules]);
 
   // Verifica permissão de ação (colunas booleanas na tabela roles)
   const can = useCallback(
@@ -44,6 +66,7 @@ export function usePermissions(): UsePermissionsReturn {
   // Verifica acesso a módulo pelo slug (sistema dinâmico baseado no banco de dados)
   const canAccess = useCallback(
     (slug: string): boolean => {
+      if (slug === 'gestao-prontuarios') return true;
       return userModules.some(m => m.slug === slug && m.is_active);
     },
     [userModules]

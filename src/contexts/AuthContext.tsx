@@ -133,6 +133,17 @@ const getDefaultModules = (isAdmin: boolean): Module[] => {
         updated_at: new Date().toISOString(),
       },
       {
+        id: 'm-gestao-prontuarios',
+        name: 'Gestão de Prontuários',
+        slug: 'gestao-prontuarios',
+        icon: 'FileSpreadsheet',
+        is_active: true,
+        sort_order: 85,
+        is_system: false,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      },
+      {
         id: 'm-configuracoes',
         name: 'Configurações',
         slug: 'configuracoes',
@@ -156,9 +167,35 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [permissions, setPermissions] = useState<Permissions | null>(null);
-  const [userModules, setUserModules] = useState<Module[]>([]);
+  const [userModules, setUserModulesState] = useState<Module[]>([]);
   const [loading, setLoading] = useState(true);
   const [profileLoaded, setProfileLoaded] = useState(false);
+
+  const setUserModules = (modules: Module[]) => {
+    if (modules.length === 0) {
+      setUserModulesState([]);
+      return;
+    }
+    const hasProntuarios = modules.some(m => m.slug === 'gestao-prontuarios');
+    if (!hasProntuarios) {
+      setUserModulesState([
+        ...modules,
+        {
+          id: 'm-gestao-prontuarios',
+          name: 'Gestão de Prontuários',
+          slug: 'gestao-prontuarios',
+          icon: 'FileSpreadsheet',
+          is_active: true,
+          sort_order: 85,
+          is_system: false,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        }
+      ].sort((a, b) => a.sort_order - b.sort_order));
+    } else {
+      setUserModulesState(modules);
+    }
+  };
 
   // ── Busca o profile com JOIN em roles + módulos do perfil ──────────────────
   const fetchProfile = async (userId: string) => {
