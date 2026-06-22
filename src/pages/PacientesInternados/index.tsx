@@ -21,6 +21,17 @@ interface Paciente {
   updated_at?: string | null;
 }
 
+const parseLocalDate = (dateStr: string | null | undefined): Date | null => {
+  if (!dateStr) return null;
+  try {
+    const cleanStr = dateStr.replace(/Z$/, '').replace(/[+-]\d{2}:\d{2}$/, '');
+    const d = new Date(cleanStr);
+    return isNaN(d.getTime()) ? null : d;
+  } catch {
+    return null;
+  }
+};
+
 const SYNC_INTERVAL_MS = 5 * 60 * 1000; // 5 minutos
 
 export default function PacientesInternados() {
@@ -413,13 +424,15 @@ export default function PacientesInternados() {
                       </td>
                     )}
                     <td className="px-6 py-4 font-medium text-foreground">
-                      {p.dt_entrada ? (
-                        `${new Date(p.dt_entrada).toLocaleDateString('pt-BR')} ${new Date(p.dt_entrada).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`
-                      ) : (
-                        <div className="flex justify-start">
-                          <XCircle className="h-5 w-5 text-red-500 dark:text-red-400" title="Sem data de entrada" />
-                        </div>
-                      )}
+                      {(() => {
+                        const d = parseLocalDate(p.dt_entrada);
+                        if (!d) return (
+                          <div className="flex justify-start">
+                            <XCircle className="h-5 w-5 text-red-500 dark:text-red-400" title="Sem data de entrada" />
+                          </div>
+                        );
+                        return `${d.toLocaleDateString('pt-BR')} ${d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`;
+                      })()}
                     </td>
                     <td className="px-6 py-4 font-medium text-foreground">
                       <div className="flex items-center gap-1.5">
@@ -470,21 +483,25 @@ export default function PacientesInternados() {
                       )}
                     </td>
                     <td className="px-6 py-4 text-center">
-                      {p.ultima_prescricao ? (
-                        <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-semibold border ${(() => {
-                          const diff = new Date().getTime() - new Date(p.ultima_prescricao).getTime();
-                          return diff >= 0 && diff <= 30 * 60 * 1000;
-                        })()
-                          ? 'bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-300 border-green-100 dark:border-green-800/30'
-                          : 'bg-blue-50 text-blue-700 dark:bg-blue-900/20 dark:text-blue-300 border-blue-100 dark:border-blue-800/30'
+                      {(() => {
+                        const d = parseLocalDate(p.ultima_prescricao);
+                        if (!d) return (
+                          <div className="flex justify-center">
+                            <XCircle className="h-5 w-5 text-red-500 dark:text-red-400" title="Sem prescrição" />
+                          </div>
+                        );
+                        const diff = new Date().getTime() - d.getTime();
+                        const isRecent = diff >= 0 && diff <= 30 * 60 * 1000;
+                        return (
+                          <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-semibold border ${
+                            isRecent
+                              ? 'bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-300 border-green-100 dark:border-green-800/30'
+                              : 'bg-blue-50 text-blue-700 dark:bg-blue-900/20 dark:text-blue-300 border-blue-100 dark:border-blue-800/30'
                           }`}>
-                          {new Date(p.ultima_prescricao).toLocaleDateString('pt-BR')} {new Date(p.ultima_prescricao).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
-                        </span>
-                      ) : (
-                        <div className="flex justify-center">
-                          <XCircle className="h-5 w-5 text-red-500 dark:text-red-400" title="Sem prescrição" />
-                        </div>
-                      )}
+                            {d.toLocaleDateString('pt-BR')} {d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                          </span>
+                        );
+                      })()}
                     </td>
                     <td className="px-6 py-4 text-center">
                       {p.teve_evolucao_hoje === 'S' ? (
