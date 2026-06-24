@@ -146,7 +146,7 @@ Deno.serve(async (req: Request) => {
         ie_status: item.IE_STATUS ? item.IE_STATUS.trim() : null,
         status: item.STATUS ? item.STATUS.trim() : null,
         ds_triagem: item.DS_TRIAGEM ? item.DS_TRIAGEM.trim() : null,
-        ie_internado: item.IE_INTERNADO ? item.IE_INTERNADO.trim() : 'N',
+        ie_internado: (item.IE_INTERNADO?.trim() === 'S' || item.STATUS?.trim() === 'Internado' || item.IE_STATUS?.trim() === 'IN') ? 'S' : 'N',
       };
 
       recordsToInsert.push(mappedRecord);
@@ -172,7 +172,21 @@ Deno.serve(async (req: Request) => {
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
-    // 4. Executar UPSERT com base em nr_atendimento
+    // 4. Limpar do banco os registros que não estão mais presentes no payload (pacientes que tiveram alta ou mudaram de setor)
+    const currentNrAtendimentos = recordsToInsert.map(r => r.nr_atendimento);
+    console.log(`[Sync Pacientes PA] Removendo pacientes antigos do banco que não estão no payload...`);
+    const { error: deleteError } = await supabase
+      .from('pacientes_pronto_atendimento')
+      .delete()
+      .not('nr_atendimento', 'in', `(${currentNrAtendimentos.join(',')})`);
+
+    if (deleteError) {
+      console.error(`[Sync Pacientes PA] Aviso: erro ao limpar registros antigos:`, deleteError.message);
+    } else {
+      console.log(`[Sync Pacientes PA] Limpeza de registros antigos concluída.`);
+    }
+
+    // 5. Executar UPSERT com base em nr_atendimento
     const { error: upsertError } = await supabase
       .from('pacientes_pronto_atendimento')
       .upsert(recordsToInsert, { onConflict: 'nr_atendimento' });
