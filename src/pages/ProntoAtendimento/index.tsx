@@ -363,6 +363,22 @@ export default function ProntoAtendimento() {
 
   // Ordenação dos dados
   const sortedPacientes = [...filteredPacientes].sort((a, b) => {
+    // Pacientes ativos (sem data de alta, sem status Alta/Internado e sem ie_internado S/IN) ficam sempre no topo
+    const aAtivo = !a.dt_alta &&
+      a.status?.toLowerCase() !== 'alta' &&
+      a.ie_internado !== 'S' &&
+      a.status?.toLowerCase() !== 'internado' &&
+      a.ie_status?.toUpperCase() !== 'IN';
+
+    const bAtivo = !b.dt_alta &&
+      b.status?.toLowerCase() !== 'alta' &&
+      b.ie_internado !== 'S' &&
+      b.status?.toLowerCase() !== 'internado' &&
+      b.ie_status?.toUpperCase() !== 'IN';
+
+    if (aAtivo && !bAtivo) return -1;
+    if (!aAtivo && bAtivo) return 1;
+
     let valA: any;
     let valB: any;
 
