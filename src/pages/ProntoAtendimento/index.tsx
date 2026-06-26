@@ -1,17 +1,17 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { 
-  Activity, 
-  Search, 
-  Loader2, 
-  RefreshCcw, 
-  Calendar, 
-  CheckCircle, 
-  XCircle, 
-  ChevronDown, 
-  Clock, 
-  Users, 
-  ShieldAlert, 
-  Filter, 
+import {
+  Activity,
+  Search,
+  Loader2,
+  RefreshCcw,
+  Calendar,
+  CheckCircle,
+  XCircle,
+  ChevronDown,
+  Clock,
+  Users,
+  ShieldAlert,
+  Filter,
   ArrowUpDown,
   ArrowLeft,
   Moon,
@@ -75,7 +75,7 @@ export default function ProntoAtendimento() {
   const [statusFilter, setStatusFilter] = useState('');
   const [internadoFilter, setInternadoFilter] = useState('');
   const [mostrarAltas, setMostrarAltas] = useState(true);
-  
+
   // Controle de ordenação
   const [sortField, setSortField] = useState<'nm_paciente' | 'dt_entrada' | 'tempo_espera' | 'tempo_atendimento' | 'tempo_total'>('dt_entrada');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
@@ -111,9 +111,22 @@ export default function ProntoAtendimento() {
   const fetchPacientes = useCallback(async (isSilent = false) => {
     if (!isSilent) setLoading(true);
     try {
+      // Filtrar apenas atendimentos das últimas 24 horas baseados na dt_entrada (considerando fuso horário local)
+      const localNow = new Date();
+      const local24hAgo = new Date(localNow.getTime() - 24 * 60 * 60 * 1000);
+      const year = local24hAgo.getFullYear();
+      const month = String(local24hAgo.getMonth() + 1).padStart(2, '0');
+      const day = String(local24hAgo.getDate()).padStart(2, '0');
+      const hours = String(local24hAgo.getHours()).padStart(2, '0');
+      const minutes = String(local24hAgo.getMinutes()).padStart(2, '0');
+      const seconds = String(local24hAgo.getSeconds()).padStart(2, '0');
+      const milliseconds = String(local24hAgo.getMilliseconds()).padStart(3, '0');
+      const local24hAgoAsUTC = `${year}-${month}-${day}T${hours}:${minutes}:${seconds}.${milliseconds}Z`;
+
       const { data, error } = await supabase
         .from('pacientes_pronto_atendimento')
         .select('*')
+        .gte('dt_entrada', local24hAgoAsUTC)
         .order('dt_entrada', { ascending: false });
 
       if (error) throw error;
@@ -200,7 +213,7 @@ export default function ProntoAtendimento() {
     const startObj = parseLocalDate(entrada);
     if (!startObj) return 0;
     const start = startObj.getTime();
-    
+
     let end = Date.now();
     if (inicio) {
       const endObj = parseLocalDate(inicio);
@@ -217,7 +230,7 @@ export default function ProntoAtendimento() {
     const startObj = parseLocalDate(inicio);
     if (!startObj) return 0;
     const start = startObj.getTime();
-    
+
     let end = Date.now();
     if (libMedica) {
       const endObj = parseLocalDate(libMedica);
@@ -235,7 +248,7 @@ export default function ProntoAtendimento() {
     const startObj = parseLocalDate(entrada);
     if (!startObj) return 0;
     const start = startObj.getTime();
-    
+
     let end = Date.now();
     if (alta) {
       const endObj = parseLocalDate(alta);
@@ -333,16 +346,16 @@ export default function ProntoAtendimento() {
 
   // Filtragem dos dados
   const filteredPacientes = pacientes.filter(p => {
-    const matchSearch = 
+    const matchSearch =
       p.nm_paciente.toLowerCase().includes(searchTerm.toLowerCase()) ||
       p.nr_atendimento.toString().includes(searchTerm);
-      
+
     const matchClinica = clinicaFilter === '' || p.ds_clinica === clinicaFilter;
     const matchTriagem = triagemFilter === '' || p.ds_triagem === triagemFilter;
     const matchStatus = statusFilter === '' || p.status === statusFilter;
     const matchInternado = internadoFilter === '' || p.ie_internado === internadoFilter;
-    
-    const temAlta = p.dt_alta !== null || p.status?.toLowerCase() === 'alta';
+
+    const temAlta = p.dt_alta !== null || p.status?.toLowerCase() === 'alta' || p.ie_internado === 'S' || p.status?.toLowerCase() === 'internado' || p.ie_status?.toUpperCase() === 'IN';
     const matchAlta = mostrarAltas || !temAlta;
 
     return matchSearch && matchClinica && matchTriagem && matchStatus && matchInternado && matchAlta;
@@ -350,6 +363,22 @@ export default function ProntoAtendimento() {
 
   // Ordenação dos dados
   const sortedPacientes = [...filteredPacientes].sort((a, b) => {
+    // Pacientes ativos (sem data de alta, sem status Alta/Internado e sem ie_internado S/IN) ficam sempre no topo
+    const aAtivo = !a.dt_alta &&
+      a.status?.toLowerCase() !== 'alta' &&
+      a.ie_internado !== 'S' &&
+      a.status?.toLowerCase() !== 'internado' &&
+      a.ie_status?.toUpperCase() !== 'IN';
+
+    const bAtivo = !b.dt_alta &&
+      b.status?.toLowerCase() !== 'alta' &&
+      b.ie_internado !== 'S' &&
+      b.status?.toLowerCase() !== 'internado' &&
+      b.ie_status?.toUpperCase() !== 'IN';
+
+    if (aAtivo && !bAtivo) return -1;
+    if (!aAtivo && bAtivo) return 1;
+
     let valA: any;
     let valB: any;
 
@@ -377,8 +406,14 @@ export default function ProntoAtendimento() {
     return 0;
   });
 
-  // Cálculos de Indicadores Clínicos (Apenas para pacientes ativos, ou seja, sem data de alta e status diferente de Alta)
-  const ativos = filteredPacientes.filter(p => !p.dt_alta && p.status?.toLowerCase() !== 'alta');
+  // Cálculos de Indicadores Clínicos (Apenas para pacientes ativos, ou seja, sem data de alta, status diferente de Alta e não internados)
+  const ativos = filteredPacientes.filter(p =>
+    !p.dt_alta &&
+    p.status?.toLowerCase() !== 'alta' &&
+    p.ie_internado !== 'S' &&
+    p.status?.toLowerCase() !== 'internado' &&
+    p.ie_status?.toUpperCase() !== 'IN'
+  );
   const totalAtivos = ativos.length;
 
   // Pacientes aguardando primeiro atendimento médico
@@ -391,23 +426,23 @@ export default function ProntoAtendimento() {
   const pacientesComTempoEspera = ativos;
   const tempoMedioEsperaMinutos = pacientesComTempoEspera.length > 0
     ? Math.round(
-        pacientesComTempoEspera.reduce((sum, p) => sum + getWaitTimeMinutes(p.dt_entrada, p.hr_inicio_consulta), 0) / 
-        pacientesComTempoEspera.length
-      )
+      pacientesComTempoEspera.reduce((sum, p) => sum + getWaitTimeMinutes(p.dt_entrada, p.hr_inicio_consulta), 0) /
+      pacientesComTempoEspera.length
+    )
     : 0;
 
   // Tempo médio de atendimento para pacientes atendidos ou em atendimento (em minutos)
   const pacientesComAtendimento = ativos.filter(p => p.hr_inicio_consulta);
   const tempoMedioAtendimentoMinutos = pacientesComAtendimento.length > 0
     ? Math.round(
-        pacientesComAtendimento.reduce((sum, p) => sum + getAtendimentoTimeMinutes(p.hr_inicio_consulta, p.dt_lib_medico, p.dt_alta), 0) / 
-        pacientesComAtendimento.length
-      )
+      pacientesComAtendimento.reduce((sum, p) => sum + getAtendimentoTimeMinutes(p.hr_inicio_consulta, p.dt_lib_medico, p.dt_alta), 0) /
+      pacientesComAtendimento.length
+    )
     : 0;
 
   return (
     <div className="flex flex-1 flex-col gap-6 p-6 md:p-8 animate-in fade-in zoom-in duration-500">
-      
+
       {/* Top Header */}
       <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-6">
         <div className="flex flex-col gap-2 w-full xl:w-auto">
@@ -430,11 +465,11 @@ export default function ProntoAtendimento() {
               Pronto Atendimento
             </h1>
           </div>
-          
+
           <p className="text-muted-foreground">
             Monitoramento de pacientes, tempos de espera e fluxos de atendimento do PA.
           </p>
-          
+
           <div className="flex flex-wrap items-center gap-x-5 gap-y-2 mt-2 text-xs text-muted-foreground">
             <span className="font-semibold uppercase tracking-wider text-muted-foreground/80">Legenda Triagem:</span>
             <span className="flex items-center gap-1.5 font-medium text-foreground">
@@ -462,7 +497,7 @@ export default function ProntoAtendimento() {
 
         {/* Indicadores do Topo */}
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 w-full xl:w-auto xl:min-w-[1100px]">
-          
+
           {/* Card 1: Total Pacientes Ativos */}
           <div className="bg-card border rounded-xl p-5 flex items-center justify-between shadow-sm relative overflow-hidden group hover:border-primary/40 transition-all">
             <div className="flex flex-col gap-1">
@@ -546,10 +581,10 @@ export default function ProntoAtendimento() {
 
       {/* Main Container */}
       <div className="bg-card border rounded-xl shadow-sm flex flex-col flex-1 overflow-hidden min-h-[500px]">
-        
+
         {/* Toolbar de Filtros */}
         <div className="p-5 border-b bg-muted/10 flex flex-col lg:flex-row gap-4 justify-between items-stretch">
-          
+
           {/* Caixa de Busca */}
           <div className="relative flex-1 max-w-md">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -564,7 +599,7 @@ export default function ProntoAtendimento() {
 
           {/* Grid de Filtros */}
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-3 flex-wrap">
-            
+
             {/* Filtro Clínica */}
             <div className="relative">
               <select
@@ -656,8 +691,8 @@ export default function ProntoAtendimento() {
               <thead className="text-xs text-muted-foreground uppercase bg-muted/40 sticky top-0 z-10 border-b">
                 <tr>
                   <th className="px-5 py-3.5 font-semibold">Atendimento</th>
-                  
-                  <th 
+
+                  <th
                     className="px-5 py-3.5 font-semibold cursor-pointer hover:text-foreground transition-colors"
                     onClick={() => handleSort('nm_paciente')}
                   >
@@ -667,7 +702,7 @@ export default function ProntoAtendimento() {
                     </div>
                   </th>
 
-                  <th 
+                  <th
                     className="px-5 py-3.5 font-semibold cursor-pointer hover:text-foreground transition-colors"
                     onClick={() => handleSort('dt_entrada')}
                   >
@@ -677,7 +712,7 @@ export default function ProntoAtendimento() {
                     </div>
                   </th>
 
-                  <th 
+                  <th
                     className="px-5 py-3.5 font-semibold cursor-pointer hover:text-foreground transition-colors text-center"
                     onClick={() => handleSort('tempo_espera')}
                   >
@@ -687,7 +722,7 @@ export default function ProntoAtendimento() {
                     </div>
                   </th>
 
-                  <th 
+                  <th
                     className="px-5 py-3.5 font-semibold cursor-pointer hover:text-foreground transition-colors text-center"
                     onClick={() => handleSort('tempo_atendimento')}
                   >
@@ -697,7 +732,7 @@ export default function ProntoAtendimento() {
                     </div>
                   </th>
 
-                  <th 
+                  <th
                     className="px-5 py-3.5 font-semibold cursor-pointer hover:text-foreground transition-colors text-center"
                     onClick={() => handleSort('tempo_total')}
                   >
@@ -721,7 +756,7 @@ export default function ProntoAtendimento() {
                   const tempoFilaMinutos = getWaitTimeMinutes(p.dt_entrada, p.hr_inicio_consulta);
                   const tempoAtendimentoMinutos = getAtendimentoTimeMinutes(p.hr_inicio_consulta, p.dt_lib_medico, p.dt_alta);
                   const tempoTotalMinutos = getTotalTimeMinutes(p.dt_entrada, p.dt_alta, p.dt_lib_medico);
-                  
+
                   return (
                     <tr key={p.id} className="hover:bg-muted/20 transition-colors">
                       {/* Atendimento */}
@@ -733,11 +768,11 @@ export default function ProntoAtendimento() {
                       <td className="px-5 py-4 max-w-[220px]" title={p.nm_paciente}>
                         <div className="flex items-center gap-2.5">
                           <div className="relative flex h-3.5 w-3.5 shrink-0" title={p.ds_triagem || 'Sem Classificação'}>
-                            {(p.ds_triagem?.toLowerCase().includes('1') || 
-                              p.ds_triagem?.toLowerCase().includes('emergencia') || 
+                            {(p.ds_triagem?.toLowerCase().includes('1') ||
+                              p.ds_triagem?.toLowerCase().includes('emergencia') ||
                               p.ds_triagem?.toLowerCase().includes('emergência')) && (
-                              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-                            )}
+                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                              )}
                             <span className={`relative inline-flex rounded-full h-3.5 w-3.5 ${getTriagemDotColor(p.ds_triagem)}`}></span>
                           </div>
                           <span className="font-semibold text-foreground truncate">{p.nm_paciente}</span>
@@ -770,13 +805,12 @@ export default function ProntoAtendimento() {
                             {formatWaitTime(tempoFilaMinutos)}
                           </span>
                         ) : (
-                          <span className={`inline-flex items-center gap-1 font-semibold text-sm ${
-                            tempoFilaMinutos > 120 
-                              ? 'text-red-500' 
-                              : tempoFilaMinutos > 60 
-                                ? 'text-yellow-600 dark:text-yellow-400 font-bold' 
+                          <span className={`inline-flex items-center gap-1 font-semibold text-sm ${tempoFilaMinutos > 120
+                              ? 'text-red-500'
+                              : tempoFilaMinutos > 60
+                                ? 'text-yellow-600 dark:text-yellow-400 font-bold'
                                 : 'text-emerald-500'
-                          }`}>
+                            }`}>
                             <Clock className="h-3.5 w-3.5" />
                             {formatWaitTime(tempoFilaMinutos)}
                           </span>
@@ -890,7 +924,7 @@ export default function ProntoAtendimento() {
         {!loading && sortedPacientes.length > 0 && (
           <div className="p-4 border-t bg-muted/20 flex flex-col sm:flex-row items-center justify-between gap-4">
             <span className="text-xs text-muted-foreground">
-              Mostrando <span className="font-semibold text-foreground">{sortedPacientes.length}</span> pacientes dos <span className="font-semibold text-foreground">{pacientes.length}</span> totais no banco.
+              Mostrando <span className="font-semibold text-foreground">{sortedPacientes.length}</span> pacientes de <span className="font-semibold text-foreground">{pacientes.length}</span> nas últimas 24h.
             </span>
             {lastSyncTime && (
               <span className="text-xs text-muted-foreground bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 px-3 py-1 rounded-full border border-emerald-500/20 font-medium">
@@ -912,7 +946,7 @@ export default function ProntoAtendimento() {
           >
             {isDarkMode ? <Sun className="h-4 w-4 text-amber-500" /> : <Moon className="h-4 w-4 text-slate-600" />}
           </button>
-          
+
           {/* Informação Adicional do Perfil */}
           {profile && (
             <div className="hidden sm:flex items-center gap-2 bg-muted/30 px-3 py-1.5 rounded-lg border text-xs text-muted-foreground">

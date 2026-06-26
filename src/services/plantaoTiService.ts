@@ -183,24 +183,47 @@ export async function removerOcorrenciaPlantao(
   return error ? { success: false, error: error.message } : { success: true };
 }
 
-// ── Busca os setores dos pacientes internados atualmente ativos ──────────────
+// ── Busca os setores na API n8n com fallback para os setores locais ──────────
 export async function fetchSetoresInternacao(): Promise<string[]> {
-  const { data, error } = await supabase
-    .from('pacientes_internados')
-    .select('ds_setor_atendimento')
-    .eq('ativo', true)
-    .not('ds_setor_atendimento', 'is', null);
+  try {
+    const resp = await fetch('https://n8n.technocode.site/webhook/consulta_setores', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({}),
+    });
 
-  if (error) {
-    console.error('Erro ao buscar setores de internação:', error);
-    throw error;
+    if (!resp.ok) {
+      throw new Error(`Erro na resposta da API n8n: Status ${resp.status}`);
+    }
+
+    const data: { CD_SETOR_ATENDIMENTO: number; DS_SETOR_ATENDIMENTO: string }[] = await resp.json();
+
+    const setores = Array.from(
+      new Set(data.map(item => item.DS_SETOR_ATENDIMENTO).filter(Boolean))
+    ).sort() as string[];
+
+    return setores;
+  } catch (err) {
+    console.error('Erro ao buscar setores de internação na API n8n, executando fallback:', err);
+    
+    // Fallback: Busca da tabela local caso a API n8n falhe
+    const { data, error } = await supabase
+      .from('pacientes_internados')
+      .select('ds_setor_atendimento')
+      .eq('ativo', true)
+      .not('ds_setor_atendimento', 'is', null);
+
+    if (error) {
+      console.error('Erro no fallback de setores:', error);
+      throw error;
+    }
+
+    const setores = Array.from(
+      new Set((data as any[]).map(item => item.ds_setor_atendimento).filter(Boolean))
+    ).sort() as string[];
+
+    return setores;
   }
-
-  const setores = Array.from(
-    new Set((data as any[]).map(item => item.ds_setor_atendimento).filter(Boolean))
-  ).sort() as string[];
-
-  return setores;
 }
 
 // ── Busca nomes de colaboradores na tabela holerites para Autocomplete ───────
