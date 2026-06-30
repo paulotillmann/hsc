@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { NavLink, useNavigate, useLocation } from 'react-router-dom';
-import { LogOut, Sun, Moon, ChevronLeft, ChevronRight, ChevronDown, HeartPulse, Cpu, Users } from 'lucide-react';
+import { LogOut, Sun, Moon, ChevronLeft, ChevronRight, ChevronDown, HeartPulse, Cpu, Users, GraduationCap } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { usePermissions } from '../hooks/usePermissions';
 import DynamicIcon from './DynamicIcon';
@@ -24,6 +24,7 @@ const Sidebar: React.FC = () => {
     if (window.location.pathname.startsWith('/gestao-prontuarios')) return 'gestao-prontuarios';
     if (window.location.pathname.startsWith('/plantao-ti') || window.location.pathname.startsWith('/ordem-servico') || window.location.pathname.startsWith('/ordem-servico-mobile')) return 'tecnologia-informacao';
     if (window.location.pathname.startsWith('/dashboard') || window.location.pathname.startsWith('/holerites') || window.location.pathname.startsWith('/informes')) return 'recursos-humanos';
+    if (window.location.pathname.startsWith('/internato-secretaria') || window.location.pathname.startsWith('/internato-notas')) return 'internato';
     return null;
   });
 
@@ -61,6 +62,8 @@ const Sidebar: React.FC = () => {
       setExpandedMenu('tecnologia-informacao');
     } else if (location.pathname.startsWith('/dashboard') || location.pathname.startsWith('/holerites') || location.pathname.startsWith('/informes')) {
       setExpandedMenu('recursos-humanos');
+    } else if (location.pathname.startsWith('/internato-secretaria') || location.pathname.startsWith('/internato-notas')) {
+      setExpandedMenu('internato');
     }
   }, [location.pathname, isCollapsed]);
 
@@ -510,8 +513,83 @@ const Sidebar: React.FC = () => {
           );
         })()}
 
+        {/* Categoria Internato (Agrupador) */}
+        {(() => {
+          const hasSecretariaAccess = userModules.some(m => m.slug === 'internato-secretaria');
+          const hasNotasAccess = userModules.some(m => m.slug === 'internato-notas');
+          const showInternato = hasSecretariaAccess || hasNotasAccess;
+          const isInternatoActive = location.pathname.startsWith('/internato-secretaria') || location.pathname.startsWith('/internato-notas');
+
+          if (!showInternato) return null;
+
+          let firstInternatoRoute = '/internato-secretaria';
+          if (hasSecretariaAccess) firstInternatoRoute = '/internato-secretaria';
+          else if (hasNotasAccess) firstInternatoRoute = '/internato-notas';
+
+          return (
+            <div className="flex flex-col">
+              {isCollapsed ? (
+                <NavLink
+                  to={firstInternatoRoute}
+                  title="Internato"
+                  className={navLinkClass(isInternatoActive)}
+                >
+                  <GraduationCap className="h-5 w-5 flex-shrink-0" />
+                </NavLink>
+              ) : (
+                <button
+                  onClick={() => {
+                    setExpandedMenu(expandedMenu === 'internato' ? null : 'internato');
+                  }}
+                  className={`flex items-center rounded-md text-sm transition-all duration-200 justify-start gap-3 px-3 py-2 w-full ${isInternatoActive
+                      ? 'bg-primary text-primary-foreground shadow-sm hover:shadow-md hover:shadow-primary/20 font-medium'
+                      : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
+                    }`}
+                >
+                  <GraduationCap className="h-5 w-5 flex-shrink-0" />
+                  <div className="flex flex-1 items-center justify-between">
+                    <span className="truncate">Internato</span>
+                    <ChevronRight className={`h-4 w-4 transition-transform ${expandedMenu === 'internato' ? 'rotate-90' : ''}`} />
+                  </div>
+                </button>
+              )}
+
+              {!isCollapsed && expandedMenu === 'internato' && (
+                <div className="flex flex-col ml-9 mt-1 gap-1 border-l-2 border-border pl-2 border-primary/20 animate-in fade-in duration-300">
+                  {hasSecretariaAccess && (
+                    <NavLink
+                      to="/internato-secretaria"
+                      className={({ isActive }) =>
+                        `text-sm px-3 py-2 rounded-md transition-colors ${isActive
+                          ? 'bg-primary/10 text-primary font-medium'
+                          : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                        }`
+                      }
+                    >
+                      Secretaria
+                    </NavLink>
+                  )}
+                  {hasNotasAccess && (
+                    <NavLink
+                      to="/internato-notas"
+                      className={({ isActive }) =>
+                        `text-sm px-3 py-2 rounded-md transition-colors ${isActive
+                          ? 'bg-primary/10 text-primary font-medium'
+                          : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                        }`
+                      }
+                    >
+                      Notas
+                    </NavLink>
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })()}
+
         {userModules
-          .filter(m => m.slug !== 'configuracoes' && m.slug !== 'pacientes-internados' && m.slug !== 'centro-cirurgico' && m.slug !== 'pronto-atendimento' && m.slug !== 'plantao-ti' && m.slug !== 'ordem-servico' && m.slug !== 'dashboard' && m.slug !== 'holerites' && m.slug !== 'informes' && m.slug !== 'notificacoes' && m.slug !== 'taxa-ocupacao') // Configurações fica na área inferior, e assistenciais, TI, RH, notificações e taxas ficam agrupados
+          .filter(m => m.slug !== 'configuracoes' && m.slug !== 'pacientes-internados' && m.slug !== 'centro-cirurgico' && m.slug !== 'pronto-atendimento' && m.slug !== 'plantao-ti' && m.slug !== 'ordem-servico' && m.slug !== 'dashboard' && m.slug !== 'holerites' && m.slug !== 'informes' && m.slug !== 'notificacoes' && m.slug !== 'taxa-ocupacao' && m.slug !== 'internato-secretaria' && m.slug !== 'internato-notas') // Configurações fica na área inferior, e assistenciais, TI, RH, notificações, taxas e internato ficam agrupados
           .map(module => {
 
             if (module.slug === 'recepcao') {
