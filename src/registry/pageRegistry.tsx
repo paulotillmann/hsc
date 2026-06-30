@@ -28,5 +28,7 @@ export const pageRegistry: Record<string, React.LazyExoticComponent<React.Compon
   'gestao-prontuarios': lazy(() => import('../pages/GestaoProntuarios/index')),
   'ordem-servico-mobile': lazy(() => import('../pages/OrdemServicoMobile/index')),
   'pronto-atendimento': lazy(() => import('../pages/ProntoAtendimento/index')),
+  'internato-secretaria': lazy(() => import('../pages/Internato/Secretaria')),
+  'internato-notas': lazy(() => import('../pages/Internato/Notas')),
   // 'relatorios': lazy(() => import('../pages/Relatorios')),
 };

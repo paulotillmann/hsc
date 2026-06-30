@@ -141,17 +141,44 @@ Deno.serve(async (req: Request) => {
       throw new Error('A resposta do n8n não retornou um array válido de ordens de serviço.');
     }
 
-    // 2. Mapear os dados para a estrutura do banco de dados
+    // 2. Inicializar o cliente do Supabase
+    if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
+      throw new Error('Variáveis de ambiente do Supabase (URL/SERVICE_ROLE_KEY) não estão configuradas.');
+    }
+
+    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+
+    // 3. Mapear os dados para a estrutura do banco de dados
     const recordsToInsert: DBOrdemServico[] = [];
+    const deletedSequences = new Set<number>();
 
     for (const item of rawData) {
       if (item.NR_SEQUENCIA === undefined || item.NR_SEQUENCIA === null) {
         continue;
       }
 
+      // Validar se o grupo de destino pertence à Manutenção
+      const dsGrupo = item.DS_GRUPO_DES ? String(item.DS_GRUPO_DES).trim() : '';
+      const isManutencao = dsGrupo.toLowerCase().includes('manuten');
+
+      if (isManutencao) {
+        const nrSeq = Number(item.NR_SEQUENCIA);
+        console.log(`[Sync OS] Detectada OS de manutenção (${nrSeq}). Executando DELETE se existir...`);
+        const { error: deleteError } = await supabase
+          .from('ordem_servico')
+          .delete()
+          .eq('nr_sequencia', nrSeq);
+        if (deleteError) {
+          console.error(`[Sync OS] Erro ao deletar OS de manutenção ${nrSeq}:`, deleteError.message);
+        } else {
+          deletedSequences.add(nrSeq);
+        }
+        continue; // Ignora upsert
+      }
+
       const mappedRecord: DBOrdemServico = {
         nr_sequencia: Number(item.NR_SEQUENCIA),
-        ds_grupo_des: item.DS_GRUPO_DES ? String(item.DS_GRUPO_DES).trim() : null,
+        ds_grupo_des: dsGrupo !== '' ? dsGrupo : null,
         nr_seq_localizacao: item.NR_SEQ_LOCALIZACAO ? Number(item.NR_SEQ_LOCALIZACAO) : null,
         ds_localizacao: item.DS_LOCALIZACAO ? String(item.DS_LOCALIZACAO).trim() : null,
         nr_seq_equipamento: item.NR_SEQ_EQUIPAMENTO ? Number(item.NR_SEQ_EQUIPAMENTO) : null,
@@ -186,19 +213,13 @@ Deno.serve(async (req: Request) => {
       return new Response(
         JSON.stringify({
           success: true,
-          message: 'Nenhuma ordem de serviço válida encontrada para sincronizar.',
-          upserted: 0
+          message: 'Nenhuma ordem de serviço válida de TI encontrada para sincronizar.',
+          upserted: 0,
+          deleted: deletedSequences.size
         }),
         { status: 200, headers: corsHeaders }
       );
     }
-
-    // 3. Inicializar o cliente do Supabase
-    if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
-      throw new Error('Variáveis de ambiente do Supabase (URL/SERVICE_ROLE_KEY) não estão configuradas.');
-    }
-
-    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
     // 4. Executar UPSERT com base em nr_sequencia na tabela public.ordem_servico
     const { error: upsertError } = await supabase

@@ -285,37 +285,67 @@ export default function OrdemServicoMobile() {
       if (!silent) {
         setLoading(true);
       }
-      const { data, error: dbError } = await supabase
-        .from('ordem_servico')
-        .select('*, historico_ordem_servico(nr_sequencia)')
-        .gte('dt_ordem_servico', '2026-01-01T00:00:00Z')
-        .lte('dt_ordem_servico', '2026-12-31T23:59:59.999Z')
-        .order('dt_ordem_servico', { ascending: false });
 
-      if (dbError) throw dbError;
+      let allData: any[] = [];
+      let page = 0;
+      const pageSize = 1000;
+      let hasMore = true;
 
-      if (data) {
-        setOrders(data as OrdemServicoItem[]);
+      while (hasMore) {
+        const { data, error: dbError } = await supabase
+          .from('ordem_servico')
+          .select('*, historico_ordem_servico(nr_sequencia)')
+          .gte('dt_ordem_servico', '2026-01-01T00:00:00Z')
+          .lte('dt_ordem_servico', '2026-12-31T23:59:59.999Z')
+          .order('dt_ordem_servico', { ascending: false })
+          .range(page * pageSize, (page + 1) * pageSize - 1);
+
+        if (dbError) throw dbError;
+
+        if (data && data.length > 0) {
+          allData = [...allData, ...data];
+          if (data.length < pageSize) {
+            hasMore = false;
+          } else {
+            page++;
+          }
+        } else {
+          hasMore = false;
+        }
+      }
+
+      if (allData.length > 0) {
+        setOrders(allData as OrdemServicoItem[]);
 
         const hasHistorySet = new Set<number>();
-        data.forEach((os: any) => {
+        allData.forEach((os: any) => {
           if (os.historico_ordem_servico && os.historico_ordem_servico.length > 0) {
             hasHistorySet.add(os.nr_sequencia);
           }
         });
         setOrdersWithHistory(hasHistorySet);
 
-        const orderNums = data.map((os: any) => os.nr_sequencia);
+        const orderNums = allData.map((os: any) => os.nr_sequencia);
         if (orderNums.length > 0) {
-          const { data: logsData, error: logsError } = await supabase
-            .from('ordem_servico_estagio_log')
-            .select('nr_sequencia, estagio_kanban, dt_transicao')
-            .in('nr_sequencia', orderNums)
-            .order('dt_transicao', { ascending: true });
-
-          if (!logsError && logsData) {
-            setStageLogs(logsData);
+          const chunks: number[][] = [];
+          const chunkSize = 500;
+          for (let i = 0; i < orderNums.length; i += chunkSize) {
+            chunks.push(orderNums.slice(i, i + chunkSize));
           }
+
+          let allLogs: any[] = [];
+          for (const chunk of chunks) {
+            const { data: logsData, error: logsError } = await supabase
+              .from('ordem_servico_estagio_log')
+              .select('nr_sequencia, estagio_kanban, dt_transicao')
+              .in('nr_sequencia', chunk)
+              .order('dt_transicao', { ascending: true });
+
+            if (!logsError && logsData) {
+              allLogs = [...allLogs, ...logsData];
+            }
+          }
+          setStageLogs(allLogs);
         } else {
           setStageLogs([]);
         }

@@ -39,6 +39,7 @@ const n8nEndpoints = {
 const edgeFunctions = {
   "sync-cirurgias": `${SUPABASE_URL}/functions/v1/sync-cirurgias`,
   "sync-ordem-servico": `${SUPABASE_URL}/functions/v1/sync-ordem-servico`,
+  "sync-status-ordem-servico": `${SUPABASE_URL}/functions/v1/sync-status-ordem-servico`,
   "send-document-email (teste)": `${SUPABASE_URL}/functions/v1/send-document-email`
 };
 
