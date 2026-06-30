@@ -113,7 +113,9 @@ export default function OrdemServicoMobile() {
 
   // Filtros
   const [searchTerm, setSearchTerm] = useState('');
-  const [dateFilter, setDateFilter] = useState<'dia' | 'semana' | 'mes' | 'todas'>('todas');
+  const [dateFilter, setDateFilter] = useState<'dia' | 'semana' | 'mes' | 'todas'>('mes');
+  const [startDate, setStartDate] = useState<string>('');
+  const [endDate, setEndDate] = useState<string>('');
   const [selectedExecutor, setSelectedExecutor] = useState<string | null>(null);
   
   // Abas Kanban Mobile
@@ -223,6 +225,15 @@ export default function OrdemServicoMobile() {
           targetDate.getMonth() === today.getMonth() &&
           targetDate.getFullYear() === today.getFullYear();
         if (!isInMonth) return false;
+      } else if (dateFilter === 'todas') {
+        if (startDate) {
+          const start = new Date(startDate + 'T00:00:00');
+          if (targetDate < start) return false;
+        }
+        if (endDate) {
+          const end = new Date(endDate + 'T23:59:59');
+          if (targetDate > end) return false;
+        }
       }
     }
 
@@ -431,42 +442,36 @@ export default function OrdemServicoMobile() {
   useEffect(() => {
     fetchOrders();
 
-    const syncTimeout = setTimeout(() => {
-      runBackgroundSync();
-    }, 1000);
-
-    const syncInterval = setInterval(() => {
-      runBackgroundSync();
-    }, 3 * 60 * 1000);
-
     const ordersChannel = supabase
       .channel('ordem-servico-mobile-realtime')
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'ordem_servico' },
         (payload) => {
-          triggerDebouncedFetch();
-          if (payload.new && (payload.new as any).nr_sequencia) {
-            const updatedOS = payload.new as OrdemServicoItem;
-            if (selectedOrderRef.current && selectedOrderRef.current.nr_sequencia === updatedOS.nr_sequencia) {
-              setSelectedOrder(updatedOS);
-            }
-          }
-        }
-      )
-      .subscribe();
+          console.log('[Realtime Mobile] Alteração na tabela ordem_servico:', payload.eventType);
+          
+          const { eventType, new: newRecord, old: oldRecord } = payload;
 
-    const historyChannel = supabase
-      .channel('historico-ordem-servico-mobile-realtime')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'historico_ordem_servico' },
-        (payload) => {
-          triggerDebouncedFetch();
-          const newRecord = payload.new as any;
-          if (newRecord && newRecord.nr_sequencia) {
-            if (selectedOrderRef.current && selectedOrderRef.current.nr_sequencia === newRecord.nr_sequencia) {
-              refreshSelectedOrderDetails(selectedOrderRef.current);
+          if (eventType === 'INSERT') {
+            const inserted = newRecord as OrdemServicoItem;
+            setOrders(prev => {
+              if (prev.some(o => o.nr_sequencia === inserted.nr_sequencia)) return prev;
+              return [inserted, ...prev];
+            });
+          } else if (eventType === 'UPDATE') {
+            const updated = newRecord as OrdemServicoItem;
+            setOrders(prev => prev.map(o => o.nr_sequencia === updated.nr_sequencia ? { ...o, ...updated } : o));
+            
+            // Se a OS modificada for a selecionada, atualiza seus dados e histórico no modal
+            if (selectedOrderRef.current && selectedOrderRef.current.nr_sequencia === updated.nr_sequencia) {
+              setSelectedOrder(updated);
+              refreshSelectedOrderDetails(updated);
+            }
+          } else if (eventType === 'DELETE') {
+            const deletedSeq = (oldRecord as any).nr_sequencia;
+            setOrders(prev => prev.filter(o => o.nr_sequencia !== deletedSeq));
+            if (selectedOrderRef.current && selectedOrderRef.current.nr_sequencia === deletedSeq) {
+              setSelectedOrder(null);
             }
           }
         }
@@ -477,12 +482,9 @@ export default function OrdemServicoMobile() {
       if (fetchTimeoutRef.current) {
         clearTimeout(fetchTimeoutRef.current);
       }
-      clearTimeout(syncTimeout);
-      clearInterval(syncInterval);
       supabase.removeChannel(ordersChannel);
-      supabase.removeChannel(historyChannel);
     };
-  }, [triggerDebouncedFetch]);
+  }, []);
 
   useEffect(() => {
     const loadExecutorAvatars = async () => {
@@ -1028,17 +1030,19 @@ export default function OrdemServicoMobile() {
         </div>
 
         <div className="flex items-center gap-2">
-          {/* Sync badge compact */}
-          {isBackgroundSyncing ? (
-            <div className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-blue-500/10 text-[9px] font-bold text-blue-500">
-              <RefreshCcw className="h-2 w-2 animate-spin" />
-              <span>SYNC</span>
-            </div>
-          ) : lastSyncTime ? (
-            <div className="text-[9px] font-semibold text-muted-foreground">
-              Sync {formatSyncTime(lastSyncTime)}
-            </div>
-          ) : null}
+          <button
+            onClick={runBackgroundSync}
+            disabled={isBackgroundSyncing}
+            className={`flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold border transition-colors ${
+              isBackgroundSyncing
+                ? 'bg-blue-500/10 border-blue-500/20 text-blue-500'
+                : 'bg-muted border-border text-muted-foreground hover:bg-muted-foreground/10 hover:text-foreground'
+            }`}
+            title="Sincronizar manualmente"
+          >
+            <RefreshCcw className={`h-2.5 w-2.5 ${isBackgroundSyncing ? 'animate-spin' : ''}`} />
+            <span>{isBackgroundSyncing ? 'SYNC' : lastSyncTime ? formatSyncTime(lastSyncTime) : 'SYNC'}</span>
+          </button>
 
           {/* Theme switcher */}
           <button
@@ -1137,6 +1141,26 @@ export default function OrdemServicoMobile() {
             <option value="mes">Mês</option>
           </select>
         </div>
+
+        {dateFilter === 'todas' && (
+          <div className="flex items-center gap-1.5 animate-in fade-in slide-in-from-top-2 duration-200">
+            <input
+              type="date"
+              value={startDate}
+              onChange={(e) => setStartDate(e.target.value)}
+              className="flex-1 py-1 px-2 bg-background border border-border rounded-lg text-[11px] focus:outline-none text-foreground cursor-pointer"
+              title="Data Inicial"
+            />
+            <span className="text-[10px] text-muted-foreground font-bold shrink-0">até</span>
+            <input
+              type="date"
+              value={endDate}
+              onChange={(e) => setEndDate(e.target.value)}
+              className="flex-1 py-1 px-2 bg-background border border-border rounded-lg text-[11px] focus:outline-none text-foreground cursor-pointer"
+              title="Data Final"
+            />
+          </div>
+        )}
 
         {/* Executors avatars row */}
         <div className="flex items-center gap-2 overflow-x-auto py-1 scrollbar-hide select-none">

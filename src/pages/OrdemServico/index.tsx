@@ -123,7 +123,9 @@ export default function OrdemServico() {
 
   // Filtros
   const [searchTerm, setSearchTerm] = useState('');
-  const [dateFilter, setDateFilter] = useState<'dia' | 'semana' | 'mes' | 'todas'>('todas');
+  const [dateFilter, setDateFilter] = useState<'dia' | 'semana' | 'mes' | 'todas'>('mes');
+  const [startDate, setStartDate] = useState<string>('');
+  const [endDate, setEndDate] = useState<string>('');
 
   interface ExecutorInfo {
     email: string;
@@ -235,6 +237,15 @@ export default function OrdemServico() {
           targetDate.getMonth() === today.getMonth() &&
           targetDate.getFullYear() === today.getFullYear();
         if (!isInMonth) return false;
+      } else if (dateFilter === 'todas') {
+        if (startDate) {
+          const start = new Date(startDate + 'T00:00:00');
+          if (targetDate < start) return false;
+        }
+        if (endDate) {
+          const end = new Date(endDate + 'T23:59:59');
+          if (targetDate > end) return false;
+        }
       }
     }
 
@@ -470,17 +481,6 @@ export default function OrdemServico() {
     // Carrega dados iniciais do banco
     fetchOrders();
 
-    // Atrasamos o início do sync inicial em background por 1 segundo
-    // para evitar concorrência no IndexedDB durante a renovação do token
-    const syncTimeout = setTimeout(() => {
-      runBackgroundSync();
-    }, 1000);
-
-    // Configura o intervalo de 3 minutos para a sincronização periódica
-    const syncInterval = setInterval(() => {
-      runBackgroundSync();
-    }, 3 * 60 * 1000); // 3 minutos
-
     // Inscreve no Realtime para alterações nas ordens de serviço
     const ordersChannel = supabase
       .channel('ordem-servico-realtime-changes')
@@ -489,34 +489,29 @@ export default function OrdemServico() {
         { event: '*', schema: 'public', table: 'ordem_servico' },
         (payload) => {
           console.log('[Realtime] Alteração na tabela ordem_servico:', payload.eventType);
-          triggerDebouncedFetch();
+          
+          const { eventType, new: newRecord, old: oldRecord } = payload;
 
-          // Se a OS modificada for a selecionada, atualiza seus dados no modal
-          if (payload.new && (payload.new as any).nr_sequencia) {
-            const updatedOS = payload.new as OrdemServicoItem;
-            if (selectedOrderRef.current && selectedOrderRef.current.nr_sequencia === updatedOS.nr_sequencia) {
-              setSelectedOrder(updatedOS);
+          if (eventType === 'INSERT') {
+            const inserted = newRecord as OrdemServicoItem;
+            setOrders(prev => {
+              if (prev.some(o => o.nr_sequencia === inserted.nr_sequencia)) return prev;
+              return [inserted, ...prev];
+            });
+          } else if (eventType === 'UPDATE') {
+            const updated = newRecord as OrdemServicoItem;
+            setOrders(prev => prev.map(o => o.nr_sequencia === updated.nr_sequencia ? { ...o, ...updated } : o));
+            
+            // Se a OS modificada for a selecionada, atualiza seus dados e histórico no modal
+            if (selectedOrderRef.current && selectedOrderRef.current.nr_sequencia === updated.nr_sequencia) {
+              setSelectedOrder(updated);
+              refreshSelectedOrderDetails(updated);
             }
-          }
-        }
-      )
-      .subscribe();
-
-    // Inscreve no Realtime para novos relatos históricos
-    const historyChannel = supabase
-      .channel('historico-ordem-servico-realtime-changes')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'historico_ordem_servico' },
-        (payload) => {
-          console.log('[Realtime] Alteração na tabela historico_ordem_servico:', payload.eventType);
-          triggerDebouncedFetch();
-
-          // Se o novo relato for da OS selecionada, atualiza o histórico dela no modal
-          const newRecord = payload.new as any;
-          if (newRecord && newRecord.nr_sequencia) {
-            if (selectedOrderRef.current && selectedOrderRef.current.nr_sequencia === newRecord.nr_sequencia) {
-              refreshSelectedOrderDetails(selectedOrderRef.current);
+          } else if (eventType === 'DELETE') {
+            const deletedSeq = (oldRecord as any).nr_sequencia;
+            setOrders(prev => prev.filter(o => o.nr_sequencia !== deletedSeq));
+            if (selectedOrderRef.current && selectedOrderRef.current.nr_sequencia === deletedSeq) {
+              setSelectedOrder(null);
             }
           }
         }
@@ -527,12 +522,9 @@ export default function OrdemServico() {
       if (fetchTimeoutRef.current) {
         clearTimeout(fetchTimeoutRef.current);
       }
-      clearTimeout(syncTimeout);
-      clearInterval(syncInterval);
       supabase.removeChannel(ordersChannel);
-      supabase.removeChannel(historyChannel);
     };
-  }, [triggerDebouncedFetch]);
+  }, []);
 
   useEffect(() => {
     const loadExecutorAvatars = async () => {
@@ -1287,33 +1279,34 @@ export default function OrdemServico() {
 
               {/* Indicador de Sincronização e Alternador de Tema agrupados */}
               <div className="flex items-center gap-2 shrink-0 select-none">
-                {(isBackgroundSyncing || syncError || lastSyncTime) && (
-                  <>
-                    {isBackgroundSyncing ? (
-                      <div className="flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-blue-50 dark:bg-blue-900/10 border border-blue-200/30 dark:border-blue-800/30 text-[10px] animate-in fade-in duration-200">
-                        <RefreshCcw className="h-2.5 w-2.5 animate-spin text-blue-500" />
-                        <span className="text-blue-600 dark:text-blue-400 font-semibold uppercase tracking-wider">Sincronizando...</span>
-                      </div>
-                    ) : syncError ? (
-                      <div className="flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-red-50 dark:bg-red-900/10 border border-red-200/30 dark:border-red-800/30 text-[10px] animate-in fade-in duration-200">
-                        <span className="relative flex h-1.5 w-1.5">
-                          <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-red-500"></span>
-                        </span>
-                        <span className="text-red-600 dark:text-red-400 font-semibold uppercase tracking-wider">Erro na sync</span>
-                      </div>
-                    ) : lastSyncTime ? (
-                      <div className="flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-emerald-50 dark:bg-emerald-900/10 border border-emerald-200/30 dark:border-emerald-800/30 text-[10px] animate-in fade-in duration-200" title={`Última sincronização: ${formatSyncTime(lastSyncTime)}`}>
-                        <span className="relative flex h-1.5 w-1.5">
-                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                          <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500"></span>
-                        </span>
-                        <span className="text-emerald-600 dark:text-emerald-400 font-semibold uppercase tracking-wider">
-                          Sync {formatSyncTime(lastSyncTime)}
-                        </span>
-                      </div>
-                    ) : null}
-                  </>
-                )}
+                <button
+                  onClick={runBackgroundSync}
+                  disabled={isBackgroundSyncing}
+                  className={`flex items-center gap-1 px-1.5 py-0.5 rounded-md border text-[10px] font-semibold uppercase tracking-wider transition-colors ${
+                    isBackgroundSyncing 
+                      ? 'bg-blue-50 dark:bg-blue-900/10 border-blue-200/30 dark:border-blue-800/30 text-blue-600 dark:text-blue-400' 
+                      : syncError 
+                        ? 'bg-red-50 dark:bg-red-900/10 border-red-200/30 dark:border-red-800/30 text-red-600 dark:text-red-400 hover:bg-red-100/50' 
+                        : 'bg-emerald-50 dark:bg-emerald-900/10 border-emerald-200/30 dark:border-emerald-800/30 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-100/50'
+                  }`}
+                  title="Clique para sincronizar ordens de serviço manualmente"
+                >
+                  {isBackgroundSyncing ? (
+                    <>
+                      <RefreshCcw className="h-2.5 w-2.5 animate-spin text-blue-500" />
+                      <span>Sincronizando...</span>
+                    </>
+                  ) : syncError ? (
+                    <span>Erro na sync (Recarregar)</span>
+                  ) : lastSyncTime ? (
+                    <>
+                      <RefreshCcw className="h-2.5 w-2.5 text-emerald-500" />
+                      <span>Sync {formatSyncTime(lastSyncTime)}</span>
+                    </>
+                  ) : (
+                    <span>Sincronizar</span>
+                  )}
+                </button>
 
                 {/* Alternador de Tema ao lado do Sync */}
                 <button
@@ -1401,6 +1394,26 @@ export default function OrdemServico() {
                 <option value="semana" className="bg-card text-foreground">Semana</option>
                 <option value="mes" className="bg-card text-foreground">Mês</option>
               </select>
+
+              {dateFilter === 'todas' && (
+                <div className="flex items-center gap-1.5 animate-in fade-in slide-in-from-right-3 duration-200">
+                  <input
+                    type="date"
+                    value={startDate}
+                    onChange={(e) => setStartDate(e.target.value)}
+                    className="py-1 px-2.5 bg-muted/40 border border-border rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-foreground cursor-pointer"
+                    title="Data Inicial"
+                  />
+                  <span className="text-[10px] text-muted-foreground font-bold">até</span>
+                  <input
+                    type="date"
+                    value={endDate}
+                    onChange={(e) => setEndDate(e.target.value)}
+                    className="py-1 px-2.5 bg-muted/40 border border-border rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-foreground cursor-pointer"
+                    title="Data Final"
+                  />
+                </div>
+              )}
             </div>
           </div>
         </div>
