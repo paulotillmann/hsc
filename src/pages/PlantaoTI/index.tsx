@@ -790,10 +790,9 @@ export default function PlantaoTI() {
                           )}
 
                           {temOcorrenciaDia && (
-                            <FileText 
-                              className="h-4.5 w-4.5 text-blue-500 dark:text-blue-400 shrink-0" 
-                              title="Há ocorrências registradas neste dia" 
-                            />
+                            <span title="Há ocorrências registradas neste dia" className="inline-flex shrink-0">
+                              <FileText className="h-4.5 w-4.5 text-blue-500 dark:text-blue-400" />
+                            </span>
                           )}
 
                           {isAdmin && (
@@ -831,10 +830,9 @@ export default function PlantaoTI() {
                                 </span>
                               </div>
                               {temOcorrenciaPlantonista && (
-                                <FileText 
-                                  className="h-3.5 w-3.5 text-blue-500 dark:text-blue-400 shrink-0" 
-                                  title={`${escala.ocorrencias.length} ocorrência(s) registrada(s)`}
-                                />
+                                <span title={`${escala.ocorrencias.length} ocorrência(s) registrada(s)`} className="inline-flex shrink-0">
+                                  <FileText className="h-3.5 w-3.5 text-blue-500 dark:text-blue-400" />
+                                </span>
                               )}
                             </div>
                           );

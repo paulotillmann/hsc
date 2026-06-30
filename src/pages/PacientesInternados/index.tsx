@@ -410,7 +410,7 @@ export default function PacientesInternados() {
                         </span>
                       ) : (
                         <div className="flex justify-center">
-                          <XCircle className="h-5 w-5 text-red-500 dark:text-red-400" title="Sem leito" />
+                          <span title="Sem leito" className="inline-flex"><XCircle className="h-5 w-5 text-red-500 dark:text-red-400" /></span>
                         </div>
                       )}
                     </td>
@@ -418,7 +418,7 @@ export default function PacientesInternados() {
                       <td className="px-6 py-4 text-muted-foreground">
                         {p.ds_setor_atendimento || (
                           <div className="flex justify-start">
-                            <XCircle className="h-5 w-5 text-red-500 dark:text-red-400" title="Sem setor" />
+                            <span title="Sem setor" className="inline-flex"><XCircle className="h-5 w-5 text-red-500 dark:text-red-400" /></span>
                           </div>
                         )}
                       </td>
@@ -428,7 +428,7 @@ export default function PacientesInternados() {
                         const d = parseLocalDate(p.dt_entrada);
                         if (!d) return (
                           <div className="flex justify-start">
-                            <XCircle className="h-5 w-5 text-red-500 dark:text-red-400" title="Sem data de entrada" />
+                            <span title="Sem data de entrada" className="inline-flex"><XCircle className="h-5 w-5 text-red-500 dark:text-red-400" /></span>
                           </div>
                         );
                         return `${d.toLocaleDateString('pt-BR')} ${d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`;
@@ -478,7 +478,7 @@ export default function PacientesInternados() {
                         );
                       })() : (
                         <div className="flex justify-center">
-                          <XCircle className="h-5 w-5 text-red-500 dark:text-red-400" title="Sem previsão" />
+                          <span title="Sem previsão" className="inline-flex"><XCircle className="h-5 w-5 text-red-500 dark:text-red-400" /></span>
                         </div>
                       )}
                     </td>
@@ -487,7 +487,7 @@ export default function PacientesInternados() {
                         const d = parseLocalDate(p.ultima_prescricao);
                         if (!d) return (
                           <div className="flex justify-center">
-                            <XCircle className="h-5 w-5 text-red-500 dark:text-red-400" title="Sem prescrição" />
+                            <span title="Sem prescrição" className="inline-flex"><XCircle className="h-5 w-5 text-red-500 dark:text-red-400" /></span>
                           </div>
                         );
                         const diff = new Date().getTime() - d.getTime();
@@ -506,11 +506,11 @@ export default function PacientesInternados() {
                     <td className="px-6 py-4 text-center">
                       {p.teve_evolucao_hoje === 'S' ? (
                         <div className="flex justify-center">
-                          <CheckCircle className="h-5 w-5 text-green-500 dark:text-green-400" title="Sim" />
+                          <span title="Sim" className="inline-flex"><CheckCircle className="h-5 w-5 text-green-500 dark:text-green-400" /></span>
                         </div>
                       ) : (
                         <div className="flex justify-center">
-                          <XCircle className="h-5 w-5 text-red-500 dark:text-red-400" title="Não" />
+                          <span title="Não" className="inline-flex"><XCircle className="h-5 w-5 text-red-500 dark:text-red-400" /></span>
                         </div>
                       )}
                     </td>

@@ -527,8 +527,8 @@ export default function NotificacoesGraficos() {
                   <PieChart>
                     <Tooltip
                       contentStyle={{ borderRadius: '8px', border: '1px solid var(--border)', backgroundColor: 'var(--card)', color: 'var(--card-foreground)' }}
-                      formatter={(value: number, name: string, props: { payload: { percentual: string } }) => [
-                        `${value} casos (${props.payload.percentual})`, name
+                      formatter={(value: number, name: string, props: any) => [
+                        `${value} casos (${props.payload?.percentual || ''})`, name
                       ]}
                     />
                     <Pie
@@ -652,8 +652,8 @@ export default function NotificacoesGraficos() {
                   <PieChart>
                     <Tooltip
                       contentStyle={{ borderRadius: '8px', border: '1px solid var(--border)', backgroundColor: 'var(--card)', color: 'var(--card-foreground)' }}
-                      formatter={(value: number, name: string, props: { payload: { percentual: string } }) => [
-                        `${value} casos (${props.payload.percentual})`, name
+                      formatter={(value: number, name: string, props: any) => [
+                        `${value} casos (${props.payload?.percentual || ''})`, name
                       ]}
                     />
                     <Pie

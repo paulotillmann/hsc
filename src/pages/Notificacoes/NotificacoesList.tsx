@@ -300,7 +300,7 @@ export default function NotificacoesList() {
         drawHeader();
         
         // Footer
-        const str = `Página ${doc.internal.getNumberOfPages()}`;
+        const str = `Página ${doc.getNumberOfPages()}`;
         doc.setFontSize(10);
         const pageSize = doc.internal.pageSize;
         const pageHeight = pageSize.height ? pageSize.height : pageSize.getHeight();
