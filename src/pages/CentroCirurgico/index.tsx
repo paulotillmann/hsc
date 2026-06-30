@@ -491,23 +491,42 @@ export default function CentroCirurgico() {
   }, [fetchCirurgias]);
 
   // Dispara a sincronização de cirurgias assim que o componente é montado (entrada na tela)
-  // e configura o intervalo para buscar a cada 3 minutos
   useEffect(() => {
     runSync();
-
-    syncIntervalRef.current = setInterval(() => {
-      runSync();
-    }, SYNC_INTERVAL_MS);
-
-    return () => {
-      if (syncIntervalRef.current) {
-        clearInterval(syncIntervalRef.current);
-      }
-    };
   }, [runSync]);
 
   useEffect(() => {
     fetchCirurgias();
+
+    const fetchSingleCirurgia = async (id: string) => {
+      try {
+        const { data, error } = await supabase
+          .from('cirurgias')
+          .select(`
+            *,
+            historico_eventos_cirurgia (
+              evento,
+              dt_registro,
+              dt_evento
+            )
+          `)
+          .eq('id', id)
+          .single();
+
+        if (!error && data) {
+          setCirurgias(prev => {
+            const exists = prev.some(c => c.id === id);
+            if (exists) {
+              return prev.map(c => c.id === id ? (data as unknown as Cirurgia) : c);
+            } else {
+              return [...prev, data as unknown as Cirurgia];
+            }
+          });
+        }
+      } catch (err) {
+        console.error('Erro ao buscar cirurgia isolada no realtime:', err);
+      }
+    };
 
     // Inscreve no canal Realtime do Supabase para ouvir qualquer alteração (INSERT, UPDATE, DELETE) na tabela 'cirurgias'
     const channel = supabase
@@ -515,9 +534,22 @@ export default function CentroCirurgico() {
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'cirurgias' },
-        () => {
-          console.log('[Realtime] Alteração detectada na tabela cirurgias. Atualizando dados...');
-          fetchCirurgias();
+        (payload) => {
+          console.log('[Realtime CC] Alteração detectada na tabela cirurgias:', payload.eventType);
+          
+          const { eventType, new: newRecord, old: oldRecord } = payload;
+          
+          if (eventType === 'INSERT' || eventType === 'UPDATE') {
+            const id = (newRecord as any).id;
+            if (id) {
+              fetchSingleCirurgia(id);
+            }
+          } else if (eventType === 'DELETE') {
+            const id = (oldRecord as any).id;
+            if (id) {
+              setCirurgias(prev => prev.filter(c => c.id !== id));
+            }
+          }
         }
       )
       .subscribe();
@@ -853,31 +885,39 @@ export default function CentroCirurgico() {
           </div>
 
           {(isSyncing || (syncMessage && syncMessage.type === 'error') || lastSyncTime) && (
-            <div className="flex items-center gap-2 select-none pr-1">
+            <button
+              onClick={runSync}
+              disabled={isSyncing}
+              className={`flex items-center gap-1.5 px-2 py-0.5 border rounded-md text-[10px] font-semibold transition-all ${
+                isSyncing 
+                  ? 'bg-blue-50 dark:bg-blue-900/10 border-blue-200/30 dark:border-blue-800/30 text-blue-600 dark:text-blue-400' 
+                  : syncMessage && syncMessage.type === 'error' 
+                    ? 'bg-red-50 dark:bg-red-900/10 border-red-200/30 dark:border-red-800/30 text-red-600 dark:text-red-400 hover:bg-red-100/50' 
+                    : 'bg-emerald-50 dark:bg-emerald-900/10 border-emerald-200/30 dark:border-emerald-800/30 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-100/50'
+              }`}
+              title="Clique para sincronizar cirurgias manualmente"
+            >
               {isSyncing ? (
-                <div className="flex items-center gap-1.5">
+                <>
                   <Loader2 className="h-3 w-3 animate-spin text-blue-500" />
-                  <span className="text-blue-600 dark:text-blue-400 font-medium text-[10px]">Sincronizando...</span>
-                </div>
+                  <span>Sincronizando...</span>
+                </>
               ) : syncMessage && syncMessage.type === 'error' ? (
-                <div className="flex items-center gap-1.5">
+                <>
                   <span className="relative flex h-1.5 w-1.5">
                     <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-red-500"></span>
                   </span>
-                  <span className="text-red-600 dark:text-red-400 font-medium text-[10px]">Erro</span>
-                </div>
+                  <span>Erro (Recarregar)</span>
+                </>
               ) : lastSyncTime ? (
-                <div className="flex items-center gap-1.5">
-                  <span className="relative flex h-1.5 w-1.5">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500"></span>
-                  </span>
-                  <span className="text-emerald-600 dark:text-emerald-400 font-medium text-[10px]">
-                    Sync {formatSyncTime(lastSyncTime)}
-                  </span>
-                </div>
-              ) : null}
-            </div>
+                <>
+                  <RefreshCcw className="h-3 w-3 text-emerald-500" />
+                  <span>Sync {formatSyncTime(lastSyncTime)}</span>
+                </>
+              ) : (
+                <span>Sincronizar</span>
+              )}
+            </button>
           )}
         </div>
       </div>
