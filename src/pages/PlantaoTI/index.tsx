@@ -741,6 +741,9 @@ export default function PlantaoTI() {
                   const feriadoInfo = feriadosDoAno[slot.dateStr];
                   const hasFeriado = !!feriadoInfo;
                   const temOcorrenciaDia = diaEscalas.some(e => e.ocorrencias && e.ocorrencias.length > 0);
+                  const temOcorrenciaPresencialDia = diaEscalas.some(
+                    e => e.ocorrencias && e.ocorrencias.some(o => o.atendimento_presencial)
+                  );
 
                   // Estilos de destaque para feriados e pontos facultativos
                   let feriadoClasses = '';
@@ -790,8 +793,15 @@ export default function PlantaoTI() {
                           )}
 
                           {temOcorrenciaDia && (
-                            <span title="Há ocorrências registradas neste dia" className="inline-flex shrink-0">
-                              <FileText className="h-4.5 w-4.5 text-blue-500 dark:text-blue-400" />
+                            <span
+                              title={temOcorrenciaPresencialDia ? "Há ocorrências presenciais registradas neste dia" : "Há ocorrências registradas neste dia"}
+                              className="inline-flex shrink-0"
+                            >
+                              {temOcorrenciaPresencialDia ? (
+                                <MapPin className="h-4.5 w-4.5 text-amber-500 dark:text-amber-400" />
+                              ) : (
+                                <FileText className="h-4.5 w-4.5 text-blue-500 dark:text-blue-400" />
+                              )}
                             </span>
                           )}
 
@@ -817,6 +827,7 @@ export default function PlantaoTI() {
                         {diaEscalas.map(escala => {
                           const estilo = getColaboradorEstilo(escala.profiles?.full_name);
                           const temOcorrenciaPlantonista = escala.ocorrencias && escala.ocorrencias.length > 0;
+                          const temPresencialPlantonista = escala.ocorrencias && escala.ocorrencias.some(o => o.atendimento_presencial);
                           return (
                             <div
                               key={escala.id}
@@ -830,8 +841,15 @@ export default function PlantaoTI() {
                                 </span>
                               </div>
                               {temOcorrenciaPlantonista && (
-                                <span title={`${escala.ocorrencias.length} ocorrência(s) registrada(s)`} className="inline-flex shrink-0">
-                                  <FileText className="h-3.5 w-3.5 text-blue-500 dark:text-blue-400" />
+                                <span
+                                  title={`${escala.ocorrencias.length} ocorrência(s) registrada(s)${temPresencialPlantonista ? ' (incluindo presencial)' : ''}`}
+                                  className="inline-flex shrink-0"
+                                >
+                                  {temPresencialPlantonista ? (
+                                    <MapPin className="h-3.5 w-3.5 text-amber-500 dark:text-amber-400" />
+                                  ) : (
+                                    <FileText className="h-3.5 w-3.5 text-blue-500 dark:text-blue-400" />
+                                  )}
                                 </span>
                               )}
                             </div>
