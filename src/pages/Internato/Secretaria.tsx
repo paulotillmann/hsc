@@ -5,6 +5,13 @@ import {
   Trash2, Edit2, CheckCircle2, XCircle, AlertCircle, RefreshCw, UserPlus, Info,
   Archive, FolderOpen, ChevronLeft, ChevronRight, Upload, Award
 } from 'lucide-react';
+import { 
+  fetchProfessores, 
+  criarProfessor, 
+  atualizarProfessor, 
+  excluirProfessor,
+  Professor 
+} from '../../services/internatoAgendaService';
 
 interface Turma {
   id: string;
@@ -28,6 +35,14 @@ interface Aluno {
     } | null;
   }[];
 }
+
+const TABS = [
+  { id: 'turmas', label: 'Turmas' },
+  { id: 'alunos', label: 'Alunos' },
+  { id: 'presenca', label: 'Frequência' },
+  { id: 'atestados', label: 'Atestados' },
+  { id: 'professores', label: 'Professores' }
+] as const;
 
 const CLINICAS = [
   { id: 'GO', nome: 'Ginecologia e Obstetrícia (G.O.)' },
@@ -110,9 +125,18 @@ interface Atestado {
 }
 
 const Secretaria: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<'turmas' | 'alunos' | 'presenca' | 'atestados'>('turmas');
+  const [activeTab, setActiveTab] = useState<'turmas' | 'alunos' | 'presenca' | 'atestados' | 'professores'>('turmas');
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
+
+  // Estados de Professores
+  const [professores, setProfessores] = useState<Professor[]>([]);
+  const [loadingProfessores, setLoadingProfessores] = useState(false);
+  const [searchTermProfessores, setSearchTermProfessores] = useState('');
+  const [showProfessorModal, setShowProfessorModal] = useState(false);
+  const [showEditProfessorModal, setShowEditProfessorModal] = useState(false);
+  const [professorForm, setProfessorForm] = useState({ nome: '', email: '', especialidade: '' });
+  const [editProfessorForm, setEditProfessorForm] = useState({ id: '', nome: '', email: '', especialidade: '' });
 
   // Estados de dados
   const [turmas, setTurmas] = useState<Turma[]>([]);
@@ -200,6 +224,24 @@ const Secretaria: React.FC = () => {
   useEffect(() => {
     fetchAlunos();
     fetchAtestados();
+    fetchProfessoresData();
+  }, []);
+
+  useEffect(() => {
+    const channel = supabase
+      .channel('internato_professores_realtime')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'internato_professores' },
+        () => {
+          fetchProfessoresData();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   useEffect(() => {
@@ -231,6 +273,71 @@ const Secretaria: React.FC = () => {
 
   const showToast = (text: string, type: 'success' | 'error' = 'success') => {
     setMessage({ text, type });
+  };
+
+  const fetchProfessoresData = async () => {
+    setLoadingProfessores(true);
+    try {
+      const data = await fetchProfessores();
+      setProfessores(data);
+    } catch (err: any) {
+      showToast(err.message || 'Erro ao carregar professores', 'error');
+    } finally {
+      setLoadingProfessores(false);
+    }
+  };
+
+  const handleCreateProfessor = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!professorForm.nome) return;
+
+    try {
+      const res = await criarProfessor(professorForm.nome, professorForm.email || null, professorForm.especialidade || null);
+      if (res.success) {
+        showToast('Professor cadastrado com sucesso!');
+        setProfessorForm({ nome: '', email: '', especialidade: '' });
+        setShowProfessorModal(false);
+        fetchProfessoresData();
+      } else {
+        showToast(res.error || 'Erro ao cadastrar professor', 'error');
+      }
+    } catch (error: any) {
+      showToast(error.message || 'Erro ao cadastrar professor', 'error');
+    }
+  };
+
+  const handleUpdateProfessor = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editProfessorForm.id || !editProfessorForm.nome) return;
+
+    try {
+      const res = await atualizarProfessor(editProfessorForm.id, editProfessorForm.nome, editProfessorForm.email || null, editProfessorForm.especialidade || null);
+      if (res.success) {
+        showToast('Professor atualizado com sucesso!');
+        setShowEditProfessorModal(false);
+        fetchProfessoresData();
+      } else {
+        showToast(res.error || 'Erro ao atualizar professor', 'error');
+      }
+    } catch (error: any) {
+      showToast(error.message || 'Erro ao atualizar professor', 'error');
+    }
+  };
+
+  const handleDeleteProfessor = async (id: string) => {
+    if (!confirm('Deseja realmente remover este professor?')) return;
+
+    try {
+      const res = await excluirProfessor(id);
+      if (res.success) {
+        showToast('Professor removido com sucesso!');
+        fetchProfessoresData();
+      } else {
+        showToast(res.error || 'Erro ao remover professor', 'error');
+      }
+    } catch (error: any) {
+      showToast(error.message || 'Erro ao remover professor', 'error');
+    }
   };
 
   // ----------------------------------------------------
@@ -1011,6 +1118,14 @@ const Secretaria: React.FC = () => {
               <Plus className="h-4 w-4" /> Registrar Atestado
             </button>
           )}
+          {activeTab === 'professores' && (
+            <button 
+              onClick={() => setShowProfessorModal(true)}
+              className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg shadow-sm hover:shadow-md hover:bg-primary/95 transition-all text-sm font-semibold"
+            >
+              <Plus className="h-4 w-4" /> Novo Professor
+            </button>
+          )}
         </div>
       </div>
 
@@ -1018,20 +1133,20 @@ const Secretaria: React.FC = () => {
 
       {/* Navegação por Abas */}
       <div className="flex border-b border-border">
-        {(['turmas', 'alunos'] as const).map(tab => (
+        {TABS.map(tab => (
           <button
-            key={tab}
+            key={tab.id}
             onClick={() => {
-              setActiveTab(tab);
+              setActiveTab(tab.id);
               setSelectedFichaAluno(null);
             }}
-            className={`px-4 py-2.5 border-b-2 text-sm font-semibold capitalize transition-colors ${
-              activeTab === tab 
+            className={`px-4 py-2.5 border-b-2 text-sm font-semibold transition-colors ${
+              activeTab === tab.id 
                 ? 'border-primary text-primary font-bold' 
                 : 'border-transparent text-muted-foreground hover:text-foreground'
             }`}
           >
-            {tab}
+            {tab.label}
           </button>
         ))}
       </div>
@@ -2161,6 +2276,98 @@ const Secretaria: React.FC = () => {
           </div>
         )}
 
+        {/* ABA: PROFESSORES */}
+        {activeTab === 'professores' && (
+          <div className="bg-card border rounded-xl p-4 shadow-sm flex flex-col gap-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <h3 className="font-extrabold text-lg text-slate-800 dark:text-slate-100">Professores Cadastrados</h3>
+                <p className="text-xs text-muted-foreground mt-0.5">Gerencie os professores disponíveis para vinculação na agenda do internato.</p>
+              </div>
+              <div className="relative w-full sm:w-64">
+                <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                <input 
+                  type="text"
+                  placeholder="Buscar professor..."
+                  value={searchTermProfessores}
+                  onChange={e => setSearchTermProfessores(e.target.value)}
+                  className="pl-9 pr-4 py-2 border rounded-lg w-full bg-card placeholder-muted-foreground text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+                />
+              </div>
+            </div>
+            
+            <div className="overflow-auto rounded-lg border border-border max-h-[calc(100vh-17rem)]">
+              <table className="w-full text-left text-sm border-collapse">
+                <thead className="bg-slate-50 dark:bg-slate-900 border-b border-border text-xs font-bold text-muted-foreground uppercase tracking-wider">
+                  <tr>
+                    <th className="px-6 py-3.5">Nome</th>
+                    <th className="px-6 py-3.5">E-mail</th>
+                    <th className="px-6 py-3.5">Especialidade</th>
+                    <th className="px-6 py-3.5 text-center">Ações</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border font-medium">
+                  {loadingProfessores ? (
+                    <tr>
+                      <td colSpan={4} className="px-6 py-10 text-center text-muted-foreground border-none">
+                        <div className="flex items-center justify-center gap-2">
+                          <RefreshCw className="h-4 w-4 animate-spin text-primary" />
+                          <span>Carregando professores...</span>
+                        </div>
+                      </td>
+                    </tr>
+                  ) : professores.filter(p => 
+                      p.nome.toLowerCase().includes(searchTermProfessores.toLowerCase()) || 
+                      (p.email && p.email.toLowerCase().includes(searchTermProfessores.toLowerCase())) ||
+                      (p.especialidade && p.especialidade.toLowerCase().includes(searchTermProfessores.toLowerCase()))
+                    ).length > 0 ? (
+                    professores
+                      .filter(p => 
+                        p.nome.toLowerCase().includes(searchTermProfessores.toLowerCase()) || 
+                        (p.email && p.email.toLowerCase().includes(searchTermProfessores.toLowerCase())) ||
+                        (p.especialidade && p.especialidade.toLowerCase().includes(searchTermProfessores.toLowerCase()))
+                      )
+                      .map(prof => (
+                        <tr key={prof.id} className="hover:bg-muted/40 transition-colors">
+                          <td className="px-6 py-3 text-slate-800 dark:text-slate-200 font-bold">{prof.nome}</td>
+                          <td className="px-6 py-3 text-muted-foreground">{prof.email || 'Não informado'}</td>
+                          <td className="px-6 py-3 text-slate-700 dark:text-slate-300">{prof.especialidade || 'Não informada'}</td>
+                          <td className="px-6 py-3 text-center">
+                            <div className="flex justify-center items-center gap-2">
+                              <button 
+                                onClick={() => {
+                                  setEditProfessorForm({ id: prof.id, nome: prof.nome, email: prof.email || '', especialidade: prof.especialidade || '' });
+                                  setShowEditProfessorModal(true);
+                                }}
+                                className="text-muted-foreground hover:text-primary p-1.5 rounded-lg hover:bg-primary/10 transition-all"
+                                title="Editar Professor"
+                              >
+                                <Edit2 className="h-4.5 w-4.5" />
+                              </button>
+                              <button 
+                                onClick={() => handleDeleteProfessor(prof.id)}
+                                className="text-muted-foreground hover:text-rose-600 p-1.5 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-950/20 transition-all"
+                                title="Remover Professor"
+                              >
+                                <Trash2 className="h-4.5 w-4.5" />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))
+                  ) : (
+                    <tr>
+                      <td colSpan={4} className="px-6 py-10 text-center text-muted-foreground border-none">
+                        Nenhum professor encontrado.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
       </div>
 
       {/* ----------------------------------------------------
@@ -2613,6 +2820,138 @@ const Secretaria: React.FC = () => {
                 <button 
                   type="submit"
                   className="px-4 py-2 bg-primary text-primary-foreground font-semibold rounded-lg hover:bg-primary/95 text-sm"
+                >
+                  Salvar Alterações
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: NOVO PROFESSOR */}
+      {showProfessorModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200">
+          <div className="bg-card border rounded-2xl w-full max-w-md p-6 shadow-xl relative animate-in zoom-in-95 duration-200">
+            <button 
+              onClick={() => setShowProfessorModal(false)}
+              className="absolute right-4 top-4 text-muted-foreground hover:text-foreground p-1 hover:bg-muted rounded-lg"
+            >
+              <X className="h-5 w-5" />
+            </button>
+            <h3 className="font-extrabold text-xl mb-4 text-slate-800 dark:text-white">Cadastrar Novo Professor</h3>
+            
+            <form onSubmit={handleCreateProfessor} className="flex flex-col gap-4">
+              <div>
+                <label className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5 block">Nome Completo</label>
+                <input 
+                  type="text"
+                  required
+                  placeholder="Ex: Dr. João da Silva"
+                  value={professorForm.nome}
+                  onChange={e => setProfessorForm(prev => ({ ...prev, nome: e.target.value }))}
+                  className="w-full border rounded-lg px-3 py-2 bg-card text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5 block">E-mail</label>
+                <input 
+                  type="email"
+                  placeholder="Ex: joao.silva@hsc.com.br"
+                  value={professorForm.email}
+                  onChange={e => setProfessorForm(prev => ({ ...prev, email: e.target.value }))}
+                  className="w-full border rounded-lg px-3 py-2 bg-card text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5 block">Especialidade / Clínica</label>
+                <input 
+                  type="text"
+                  placeholder="Ex: Ginecologia e Obstetrícia, Pediatria..."
+                  value={professorForm.especialidade}
+                  onChange={e => setProfessorForm(prev => ({ ...prev, especialidade: e.target.value }))}
+                  className="w-full border rounded-lg px-3 py-2 bg-card text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 border-t pt-4 mt-2">
+                <button 
+                  type="button"
+                  onClick={() => setShowProfessorModal(false)}
+                  className="px-4 py-2 border rounded-lg text-sm font-semibold hover:bg-muted"
+                >
+                  Cancelar
+                </button>
+                <button 
+                  type="submit"
+                  className="px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-semibold hover:bg-primary/95 shadow-sm"
+                >
+                  Salvar
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: EDITAR PROFESSOR */}
+      {showEditProfessorModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200">
+          <div className="bg-card border rounded-2xl w-full max-w-md p-6 shadow-xl relative animate-in zoom-in-95 duration-200">
+            <button 
+              onClick={() => setShowEditProfessorModal(false)}
+              className="absolute right-4 top-4 text-muted-foreground hover:text-foreground p-1 hover:bg-muted rounded-lg"
+            >
+              <X className="h-5 w-5" />
+            </button>
+            <h3 className="font-extrabold text-xl mb-4 text-slate-800 dark:text-white">Editar Professor</h3>
+            
+            <form onSubmit={handleUpdateProfessor} className="flex flex-col gap-4">
+              <div>
+                <label className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5 block">Nome Completo</label>
+                <input 
+                  type="text"
+                  required
+                  value={editProfessorForm.nome}
+                  onChange={e => setEditProfessorForm(prev => ({ ...prev, nome: e.target.value }))}
+                  className="w-full border rounded-lg px-3 py-2 bg-card text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5 block">E-mail</label>
+                <input 
+                  type="email"
+                  value={editProfessorForm.email}
+                  onChange={e => setEditProfessorForm(prev => ({ ...prev, email: e.target.value }))}
+                  className="w-full border rounded-lg px-3 py-2 bg-card text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5 block">Especialidade / Clínica</label>
+                <input 
+                  type="text"
+                  placeholder="Ex: Ginecologia e Obstetrícia, Pediatria..."
+                  value={editProfessorForm.especialidade}
+                  onChange={e => setEditProfessorForm(prev => ({ ...prev, especialidade: e.target.value }))}
+                  className="w-full border rounded-lg px-3 py-2 bg-card text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 border-t pt-4 mt-2">
+                <button 
+                  type="button"
+                  onClick={() => setShowEditProfessorModal(false)}
+                  className="px-4 py-2 border rounded-lg text-sm font-semibold hover:bg-muted"
+                >
+                  Cancelar
+                </button>
+                <button 
+                  type="submit"
+                  className="px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-semibold hover:bg-primary/95 shadow-sm"
                 >
                   Salvar Alterações
                 </button>
