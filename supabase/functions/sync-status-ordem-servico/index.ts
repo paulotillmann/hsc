@@ -32,6 +32,8 @@ interface N8NOrdemServico {
   DS_SITUACAO: string | null;
   DS_SOLUCAO: string | null;
   DS_RELAT_TECNICO: string | null;
+  HISTORICO: string | null;
+  DT_HISTORICO: string | null;
 }
 
 // Interface representando o schema do PostgreSQL no Supabase (snake_case)
@@ -212,11 +214,7 @@ Deno.serve(async (req: Request) => {
       }
 
       const existing = existingMap.get(nrSeq);
-
-      // Regra de Negócio: Se a OS não existe no banco, ignora
-      if (!existing) {
-        continue;
-      }
+      const isNew = !existing;
 
       // Validação de Alterações
       const newDtAtualizacao = item.DT_ATUALIZACAO ? new Date(item.DT_ATUALIZACAO).toISOString() : null;
@@ -224,21 +222,31 @@ Deno.serve(async (req: Request) => {
       const newDsEstagio = item.DS_ESTAGIO ? String(item.DS_ESTAGIO).trim() : null;
       const newNmUsuarioEncer = item.NM_USUARIO_ENCER ? String(item.NM_USUARIO_ENCER).trim() : null;
 
-      // Comparar datas (seguro contra fusos e nulos)
-      let datesDiffer = false;
-      if (newDtAtualizacao && existing.dt_atualizacao) {
-        datesDiffer = new Date(newDtAtualizacao).getTime() !== new Date(existing.dt_atualizacao).getTime();
-      } else if (newDtAtualizacao !== existing.dt_atualizacao) {
-        datesDiffer = true;
+      let shouldUpsert = false;
+
+      if (isNew) {
+        shouldUpsert = true;
+      } else {
+        // Comparar datas (seguro contra fusos e nulos)
+        let datesDiffer = false;
+        if (newDtAtualizacao && existing.dt_atualizacao) {
+          datesDiffer = new Date(newDtAtualizacao).getTime() !== new Date(existing.dt_atualizacao).getTime();
+        } else if (newDtAtualizacao !== existing.dt_atualizacao) {
+          datesDiffer = true;
+        }
+
+        const statusDiffer = datesDiffer ||
+          existing.ds_situacao !== newDsSituacao ||
+          existing.ds_estagio !== newDsEstagio ||
+          existing.nm_usuario_encer !== newNmUsuarioEncer;
+
+        if (statusDiffer) {
+          shouldUpsert = true;
+        }
       }
 
-      const statusDiffer = datesDiffer ||
-        existing.ds_situacao !== newDsSituacao ||
-        existing.ds_estagio !== newDsEstagio ||
-        existing.nm_usuario_encer !== newNmUsuarioEncer;
-
-      // Só atualiza se houver alguma diferença
-      if (statusDiffer) {
+      // Só atualiza ou insere se houver alteração ou for nova
+      if (shouldUpsert) {
         const mappedRecord: DBOrdemServico = {
           nr_sequencia: nrSeq,
           ds_grupo_des: item.DS_GRUPO_DES ? String(item.DS_GRUPO_DES).trim() : null,
@@ -264,7 +272,7 @@ Deno.serve(async (req: Request) => {
           nr_seq_estagio: item.NR_SEQ_ESTAGIO ? Number(item.NR_SEQ_ESTAGIO) : null,
           ds_situacao: newDsSituacao,
           ds_solucao: item.DS_SOLUCAO ? cleanHTML(item.DS_SOLUCAO) : null,
-          ds_relat_tecnico: item.DS_RELAT_TECNICO ? cleanHTML(item.DS_RELAT_TECNICO) : null,
+          ds_relat_tecnico: (item.HISTORICO || item.DS_RELAT_TECNICO) ? cleanHTML(item.HISTORICO || item.DS_RELAT_TECNICO) : null,
         };
 
         recordsToUpdate.push(mappedRecord);
@@ -301,18 +309,22 @@ Deno.serve(async (req: Request) => {
 
     const { data: existingRelatos, error: relatoQueryError } = await supabase
       .from('historico_ordem_servico')
-      .select('nr_sequencia, ds_relat_tecnico, created_at')
+      .select('nr_sequencia, ds_relat_tecnico, dt_historico, created_at')
       .in('nr_sequencia', nrSequenciasAtualizadas)
+      .order('dt_historico', { ascending: false })
       .order('created_at', { ascending: false });
 
     if (relatoQueryError) {
       console.error('[Sync Status OS] Erro ao consultar historico_ordem_servico:', relatoQueryError.message);
     } else {
-      const latestRelatoMap = new Map<number, string>();
+      const latestRelatoMap = new Map<number, { text: string; date: string | null }>();
       if (existingRelatos && existingRelatos.length > 0) {
         for (const r of existingRelatos) {
           if (!latestRelatoMap.has(r.nr_sequencia)) {
-            latestRelatoMap.set(r.nr_sequencia, (r.ds_relat_tecnico || '').trim());
+            latestRelatoMap.set(r.nr_sequencia, {
+              text: (r.ds_relat_tecnico || '').trim(),
+              date: r.dt_historico ? new Date(r.dt_historico).toISOString() : null
+            });
           }
         }
       }
@@ -320,22 +332,38 @@ Deno.serve(async (req: Request) => {
       const relatosToInsert: Array<{
         nr_sequencia: number;
         ds_relat_tecnico: string;
+        dt_historico: string | null;
         nm_usuario: string | null;
       }> = [];
 
       for (const item of rawDataToUpdate) {
         const nrSeq = Number(item.NR_SEQUENCIA);
-        const novoRelato = item.DS_RELAT_TECNICO ? cleanHTML(item.DS_RELAT_TECNICO) : '';
+        const novoRelato = item.HISTORICO ? cleanHTML(item.HISTORICO) : '';
+        const novaDataStr = item.DT_HISTORICO ? new Date(item.DT_HISTORICO).toISOString() : null;
 
         if (novoRelato !== '') {
-          const ultimoGravado = latestRelatoMap.get(nrSeq) || '';
-          if (novoRelato !== ultimoGravado) {
+          const ultimoGravado = latestRelatoMap.get(nrSeq);
+          
+          let isDifferent = true;
+          if (ultimoGravado) {
+            if (novaDataStr && ultimoGravado.date) {
+              isDifferent = new Date(novaDataStr).getTime() !== new Date(ultimoGravado.date).getTime();
+            } else {
+              isDifferent = novoRelato !== ultimoGravado.text;
+            }
+          }
+
+          if (isDifferent) {
             relatosToInsert.push({
               nr_sequencia: nrSeq,
               ds_relat_tecnico: novoRelato,
+              dt_historico: novaDataStr,
               nm_usuario: item.NM_USUARIO ? String(item.NM_USUARIO).trim() : null
             });
-            latestRelatoMap.set(nrSeq, novoRelato);
+            latestRelatoMap.set(nrSeq, {
+              text: novoRelato,
+              date: novaDataStr
+            });
           }
         }
       }

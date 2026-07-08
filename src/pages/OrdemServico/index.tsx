@@ -285,6 +285,7 @@ export default function OrdemServico() {
         .from('historico_ordem_servico')
         .select('*')
         .eq('nr_sequencia', os.nr_sequencia)
+        .order('dt_historico', { ascending: false, nullsFirst: false })
         .order('created_at', { ascending: false });
 
       if (relatoError) throw relatoError;
@@ -397,6 +398,7 @@ export default function OrdemServico() {
         .from('historico_ordem_servico')
         .select('*')
         .eq('nr_sequencia', os.nr_sequencia)
+        .order('dt_historico', { ascending: false, nullsFirst: false })
         .order('created_at', { ascending: false });
 
       if (!relatoError) {
@@ -1393,7 +1395,7 @@ export default function OrdemServico() {
                           <span className="font-semibold text-foreground/75">
                             {hist.nm_usuario || 'Sistema'}
                           </span>
-                          <span>{formatDate(hist.created_at)}</span>
+                          <span>{formatDate(hist.dt_historico || hist.created_at)}</span>
                         </div>
                         <p className="text-sm text-foreground/90 whitespace-pre-wrap leading-relaxed break-words border-t border-border/40 pt-2">
                           {hist.ds_relat_tecnico}
