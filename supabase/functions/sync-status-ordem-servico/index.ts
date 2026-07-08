@@ -34,6 +34,7 @@ interface N8NOrdemServico {
   DS_RELAT_TECNICO: string | null;
   HISTORICO: string | null;
   DT_HISTORICO: string | null;
+  NR_GRUPO_PLANEJ: number | null;
 }
 
 // Interface representando o schema do PostgreSQL no Supabase (snake_case)
@@ -63,6 +64,7 @@ interface DBOrdemServico {
   ds_situacao: string | null;
   ds_solucao: string | null;
   ds_relat_tecnico: string | null;
+  nr_grupo_planej: number | null;
 }
 
 const corsHeaders = {
@@ -192,20 +194,24 @@ Deno.serve(async (req: Request) => {
 
       const nrSeq = Number(item.NR_SEQUENCIA);
 
-      // Validar se o grupo de destino pertence à Manutenção
+      // Validar o grupo de planejamento (apenas grupo 22 - TI)
+      const nrGrupoPlanej = item.NR_GRUPO_PLANEJ !== undefined && item.NR_GRUPO_PLANEJ !== null ? Number(item.NR_GRUPO_PLANEJ) : null;
+      
+      // Validar se o grupo de destino pertence à Manutenção (fallback secundário)
       const dsGrupo = item.DS_GRUPO_DES ? String(item.DS_GRUPO_DES).trim() : '';
       const isManutencao = dsGrupo.toLowerCase().includes('manuten');
 
-      if (isManutencao) {
+      // Se a OS não for do grupo de planejamento 22 (TI) ou for identificada como manutenção, remove do banco
+      if ((nrGrupoPlanej !== null && nrGrupoPlanej !== 22) || isManutencao) {
         const existing = existingMap.get(nrSeq);
         if (existing) {
-          console.log(`[Sync Status OS] Detectada OS de manutenção (${nrSeq}). Executando DELETE...`);
+          console.log(`[Sync Status OS] OS #${nrSeq} fora do grupo de TI (Grupo Planejamento: ${nrGrupoPlanej}). Executando DELETE...`);
           const { error: deleteError } = await supabase
             .from('ordem_servico')
             .delete()
             .eq('nr_sequencia', nrSeq);
           if (deleteError) {
-            console.error(`[Sync Status OS] Erro ao deletar OS de manutenção ${nrSeq}:`, deleteError.message);
+            console.error(`[Sync Status OS] Erro ao deletar OS ${nrSeq}:`, deleteError.message);
           } else {
             deletedSequences.add(nrSeq);
           }
@@ -273,6 +279,7 @@ Deno.serve(async (req: Request) => {
           ds_situacao: newDsSituacao,
           ds_solucao: item.DS_SOLUCAO ? cleanHTML(item.DS_SOLUCAO) : null,
           ds_relat_tecnico: (item.HISTORICO || item.DS_RELAT_TECNICO) ? cleanHTML(item.HISTORICO || item.DS_RELAT_TECNICO) : null,
+          nr_grupo_planej: nrGrupoPlanej,
         };
 
         recordsToUpdate.push(mappedRecord);
