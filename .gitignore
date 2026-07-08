@@ -42,3 +42,8 @@ public/informes/INFORME_*.pdf
 # Temporary output files
 output_test.txt
 
+# Supabase CLI
+supabase.exe
+supabase-go.exe
+
+

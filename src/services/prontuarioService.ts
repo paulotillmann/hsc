@@ -624,7 +624,7 @@ export async function disponibilizarDocumento(
       .update({
         status: status_novo,
         arquivo_url: pdfUrl,
-        arquivo_name: file.name,
+        arquivo_nome: file.name,
         responsavel_id: usuarioId,
         responsavel_nome: usuarioNome,
         data_finalizacao: new Date().toISOString(),
@@ -651,7 +651,7 @@ export async function disponibilizarDocumento(
       const status_anterior = local[index].status;
       local[index].status = status_novo;
       local[index].arquivo_url = pdfUrl;
-      local[index].arquivo_name = file.name;
+      local[index].arquivo_nome = file.name;
       local[index].responsavel_id = usuarioId;
       local[index].responsavel_nome = usuarioNome;
       local[index].data_finalizacao = new Date().toISOString();
@@ -822,12 +822,12 @@ export async function atualizarSolicitacaoCompleta(
       updateData.data_finalizacao = dataAtual;
       if (pdfUrl) {
         updateData.arquivo_url = pdfUrl;
-        updateData.arquivo_name = pdfName;
+        updateData.arquivo_nome = pdfName;
       }
     } else if (novoStatus === 'Aprovado') {
       if (pdfUrl) {
         updateData.arquivo_url = pdfUrl;
-        updateData.arquivo_name = pdfName;
+        updateData.arquivo_nome = pdfName;
       }
     }
 
@@ -866,12 +866,12 @@ export async function atualizarSolicitacaoCompleta(
         local[index].data_finalizacao = dataAtual;
         if (pdfUrl) {
           local[index].arquivo_url = pdfUrl;
-          local[index].arquivo_name = pdfName;
+          local[index].arquivo_nome = pdfName;
         }
       } else if (novoStatus === 'Aprovado') {
         if (pdfUrl) {
           local[index].arquivo_url = pdfUrl;
-          local[index].arquivo_name = pdfName;
+          local[index].arquivo_nome = pdfName;
         }
       }
 
@@ -880,3 +880,38 @@ export async function atualizarSolicitacaoCompleta(
     }
   }
 }
+
+/**
+ * Cria uma solicitação de teste no banco de dados.
+ */
+export async function criarSolicitacaoTeste(): Promise<void> {
+  const nomesTeste = ['Antônio da Silva Santos', 'Regina Célia de Souza', 'Cláudio Ferreira Lima', 'Beatriz Rocha Melo'];
+  const cpfsTeste = ['111.222.333-44', '555.666.777-88', '999.888.777-66', '333.444.555-66'];
+  const contatosTeste = ['(34) 98888-7777', '(34) 99999-8888', '(34) 97777-6666', '(34) 96666-5555'];
+  const motivosTeste = [
+    'Consulta com cardiologista em outra clínica médica.',
+    'Necessidade de histórico cirúrgico completo para perícia médica.',
+    'Apresentação de prontuário em processo judicial de aposentadoria.',
+    'Acompanhamento de tratamento oncológico de rotina.'
+  ];
+
+  const indice = Math.floor(Math.random() * nomesTeste.length);
+
+  const novaSolicitacao = {
+    paciente_nome: nomesTeste[indice],
+    paciente_cpf: cpfsTeste[indice],
+    paciente_data_nascimento: '1980-01-01',
+    paciente_contato: contatosTeste[indice],
+    motivo: motivosTeste[indice],
+    observacoes: 'SOLICITAÇÃO DE TESTE DO SISTEMA',
+    status: 'Pendente',
+    tipo_solicitacao: Math.random() > 0.5 ? 'Digital' : 'Físico'
+  };
+
+  const { error } = await supabase
+    .from('solicitacoes_prontuario')
+    .insert(novaSolicitacao);
+
+  if (error) throw error;
+}
+

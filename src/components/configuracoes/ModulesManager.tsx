@@ -8,6 +8,7 @@ import {
   ToggleLeft, ToggleRight, PackagePlus,
 } from 'lucide-react';
 import { Role } from '../../types/permissions';
+import { useAuth } from '../../contexts/AuthContext';
 import {
   fetchModulesWithRoles, ModuleWithRoles,
   createModule, updateModule, deleteModule, setRoleModuleAccess,
@@ -182,6 +183,7 @@ const ModuleModal: React.FC<{
 
 // ── ModulesManager ────────────────────────────────────────────────────────────
 const ModulesManager: React.FC<ModulesManagerProps> = ({ roles, showToast }) => {
+  const { refreshProfile } = useAuth();
   const [modules, setModules] = useState<ModuleWithRoles[]>([]);
   const [loading, setLoading] = useState(true);
   const [modal, setModal] = useState<ModuleForm | null>(null);
@@ -227,7 +229,12 @@ const ModulesManager: React.FC<ModulesManagerProps> = ({ roles, showToast }) => 
 
   const handleToggleActive = async (m: ModuleWithRoles) => {
     const result = await updateModule(m.id, { is_active: !m.is_active });
-    result.success ? loadModules() : showToast('error', result.error || 'Erro ao atualizar status.');
+    if (result.success) {
+      await loadModules();
+      await refreshProfile();
+    } else {
+      showToast('error', result.error || 'Erro ao atualizar status.');
+    }
   };
 
   const handleAccessToggle = async (roleId: string, moduleId: string, currentHasAccess: boolean) => {
@@ -235,7 +242,12 @@ const ModulesManager: React.FC<ModulesManagerProps> = ({ roles, showToast }) => 
     setTogglingAccess(key);
     const result = await setRoleModuleAccess(roleId, moduleId, !currentHasAccess);
     setTogglingAccess(null);
-    result.success ? await loadModules() : showToast('error', result.error || 'Erro ao atualizar permissão.');
+    if (result.success) {
+      await loadModules();
+      await refreshProfile();
+    } else {
+      showToast('error', result.error || 'Erro ao atualizar permissão.');
+    }
   };
 
   if (loading) {
