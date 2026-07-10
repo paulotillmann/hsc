@@ -67,5 +67,38 @@ export const webhookService = {
       console.error('Error in webhook triggerConsultaFaturamentos:', error);
       return null;
     }
+  },
+
+  /**
+   * Trigger the "Financeiro" webhook
+   * @param payload Data containing filters like dateFrom, dateTo, etc.
+   */
+  async triggerFinanceiro(payload: any = {}): Promise<any> {
+    const webhookUrl = import.meta.env.VITE_N8N_WEBHOOK_FINANCEIRO || 'https://n8n-n8n.7woir1.easypanel.host/webhook/financeiro';
+    
+    if (!webhookUrl) {
+      console.error('Webhook URL (VITE_N8N_WEBHOOK_FINANCEIRO) is not configured.');
+      return null;
+    }
+
+    try {
+      const response = await fetch(webhookUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Error triggering webhook: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      return data;
+    } catch (error) {
+      console.error('Error in webhook triggerFinanceiro:', error);
+      return null;
+    }
   }
 };

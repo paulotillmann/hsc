@@ -32,26 +32,26 @@ interface UsePermissionsReturn {
 export function usePermissions(): UsePermissionsReturn {
   const { permissions, isAdmin, userModules: rawUserModules } = useAuth();
 
-  // Injeta o módulo de Gestão de Prontuários no localhost para fins de desenvolvimento
+  // Injeta os módulos de Gestão de Prontuários no localhost para fins de desenvolvimento
   const userModules = useMemo(() => {
     const hasProntuarios = rawUserModules.some(m => m.slug === 'gestao-prontuarios');
+    let list = [...rawUserModules];
+
     if (!hasProntuarios) {
-      return [
-        ...rawUserModules,
-        {
-          id: 'm-gestao-prontuarios',
-          name: 'Gestão de Prontuários',
-          slug: 'gestao-prontuarios',
-          icon: 'FileSpreadsheet',
-          is_active: true,
-          sort_order: 85,
-          is_system: false,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        }
-      ].sort((a, b) => a.sort_order - b.sort_order);
+      list.push({
+        id: 'm-gestao-prontuarios',
+        name: 'Gestão de Prontuários',
+        slug: 'gestao-prontuarios',
+        icon: 'FileSpreadsheet',
+        is_active: true,
+        sort_order: 85,
+        is_system: false,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      });
     }
-    return rawUserModules;
+
+    return list.sort((a, b) => a.sort_order - b.sort_order);
   }, [rawUserModules]);
 
   // Verifica permissão de ação (colunas booleanas na tabela roles)

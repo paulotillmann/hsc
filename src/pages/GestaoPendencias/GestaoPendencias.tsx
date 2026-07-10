@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   ClipboardList, AlertTriangle, CheckCircle2, Clock, 
@@ -436,6 +436,41 @@ export default function GestaoPendencias() {
     }
   };
 
+  // Referência para sempre executar a versão mais atualizada da função de sincronização sem reiniciar o timer
+  const syncRef = useRef(handleSyncWithWebhook);
+  useEffect(() => {
+    syncRef.current = handleSyncWithWebhook;
+  });
+
+  const timerRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Função para reiniciar o cronômetro de 5 minutos
+  const resetInterval = useCallback(() => {
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+    }
+    timerRef.current = setInterval(() => {
+      // Executa a sincronização em segundo plano se não estiver carregando no momento
+      syncRef.current();
+    }, 5 * 60 * 1000); // 5 minutos
+  }, []);
+
+  // Inicia o temporizador no carregamento inicial da tela
+  useEffect(() => {
+    resetInterval();
+    return () => {
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+      }
+    };
+  }, [resetInterval]);
+
+  // Função de sincronização manual que também reinicia o cronômetro automático
+  const handleManualSync = async () => {
+    await handleSyncWithWebhook();
+    resetInterval();
+  };
+
   // Carregamento inicial inteligente com cache em sessionStorage
   useEffect(() => {
     try {
@@ -801,7 +836,7 @@ export default function GestaoPendencias() {
           </button>
 
           <button
-            onClick={handleSyncWithWebhook}
+            onClick={handleManualSync}
             disabled={loading}
             className="w-full md:w-auto inline-flex items-center justify-center rounded-md text-sm font-semibold bg-primary text-primary-foreground hover:opacity-90 disabled:opacity-50 h-10 px-5 transition-all shadow-sm shadow-primary/15"
           >

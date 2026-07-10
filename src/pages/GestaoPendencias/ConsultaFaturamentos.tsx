@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   DollarSign, Search, Filter, RefreshCw, FileText, 
@@ -295,6 +295,41 @@ const ConsultaFaturamentos: React.FC = () => {
     }
   }, [periodFrom, periodTo]);
 
+  // Referência para sempre executar a versão mais atualizada da função de sincronização sem reiniciar o timer
+  const syncRef = useRef(fetchFaturamentos);
+  useEffect(() => {
+    syncRef.current = fetchFaturamentos;
+  });
+
+  const timerRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Função para reiniciar o cronômetro de 5 minutos
+  const resetInterval = useCallback(() => {
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+    }
+    timerRef.current = setInterval(() => {
+      // Executa a sincronização em segundo plano se não estiver carregando no momento
+      syncRef.current(false, true);
+    }, 5 * 60 * 1000); // 5 minutos
+  }, []);
+
+  // Inicia o temporizador no carregamento inicial da tela
+  useEffect(() => {
+    resetInterval();
+    return () => {
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+      }
+    };
+  }, [resetInterval]);
+
+  // Função de sincronização manual que também reinicia o cronômetro automático
+  const handleManualSync = async () => {
+    await fetchFaturamentos(true, true);
+    resetInterval();
+  };
+
   // Carrega ao iniciar e quando o período muda
   useEffect(() => {
     fetchFaturamentos();
@@ -537,7 +572,7 @@ const ConsultaFaturamentos: React.FC = () => {
           )}
 
           <button
-            onClick={() => fetchFaturamentos(true, true)}
+            onClick={handleManualSync}
             disabled={loading}
             className="flex items-center justify-center rounded-md text-sm font-semibold bg-card border border-border text-foreground hover:bg-muted h-10 w-10 transition-all shadow-sm"
             title="Atualizar dados"
