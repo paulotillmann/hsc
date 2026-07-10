@@ -624,7 +624,7 @@ export async function disponibilizarDocumento(
       .update({
         status: status_novo,
         arquivo_url: pdfUrl,
-        arquivo_name: file.name,
+        arquivo_nome: file.name,
         responsavel_id: usuarioId,
         responsavel_nome: usuarioNome,
         data_finalizacao: new Date().toISOString(),
@@ -651,7 +651,7 @@ export async function disponibilizarDocumento(
       const status_anterior = local[index].status;
       local[index].status = status_novo;
       local[index].arquivo_url = pdfUrl;
-      local[index].arquivo_name = file.name;
+      local[index].arquivo_nome = file.name;
       local[index].responsavel_id = usuarioId;
       local[index].responsavel_nome = usuarioNome;
       local[index].data_finalizacao = new Date().toISOString();
@@ -822,12 +822,12 @@ export async function atualizarSolicitacaoCompleta(
       updateData.data_finalizacao = dataAtual;
       if (pdfUrl) {
         updateData.arquivo_url = pdfUrl;
-        updateData.arquivo_name = pdfName;
+        updateData.arquivo_nome = pdfName;
       }
     } else if (novoStatus === 'Aprovado') {
       if (pdfUrl) {
         updateData.arquivo_url = pdfUrl;
-        updateData.arquivo_name = pdfName;
+        updateData.arquivo_nome = pdfName;
       }
     }
 
@@ -866,12 +866,12 @@ export async function atualizarSolicitacaoCompleta(
         local[index].data_finalizacao = dataAtual;
         if (pdfUrl) {
           local[index].arquivo_url = pdfUrl;
-          local[index].arquivo_name = pdfName;
+          local[index].arquivo_nome = pdfName;
         }
       } else if (novoStatus === 'Aprovado') {
         if (pdfUrl) {
           local[index].arquivo_url = pdfUrl;
-          local[index].arquivo_name = pdfName;
+          local[index].arquivo_nome = pdfName;
         }
       }
 

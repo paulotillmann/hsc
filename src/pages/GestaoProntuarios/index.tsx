@@ -694,7 +694,7 @@ export default function GestaoProntuarios() {
                       <div className="p-3.5 bg-emerald-50/30 border border-emerald-100 rounded-xl flex items-center justify-between text-xs dark:bg-emerald-950/5 dark:border-emerald-900/20">
                         <div className="flex items-center gap-2 truncate">
                           <FileCheck className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-                          <span className="font-semibold text-foreground truncate">{selectedSolicitacao.arquivo_name}</span>
+                          <span className="font-semibold text-foreground truncate">{selectedSolicitacao.arquivo_nome}</span>
                         </div>
                         <a
                           href={selectedSolicitacao.arquivo_url}
