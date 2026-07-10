@@ -161,7 +161,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [profileLoaded, setProfileLoaded] = useState(false);
 
   const setUserModules = (modules: Module[]) => {
-    setUserModulesState(modules);
+    setUserModulesState([...modules].sort((a, b) => a.sort_order - b.sort_order));
   };
 
   // ── Busca o profile com JOIN em roles + módulos do perfil ──────────────────

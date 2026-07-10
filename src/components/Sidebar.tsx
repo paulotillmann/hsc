@@ -20,6 +20,7 @@ const Sidebar: React.FC = () => {
     if (window.location.pathname.startsWith('/taxa-ocupacao')) return 'assistencial';
     if (window.location.pathname.startsWith('/pronto-atendimento') || window.location.pathname.startsWith('/pacientes-internados') || window.location.pathname.startsWith('/centro-cirurgico')) return 'assistencial';
     if (window.location.pathname.startsWith('/gestao-pendencias')) return 'faturamento';
+    if (window.location.pathname.startsWith('/financeiro')) return 'financeiro';
     if (window.location.pathname.startsWith('/gestao-escuta-santa-casa')) return 'gestao-escuta-santa-casa';
     if (window.location.pathname.startsWith('/gestao-prontuarios')) return 'gestao-prontuarios';
     if (window.location.pathname.startsWith('/plantao-ti') || window.location.pathname.startsWith('/ordem-servico') || window.location.pathname.startsWith('/ordem-servico-mobile') || window.location.pathname.startsWith('/equipamentos')) return 'tecnologia-informacao';
@@ -54,6 +55,8 @@ const Sidebar: React.FC = () => {
       setExpandedMenu('assistencial');
     } else if (location.pathname.startsWith('/gestao-pendencias')) {
       setExpandedMenu('faturamento');
+    } else if (location.pathname.startsWith('/financeiro')) {
+      setExpandedMenu('financeiro');
     } else if (location.pathname.startsWith('/gestao-escuta-santa-casa')) {
       setExpandedMenu('gestao-escuta-santa-casa');
     } else if (location.pathname.startsWith('/gestao-prontuarios')) {
@@ -772,6 +775,56 @@ const Sidebar: React.FC = () => {
                         }
                       >
                         Consulta Faturamentos
+                      </NavLink>
+                    </div>
+                  )}
+                </div>
+              );
+            }
+ 
+            if (module.slug === 'financeiro') {
+              const isActiveLocal = location.pathname.startsWith('/financeiro');
+              return (
+                <div key={module.slug} className="flex flex-col">
+                  {isCollapsed ? (
+                    <NavLink
+                      to="/financeiro/tesouraria"
+                      title="Financeiro"
+                      className={navLinkClass(isActiveLocal)}
+                    >
+                      <DynamicIcon name="Wallet" className="h-5 w-5 flex-shrink-0" />
+                    </NavLink>
+                  ) : (
+                    <button
+                      onClick={() => {
+                        setExpandedMenu(expandedMenu === 'financeiro' ? null : 'financeiro');
+                        if (!isActiveLocal) navigate('/financeiro/tesouraria');
+                      }}
+                      className={`flex items-center rounded-md text-sm transition-all duration-200 justify-start gap-3 px-3 py-2 w-full ${isActiveLocal
+                        ? 'bg-primary text-primary-foreground shadow-sm hover:shadow-md hover:shadow-primary/20 font-medium'
+                        : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
+                        }`}
+                    >
+                      <DynamicIcon name="Wallet" className="h-5 w-5 flex-shrink-0" />
+                      <div className="flex flex-1 items-center justify-between">
+                        <span className="truncate">Financeiro</span>
+                        <ChevronRight className={`h-4 w-4 transition-transform ${expandedMenu === 'financeiro' ? 'rotate-90' : ''}`} />
+                      </div>
+                    </button>
+                  )}
+
+                  {!isCollapsed && expandedMenu === 'financeiro' && (
+                    <div className="flex flex-col ml-9 mt-1 gap-1 border-l-2 border-border pl-2 border-primary/20">
+                      <NavLink
+                        to="/financeiro/tesouraria"
+                        className={({ isActive }) =>
+                          `text-sm px-3 py-2 rounded-md transition-colors ${isActive
+                            ? 'bg-primary text-primary-foreground shadow-sm font-medium'
+                            : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
+                          }`
+                        }
+                      >
+                        Tesouraria
                       </NavLink>
                     </div>
                   )}
