@@ -20,7 +20,7 @@ INSERT INTO public.roles (name, slug, can_upload, can_send_email, can_view_all, 
 SELECT 'Colaborador', 'user', false, false, false, true, true, false, true
 WHERE NOT EXISTS (SELECT 1 FROM public.roles WHERE slug = 'user');
 
--- Role: Financeiro (acesso ao módulo financeiro + faturamento)
+-- Role: Financeiro (acesso exclusivo ao módulo financeiro)
 INSERT INTO public.roles (name, slug, can_upload, can_send_email, can_view_all, can_informes, can_holerites, can_config, is_system)
 SELECT 'Financeiro', 'financeiro', false, false, true, false, false, false, false
 WHERE NOT EXISTS (SELECT 1 FROM public.roles WHERE slug = 'financeiro');
@@ -132,13 +132,13 @@ WHERE r.slug = 'user'
   AND m.slug IN ('dashboard', 'informes', 'holerites')
 ON CONFLICT DO NOTHING;
 
--- 3.3 FINANCEIRO: acesso ao módulo financeiro + faturamento + dashboard
+-- 3.3 FINANCEIRO: acesso apenas ao módulo financeiro
 INSERT INTO public.role_module_permissions (role_id, module_id)
 SELECT r.id, m.id
 FROM public.roles r
 CROSS JOIN public.modules m
 WHERE r.slug = 'financeiro'
-  AND m.slug IN ('dashboard', 'financeiro', 'gestao-pendencias')
+  AND m.slug IN ('financeiro')
 ON CONFLICT DO NOTHING;
 
 -- 3.4 FATURAMENTO: acesso ao módulo de gestão de pendências + dashboard

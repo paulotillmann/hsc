@@ -172,28 +172,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [profileLoaded, setProfileLoaded] = useState(false);
 
   const setUserModules = (modules: Module[]) => {
-    if (modules.length === 0) {
-      setUserModulesState([]);
-      return;
-    }
-    const hasProntuarios = modules.some(m => m.slug === 'gestao-prontuarios');
-    let list = [...modules];
-
-    if (!hasProntuarios) {
-      list.push({
-        id: 'm-gestao-prontuarios',
-        name: 'Gestão de Prontuários',
-        slug: 'gestao-prontuarios',
-        icon: 'FileSpreadsheet',
-        is_active: true,
-        sort_order: 85,
-        is_system: false,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      });
-    }
-
-    setUserModulesState(list.sort((a, b) => a.sort_order - b.sort_order));
+    setUserModulesState([...modules].sort((a, b) => a.sort_order - b.sort_order));
   };
 
   // ── Busca o profile com JOIN em roles + módulos do perfil ──────────────────
