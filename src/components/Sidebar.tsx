@@ -22,9 +22,9 @@ const Sidebar: React.FC = () => {
     if (window.location.pathname.startsWith('/gestao-pendencias')) return 'faturamento';
     if (window.location.pathname.startsWith('/gestao-escuta-santa-casa')) return 'gestao-escuta-santa-casa';
     if (window.location.pathname.startsWith('/gestao-prontuarios')) return 'gestao-prontuarios';
-    if (window.location.pathname.startsWith('/plantao-ti') || window.location.pathname.startsWith('/ordem-servico') || window.location.pathname.startsWith('/ordem-servico-mobile')) return 'tecnologia-informacao';
+    if (window.location.pathname.startsWith('/plantao-ti') || window.location.pathname.startsWith('/ordem-servico') || window.location.pathname.startsWith('/ordem-servico-mobile') || window.location.pathname.startsWith('/equipamentos')) return 'tecnologia-informacao';
     if (window.location.pathname.startsWith('/dashboard') || window.location.pathname.startsWith('/holerites') || window.location.pathname.startsWith('/informes')) return 'recursos-humanos';
-    if (window.location.pathname.startsWith('/internato-secretaria') || window.location.pathname.startsWith('/internato-notas')) return 'internato';
+    if (window.location.pathname.startsWith('/internato-secretaria') || window.location.pathname.startsWith('/internato-notas') || window.location.pathname.startsWith('/internato-agenda')) return 'internato';
     return null;
   });
 
@@ -58,11 +58,11 @@ const Sidebar: React.FC = () => {
       setExpandedMenu('gestao-escuta-santa-casa');
     } else if (location.pathname.startsWith('/gestao-prontuarios')) {
       setExpandedMenu('gestao-prontuarios');
-    } else if (location.pathname.startsWith('/plantao-ti') || location.pathname.startsWith('/ordem-servico') || location.pathname.startsWith('/ordem-servico-mobile')) {
+    } else if (location.pathname.startsWith('/plantao-ti') || location.pathname.startsWith('/ordem-servico') || location.pathname.startsWith('/ordem-servico-mobile') || location.pathname.startsWith('/equipamentos')) {
       setExpandedMenu('tecnologia-informacao');
     } else if (location.pathname.startsWith('/dashboard') || location.pathname.startsWith('/holerites') || location.pathname.startsWith('/informes')) {
       setExpandedMenu('recursos-humanos');
-    } else if (location.pathname.startsWith('/internato-secretaria') || location.pathname.startsWith('/internato-notas')) {
+    } else if (location.pathname.startsWith('/internato-secretaria') || location.pathname.startsWith('/internato-notas') || location.pathname.startsWith('/internato-agenda')) {
       setExpandedMenu('internato');
     }
   }, [location.pathname, isCollapsed]);
@@ -343,8 +343,9 @@ const Sidebar: React.FC = () => {
         {(() => {
           const hasPlantaoTiAccess = userModules.some(m => m.slug === 'plantao-ti');
           const hasOrdemServicoAccess = userModules.some(m => m.slug === 'ordem-servico');
-          const showTI = hasPlantaoTiAccess || hasOrdemServicoAccess;
-          const isTIActive = location.pathname.startsWith('/plantao-ti') || location.pathname.startsWith('/ordem-servico') || location.pathname.startsWith('/ordem-servico-mobile');
+          const hasEquipamentosAccess = userModules.some(m => m.slug === 'equipamentos');
+          const showTI = hasPlantaoTiAccess || hasOrdemServicoAccess || hasEquipamentosAccess;
+          const isTIActive = location.pathname.startsWith('/plantao-ti') || location.pathname.startsWith('/ordem-servico') || location.pathname.startsWith('/ordem-servico-mobile') || location.pathname.startsWith('/equipamentos');
 
           if (!showTI) return null;
 
@@ -352,7 +353,7 @@ const Sidebar: React.FC = () => {
             <div className="flex flex-col">
               {isCollapsed ? (
                 <NavLink
-                  to={hasPlantaoTiAccess ? "/plantao-ti" : "/ordem-servico"}
+                  to={hasPlantaoTiAccess ? "/plantao-ti" : (hasOrdemServicoAccess ? "/ordem-servico" : "/equipamentos")}
                   title="T.I"
                   className={navLinkClass(isTIActive)}
                 >
@@ -416,6 +417,19 @@ const Sidebar: React.FC = () => {
                         Ordem de Serviço (Móbile)
                       </NavLink>
                     </>
+                  )}
+                  {hasEquipamentosAccess && (
+                    <NavLink
+                      to="/equipamentos"
+                      className={({ isActive }) =>
+                        `text-sm px-3 py-2 rounded-md transition-colors ${isActive
+                          ? 'bg-primary text-primary-foreground shadow-sm font-medium'
+                          : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                        }`
+                      }
+                    >
+                      Equipamentos
+                    </NavLink>
                   )}
                 </div>
               )}
@@ -517,14 +531,16 @@ const Sidebar: React.FC = () => {
         {(() => {
           const hasSecretariaAccess = userModules.some(m => m.slug === 'internato-secretaria');
           const hasNotasAccess = userModules.some(m => m.slug === 'internato-notas');
-          const showInternato = hasSecretariaAccess || hasNotasAccess;
-          const isInternatoActive = location.pathname.startsWith('/internato-secretaria') || location.pathname.startsWith('/internato-notas');
+          const hasAgendaAccess = userModules.some(m => m.slug === 'internato-agenda');
+          const showInternato = hasSecretariaAccess || hasNotasAccess || hasAgendaAccess;
+          const isInternatoActive = location.pathname.startsWith('/internato-secretaria') || location.pathname.startsWith('/internato-notas') || location.pathname.startsWith('/internato-agenda');
 
           if (!showInternato) return null;
 
           let firstInternatoRoute = '/internato-secretaria';
           if (hasSecretariaAccess) firstInternatoRoute = '/internato-secretaria';
           else if (hasNotasAccess) firstInternatoRoute = '/internato-notas';
+          else if (hasAgendaAccess) firstInternatoRoute = '/internato-agenda';
 
           return (
             <div className="flex flex-col">
@@ -582,6 +598,19 @@ const Sidebar: React.FC = () => {
                       Notas
                     </NavLink>
                   )}
+                  {hasAgendaAccess && (
+                    <NavLink
+                      to="/internato-agenda"
+                      className={({ isActive }) =>
+                        `text-sm px-3 py-2 rounded-md transition-colors ${isActive
+                          ? 'bg-primary/10 text-primary font-medium'
+                          : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                        }`
+                      }
+                    >
+                      Agenda
+                    </NavLink>
+                  )}
                 </div>
               )}
             </div>
@@ -589,7 +618,7 @@ const Sidebar: React.FC = () => {
         })()}
 
         {userModules
-          .filter(m => m.slug !== 'configuracoes' && m.slug !== 'pacientes-internados' && m.slug !== 'centro-cirurgico' && m.slug !== 'pronto-atendimento' && m.slug !== 'plantao-ti' && m.slug !== 'ordem-servico' && m.slug !== 'dashboard' && m.slug !== 'holerites' && m.slug !== 'informes' && m.slug !== 'notificacoes' && m.slug !== 'taxa-ocupacao' && m.slug !== 'internato-secretaria' && m.slug !== 'internato-notas') // Configurações fica na área inferior, e assistenciais, TI, RH, notificações, taxas e internato ficam agrupados
+          .filter(m => m.slug !== 'configuracoes' && m.slug !== 'pacientes-internados' && m.slug !== 'centro-cirurgico' && m.slug !== 'pronto-atendimento' && m.slug !== 'plantao-ti' && m.slug !== 'ordem-servico' && m.slug !== 'dashboard' && m.slug !== 'holerites' && m.slug !== 'informes' && m.slug !== 'notificacoes' && m.slug !== 'taxa-ocupacao' && m.slug !== 'internato-secretaria' && m.slug !== 'internato-notas' && m.slug !== 'internato-agenda' && m.slug !== 'equipamentos') // Configurações fica na área inferior, e assistenciais, TI, RH, notificações, taxas e internato ficam agrupados
           .map(module => {
 
             if (module.slug === 'recepcao') {

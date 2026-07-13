@@ -174,7 +174,6 @@ export default function OrdemServico() {
   const [ordersWithHistory, setOrdersWithHistory] = useState<Set<number>>(new Set());
   const [stageHistory, setStageHistory] = useState<any[]>([]);
   const [loadingStageHistory, setLoadingStageHistory] = useState(false);
-  const [stageLogs, setStageLogs] = useState<any[]>([]);
 
   // Filtragem dos itens (declarada acima dos hooks para evitar TDZ na avaliação de dependências)
   const filteredOrders = orders.filter(os => {
@@ -286,6 +285,7 @@ export default function OrdemServico() {
         .from('historico_ordem_servico')
         .select('*')
         .eq('nr_sequencia', os.nr_sequencia)
+        .order('dt_historico', { ascending: false, nullsFirst: false })
         .order('created_at', { ascending: false });
 
       if (relatoError) throw relatoError;
@@ -354,38 +354,9 @@ export default function OrdemServico() {
         });
         setOrdersWithHistory(hasHistorySet);
 
-        // Buscar logs de estágio em lote para os chamados carregados (dividido em blocos se exceder 500)
-        const orderNums = allData.map((os: any) => os.nr_sequencia);
-        if (orderNums.length > 0) {
-          // Chunk orderNums to avoid exceeding PostgreSQL parameter limits
-          const chunks: number[][] = [];
-          const chunkSize = 500;
-          for (let i = 0; i < orderNums.length; i += chunkSize) {
-            chunks.push(orderNums.slice(i, i + chunkSize));
-          }
-
-          let allLogs: any[] = [];
-          for (const chunk of chunks) {
-            const { data: logsData, error: logsError } = await supabase
-              .from('ordem_servico_estagio_log')
-              .select('nr_sequencia, estagio_kanban, dt_transicao')
-              .in('nr_sequencia', chunk)
-              .order('dt_transicao', { ascending: true });
-
-            if (!logsError && logsData) {
-              allLogs = [...allLogs, ...logsData];
-            } else if (logsError) {
-              console.error('Erro ao buscar logs de estágio para o lote:', logsError);
-            }
-          }
-          setStageLogs(allLogs);
-        } else {
-          setStageLogs([]);
-        }
       } else {
         setOrders([]);
         setOrdersWithHistory(new Set());
-        setStageLogs([]);
       }
     } catch (err: any) {
       console.error('Erro ao carregar ordens de serviço:', err);
@@ -427,6 +398,7 @@ export default function OrdemServico() {
         .from('historico_ordem_servico')
         .select('*')
         .eq('nr_sequencia', os.nr_sequencia)
+        .order('dt_historico', { ascending: false, nullsFirst: false })
         .order('created_at', { ascending: false });
 
       if (!relatoError) {
@@ -556,181 +528,7 @@ export default function OrdemServico() {
     loadExecutorAvatars();
   }, []);
 
-  // Efeito para imprimir no console do navegador a auditoria detalhada dos tempos médios (completamente seguro contra exceções de RangeError)
-  useEffect(() => {
-    try {
-      if (loading || filteredOrders.length === 0) return;
 
-      const safeLocaleString = (val: any) => {
-        if (!val) return 'N/A';
-        const d = new Date(val);
-        if (isNaN(d.getTime())) return 'Data Inválida';
-        return d.toLocaleString('pt-BR');
-      };
-
-      console.group(`[Auditoria de Médias] Filtro de Período: ${dateFilter}`);
-
-      // 1. Triagem
-      const now = new Date().getTime();
-      const logsByOrder = new Map<number, any[]>();
-      stageLogs.forEach(log => {
-        if (!logsByOrder.has(log.nr_sequencia)) {
-          logsByOrder.set(log.nr_sequencia, []);
-        }
-        logsByOrder.get(log.nr_sequencia)!.push(log);
-      });
-
-      let totalTriagemMs = 0;
-      let countTriagem = 0;
-      const triagemDetails: any[] = [];
-
-      filteredOrders.forEach(order => {
-        const orderLogs = logsByOrder.get(order.nr_sequencia) || [];
-        const triagemLog = orderLogs.find(l => l.estagio_kanban === 'triagem');
-        let triagemStart = triagemLog 
-          ? new Date(triagemLog.dt_transicao).getTime() 
-          : (parseTasyDate(order.dt_ordem_servico)?.getTime() || 0);
-
-        if (!triagemStart || isNaN(triagemStart) || triagemStart === 0) return;
-
-        const nextLog = orderLogs.find(l => 
-          l.estagio_kanban !== 'triagem' && 
-          new Date(l.dt_transicao).getTime() > triagemStart
-        );
-
-        let triagemEnd = nextLog 
-          ? new Date(nextLog.dt_transicao).getTime() 
-          : now;
-
-        if (!triagemEnd || isNaN(triagemEnd)) return;
-
-        const duration = triagemEnd - triagemStart;
-        if (duration > 0) {
-          totalTriagemMs += duration;
-          countTriagem++;
-          triagemDetails.push({
-            'OS #': order.nr_sequencia,
-            'Início Triagem': triagemLog ? safeLocaleString(triagemLog.dt_transicao) : safeLocaleString(triagemStart) + ' (Abertura)',
-            'Fim Triagem': nextLog ? safeLocaleString(nextLog.dt_transicao) : 'Ainda em Triagem (Até agora)',
-            'Duração': formatDuration(duration)
-          });
-        }
-      });
-
-      console.log(`%cTempo Médio em Triagem: ${formatDuration(countTriagem > 0 ? totalTriagemMs / countTriagem : 0)} (Baseado em ${countTriagem} ordens)`, 'color: #3b82f6; font-weight: bold;');
-      if (triagemDetails.length > 0) {
-        console.table(triagemDetails);
-      }
-
-      // 2. Encerrados
-      const closedOrders = filteredOrders.filter(os => {
-        const situacao = (os.ds_situacao || '').toLowerCase();
-        const encer = (os.nm_usuario_encer || '').trim();
-        const estagioLower = (os.ds_estagio || '').trim().toLowerCase();
-        return (
-          situacao.includes('finalizada') ||
-          situacao.includes('finalizado') ||
-          situacao.includes('encerrada') ||
-          situacao.includes('concluída') ||
-          situacao.includes('concluido') ||
-          encer !== '' ||
-          estagioLower.includes('encerrad')
-        );
-      });
-
-      let totalClosedMs = 0;
-      let countClosed = 0;
-      const closedDetails: any[] = [];
-
-      closedOrders.forEach(order => {
-        const orderLogs = logsByOrder.get(order.nr_sequencia) || [];
-        if (orderLogs.length === 0) {
-          const start = parseTasyDate(order.dt_ordem_servico)?.getTime() || 0;
-          const end = parseTasyDate(order.dt_atualizacao || order.updated_at)?.getTime() || 0;
-          if (start > 0 && end >= start && !isNaN(start) && !isNaN(end)) {
-            const duration = end - start;
-            totalClosedMs += duration;
-            countClosed++;
-            closedDetails.push({
-              'OS #': order.nr_sequencia,
-              'Abertura': safeLocaleString(start),
-              'Encerramento': safeLocaleString(end),
-              'Tempo Bruto': formatDuration(duration),
-              'Tempo Escalonado': '0m (Sem logs)',
-              'Tempo Líquido': formatDuration(duration)
-            });
-          }
-          return;
-        }
-
-        const sortedLogs = [...orderLogs].sort(
-          (a, b) => new Date(a.dt_transicao).getTime() - new Date(b.dt_transicao).getTime()
-        );
-
-        const startTotal = parseTasyDate(order.dt_ordem_servico)?.getTime() || new Date(sortedLogs[0].dt_transicao).getTime();
-        const finalizadoLog = sortedLogs.find(l => l.estagio_kanban === 'finalizado');
-        const endTotal = finalizadoLog 
-          ? new Date(finalizadoLog.dt_transicao).getTime()
-          : (parseTasyDate(order.dt_atualizacao || order.updated_at)?.getTime() || new Date(sortedLogs[sortedLogs.length - 1].dt_transicao).getTime());
-
-        if (!startTotal || isNaN(startTotal) || !endTotal || isNaN(endTotal) || endTotal <= startTotal) return;
-
-        const totalDuration = endTotal - startTotal;
-
-        let escalonadoMs = 0;
-        for (let i = 0; i < sortedLogs.length; i++) {
-          const log = sortedLogs[i];
-          if (log.estagio_kanban === 'escalonado') {
-            const escalonadoStart = new Date(log.dt_transicao).getTime();
-            let escalonadoEnd = endTotal;
-            if (i + 1 < sortedLogs.length) {
-              escalonadoEnd = new Date(sortedLogs[i + 1].dt_transicao).getTime();
-            }
-            if (isNaN(escalonadoStart) || isNaN(escalonadoEnd)) continue;
-            const escDiff = escalonadoEnd - escalonadoStart;
-            if (escDiff > 0) {
-              escalonadoMs += escDiff;
-            }
-          }
-        }
-
-        const netDuration = totalDuration - escalonadoMs;
-        if (!isNaN(netDuration) && netDuration > 0) {
-          totalClosedMs += netDuration;
-          countClosed++;
-          closedDetails.push({
-            'OS #': order.nr_sequencia,
-            'Abertura': safeLocaleString(startTotal),
-            'Encerramento': safeLocaleString(endTotal),
-            'Tempo Bruto': formatDuration(totalDuration),
-            'Tempo Escalonado': formatDuration(escalonadoMs),
-            'Tempo Líquido': formatDuration(netDuration)
-          });
-        } else {
-          const fallback = Math.max(0, totalDuration);
-          totalClosedMs += fallback;
-          countClosed++;
-          closedDetails.push({
-            'OS #': order.nr_sequencia,
-            'Abertura': safeLocaleString(startTotal),
-            'Encerramento': safeLocaleString(endTotal),
-            'Tempo Bruto': formatDuration(totalDuration),
-            'Tempo Escalonado': 'N/A (Líquido <= 0)',
-            'Tempo Líquido': formatDuration(fallback)
-          });
-        }
-      });
-
-      console.log(`%cTempo Médio de Resolução (Líquido): ${formatDuration(countClosed > 0 ? totalClosedMs / countClosed : 0)} (Baseado em ${countClosed} ordens)`, 'color: #10b981; font-weight: bold;');
-      if (closedDetails.length > 0) {
-        console.table(closedDetails);
-      }
-
-      console.groupEnd();
-    } catch (err) {
-      console.error('Erro na auditoria de médias:', err);
-    }
-  }, [loading, filteredOrders, stageLogs, dateFilter]);
 
   // Função para distribuir as OSs nas colunas do Kanban
   const getColumnOrders = (columnId: 'triagem' | 'processo' | 'escalonado' | 'finalizado') => {
@@ -892,157 +690,7 @@ export default function OrdemServico() {
     return trimmed;
   };
 
-  // Cálculo do tempo médio em Triagem (seguro contra valores NaN)
-  const calculateAverageTriagemTime = (ordersList: OrdemServicoItem[], logs: any[]) => {
-    try {
-      let totalMs = 0;
-      let count = 0;
-      const now = new Date().getTime();
 
-      // Mapear logs por nr_sequencia para busca rápida
-      const logsByOrder = new Map<number, any[]>();
-      logs.forEach(log => {
-        if (!logsByOrder.has(log.nr_sequencia)) {
-          logsByOrder.set(log.nr_sequencia, []);
-        }
-        logsByOrder.get(log.nr_sequencia)!.push(log);
-      });
-
-      ordersList.forEach(order => {
-        const orderLogs = logsByOrder.get(order.nr_sequencia) || [];
-        
-        // Encontrar a primeira transição para 'triagem'
-        const triagemLog = orderLogs.find(l => l.estagio_kanban === 'triagem');
-        let triagemStart = triagemLog 
-          ? new Date(triagemLog.dt_transicao).getTime() 
-          : (parseTasyDate(order.dt_ordem_servico)?.getTime() || 0);
-
-        if (!triagemStart || isNaN(triagemStart) || triagemStart === 0) return;
-
-        // O estágio de triagem termina quando há qualquer transição subsequente no log
-        const nextLog = orderLogs.find(l => 
-          l.estagio_kanban !== 'triagem' && 
-          new Date(l.dt_transicao).getTime() > triagemStart
-        );
-
-        let triagemEnd = nextLog 
-          ? new Date(nextLog.dt_transicao).getTime() 
-          : now; // Se não houver transição subsequente, ainda está na triagem (calculamos até agora)
-
-        if (!triagemEnd || isNaN(triagemEnd)) return;
-
-        const duration = triagemEnd - triagemStart;
-        if (duration > 0) {
-          totalMs += duration;
-          count++;
-        }
-      });
-
-      return count > 0 ? totalMs / count : 0;
-    } catch (err) {
-      console.error('Erro em calculateAverageTriagemTime:', err);
-      return 0;
-    }
-  };
-
-  // Cálculo do tempo médio total líquido dos encerrados (seguro contra valores NaN e excluindo tempo escalonado)
-  const calculateAverageClosedTime = (ordersList: OrdemServicoItem[], logs: any[]) => {
-    try {
-      // Filtrar ordens finalizadas
-      const closedOrders = ordersList.filter(os => {
-        const situacao = (os.ds_situacao || '').toLowerCase();
-        const encer = (os.nm_usuario_encer || '').trim();
-        const estagioLower = (os.ds_estagio || '').trim().toLowerCase();
-        return (
-          situacao.includes('finalizada') ||
-          situacao.includes('finalizado') ||
-          situacao.includes('encerrada') ||
-          situacao.includes('concluída') ||
-          situacao.includes('concluido') ||
-          encer !== '' ||
-          estagioLower.includes('encerrad')
-        );
-      });
-
-      if (closedOrders.length === 0) return 0;
-
-      let totalMs = 0;
-      let count = 0;
-
-      const logsByOrder = new Map<number, any[]>();
-      logs.forEach(log => {
-        if (!logsByOrder.has(log.nr_sequencia)) {
-          logsByOrder.set(log.nr_sequencia, []);
-        }
-        logsByOrder.get(log.nr_sequencia)!.push(log);
-      });
-
-      closedOrders.forEach(order => {
-        const orderLogs = logsByOrder.get(order.nr_sequencia) || [];
-        if (orderLogs.length === 0) {
-          // Se não houver logs de estágio, faz um cálculo básico usando dt_ordem_servico e dt_atualizacao
-          const start = parseTasyDate(order.dt_ordem_servico)?.getTime() || 0;
-          const end = parseTasyDate(order.dt_atualizacao || order.updated_at)?.getTime() || 0;
-          if (start > 0 && end >= start && !isNaN(start) && !isNaN(end)) {
-            totalMs += (end - start);
-            count++;
-          }
-          return;
-        }
-
-        // Ordenar logs cronologicamente
-        const sortedLogs = [...orderLogs].sort(
-          (a, b) => new Date(a.dt_transicao).getTime() - new Date(b.dt_transicao).getTime()
-        );
-
-        // Data de abertura: primeiro log ou dt_ordem_servico
-        const startTotal = parseTasyDate(order.dt_ordem_servico)?.getTime() || new Date(sortedLogs[0].dt_transicao).getTime();
-
-        // Data de encerramento: log 'finalizado' ou última transição
-        const finalizadoLog = sortedLogs.find(l => l.estagio_kanban === 'finalizado');
-        const endTotal = finalizadoLog 
-          ? new Date(finalizadoLog.dt_transicao).getTime()
-          : (parseTasyDate(order.dt_atualizacao || order.updated_at)?.getTime() || new Date(sortedLogs[sortedLogs.length - 1].dt_transicao).getTime());
-
-        if (!startTotal || isNaN(startTotal) || !endTotal || isNaN(endTotal) || endTotal <= startTotal) return;
-
-        const totalDuration = endTotal - startTotal;
-
-        // Calcular o tempo gasto no estágio 'escalonado'
-        let escalonadoMs = 0;
-        for (let i = 0; i < sortedLogs.length; i++) {
-          const log = sortedLogs[i];
-          if (log.estagio_kanban === 'escalonado') {
-            const escalonadoStart = new Date(log.dt_transicao).getTime();
-            // O estágio escalonado termina na próxima transição ou, se for a última, no encerramento
-            let escalonadoEnd = endTotal;
-            if (i + 1 < sortedLogs.length) {
-              escalonadoEnd = new Date(sortedLogs[i + 1].dt_transicao).getTime();
-            }
-            if (isNaN(escalonadoStart) || isNaN(escalonadoEnd)) continue;
-            const escDiff = escalonadoEnd - escalonadoStart;
-            if (escDiff > 0) {
-              escalonadoMs += escDiff;
-            }
-          }
-        }
-
-        const netDuration = totalDuration - escalonadoMs;
-        if (!isNaN(netDuration) && netDuration > 0) {
-          totalMs += netDuration;
-          count++;
-        } else {
-          totalMs += Math.max(0, totalDuration);
-          count++;
-        }
-      });
-
-      return count > 0 ? totalMs / count : 0;
-    } catch (err) {
-      console.error('Erro em calculateAverageClosedTime:', err);
-      return 0;
-    }
-  };
 
   // Cálculo das durações por estágio
   const getStageDurations = (logs: any[], currentEstagio: string, dtOrdemServico: string | null) => {
@@ -1256,8 +904,6 @@ export default function OrdemServico() {
   // Ordenar os executores em ordem alfabética pelo nome de exibição
   const sortedExecutors = [...executors].sort((a, b) => a.displayName.localeCompare(b.displayName));
 
-  const avgTriagem = calculateAverageTriagemTime(filteredOrders, stageLogs);
-  const avgClosed = calculateAverageClosedTime(filteredOrders, stageLogs);
 
   return (
     <div className="h-screen w-full flex flex-col p-4 overflow-hidden text-foreground bg-background transition-all gap-4">
@@ -1435,13 +1081,6 @@ export default function OrdemServico() {
           subtext="🔍 Aguardando análise"
           subtextColorClass="text-slate-500 dark:text-slate-400"
           isLoading={loading}
-          extraHeader={
-            avgTriagem > 0 && (
-              <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-slate-500/10 text-slate-600 dark:text-slate-400 border border-slate-500/20">
-                ⏱️ Méd: {formatDuration(avgTriagem)}
-              </span>
-            )
-          }
         />
         <VisaoGeralCard
           title="Em Processo"
@@ -1466,13 +1105,6 @@ export default function OrdemServico() {
           subtext="✅ Chamados finalizados"
           subtextColorClass="text-emerald-600 dark:text-emerald-400"
           isLoading={loading}
-          extraHeader={
-            avgClosed > 0 && (
-              <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
-                ⏱️ Méd: {formatDuration(avgClosed)}
-              </span>
-            )
-          }
         />
         <VisaoGeralCard
           title="Total"
@@ -1763,7 +1395,7 @@ export default function OrdemServico() {
                           <span className="font-semibold text-foreground/75">
                             {hist.nm_usuario || 'Sistema'}
                           </span>
-                          <span>{formatDate(hist.created_at)}</span>
+                          <span>{formatDate(hist.dt_historico || hist.created_at)}</span>
                         </div>
                         <p className="text-sm text-foreground/90 whitespace-pre-wrap leading-relaxed break-words border-t border-border/40 pt-2">
                           {hist.ds_relat_tecnico}

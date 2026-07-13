@@ -32,6 +32,9 @@ interface N8NOrdemServico {
   DS_SITUACAO: string | null;
   DS_SOLUCAO: string | null;
   DS_RELAT_TECNICO: string | null;
+  HISTORICO: string | null;
+  DT_HISTORICO: string | null;
+  NR_GRUPO_PLANEJ: number | null;
 }
 
 // Interface representando o schema do PostgreSQL no Supabase (snake_case)
@@ -61,6 +64,7 @@ interface DBOrdemServico {
   ds_situacao: string | null;
   ds_solucao: string | null;
   ds_relat_tecnico: string | null;
+  nr_grupo_planej: number | null;
 }
 
 const corsHeaders = {
@@ -190,20 +194,24 @@ Deno.serve(async (req: Request) => {
 
       const nrSeq = Number(item.NR_SEQUENCIA);
 
-      // Validar se o grupo de destino pertence à Manutenção
+      // Validar o grupo de planejamento (apenas grupo 22 - TI)
+      const nrGrupoPlanej = item.NR_GRUPO_PLANEJ !== undefined && item.NR_GRUPO_PLANEJ !== null ? Number(item.NR_GRUPO_PLANEJ) : null;
+      
+      // Validar se o grupo de destino pertence à Manutenção (fallback secundário)
       const dsGrupo = item.DS_GRUPO_DES ? String(item.DS_GRUPO_DES).trim() : '';
       const isManutencao = dsGrupo.toLowerCase().includes('manuten');
 
-      if (isManutencao) {
+      // Se a OS não for do grupo de planejamento 22 (TI) ou for identificada como manutenção, remove do banco
+      if ((nrGrupoPlanej !== null && nrGrupoPlanej !== 22) || isManutencao) {
         const existing = existingMap.get(nrSeq);
         if (existing) {
-          console.log(`[Sync Status OS] Detectada OS de manutenção (${nrSeq}). Executando DELETE...`);
+          console.log(`[Sync Status OS] OS #${nrSeq} fora do grupo de TI (Grupo Planejamento: ${nrGrupoPlanej}). Executando DELETE...`);
           const { error: deleteError } = await supabase
             .from('ordem_servico')
             .delete()
             .eq('nr_sequencia', nrSeq);
           if (deleteError) {
-            console.error(`[Sync Status OS] Erro ao deletar OS de manutenção ${nrSeq}:`, deleteError.message);
+            console.error(`[Sync Status OS] Erro ao deletar OS ${nrSeq}:`, deleteError.message);
           } else {
             deletedSequences.add(nrSeq);
           }
@@ -212,11 +220,7 @@ Deno.serve(async (req: Request) => {
       }
 
       const existing = existingMap.get(nrSeq);
-
-      // Regra de Negócio: Se a OS não existe no banco, ignora
-      if (!existing) {
-        continue;
-      }
+      const isNew = !existing;
 
       // Validação de Alterações
       const newDtAtualizacao = item.DT_ATUALIZACAO ? new Date(item.DT_ATUALIZACAO).toISOString() : null;
@@ -224,21 +228,31 @@ Deno.serve(async (req: Request) => {
       const newDsEstagio = item.DS_ESTAGIO ? String(item.DS_ESTAGIO).trim() : null;
       const newNmUsuarioEncer = item.NM_USUARIO_ENCER ? String(item.NM_USUARIO_ENCER).trim() : null;
 
-      // Comparar datas (seguro contra fusos e nulos)
-      let datesDiffer = false;
-      if (newDtAtualizacao && existing.dt_atualizacao) {
-        datesDiffer = new Date(newDtAtualizacao).getTime() !== new Date(existing.dt_atualizacao).getTime();
-      } else if (newDtAtualizacao !== existing.dt_atualizacao) {
-        datesDiffer = true;
+      let shouldUpsert = false;
+
+      if (isNew) {
+        shouldUpsert = true;
+      } else {
+        // Comparar datas (seguro contra fusos e nulos)
+        let datesDiffer = false;
+        if (newDtAtualizacao && existing.dt_atualizacao) {
+          datesDiffer = new Date(newDtAtualizacao).getTime() !== new Date(existing.dt_atualizacao).getTime();
+        } else if (newDtAtualizacao !== existing.dt_atualizacao) {
+          datesDiffer = true;
+        }
+
+        const statusDiffer = datesDiffer ||
+          existing.ds_situacao !== newDsSituacao ||
+          existing.ds_estagio !== newDsEstagio ||
+          existing.nm_usuario_encer !== newNmUsuarioEncer;
+
+        if (statusDiffer) {
+          shouldUpsert = true;
+        }
       }
 
-      const statusDiffer = datesDiffer ||
-        existing.ds_situacao !== newDsSituacao ||
-        existing.ds_estagio !== newDsEstagio ||
-        existing.nm_usuario_encer !== newNmUsuarioEncer;
-
-      // Só atualiza se houver alguma diferença
-      if (statusDiffer) {
+      // Só atualiza ou insere se houver alteração ou for nova
+      if (shouldUpsert) {
         const mappedRecord: DBOrdemServico = {
           nr_sequencia: nrSeq,
           ds_grupo_des: item.DS_GRUPO_DES ? String(item.DS_GRUPO_DES).trim() : null,
@@ -264,7 +278,8 @@ Deno.serve(async (req: Request) => {
           nr_seq_estagio: item.NR_SEQ_ESTAGIO ? Number(item.NR_SEQ_ESTAGIO) : null,
           ds_situacao: newDsSituacao,
           ds_solucao: item.DS_SOLUCAO ? cleanHTML(item.DS_SOLUCAO) : null,
-          ds_relat_tecnico: item.DS_RELAT_TECNICO ? cleanHTML(item.DS_RELAT_TECNICO) : null,
+          ds_relat_tecnico: (item.HISTORICO || item.DS_RELAT_TECNICO) ? cleanHTML(item.HISTORICO || item.DS_RELAT_TECNICO) : null,
+          nr_grupo_planej: nrGrupoPlanej,
         };
 
         recordsToUpdate.push(mappedRecord);
@@ -301,18 +316,22 @@ Deno.serve(async (req: Request) => {
 
     const { data: existingRelatos, error: relatoQueryError } = await supabase
       .from('historico_ordem_servico')
-      .select('nr_sequencia, ds_relat_tecnico, created_at')
+      .select('nr_sequencia, ds_relat_tecnico, dt_historico, created_at')
       .in('nr_sequencia', nrSequenciasAtualizadas)
+      .order('dt_historico', { ascending: false })
       .order('created_at', { ascending: false });
 
     if (relatoQueryError) {
       console.error('[Sync Status OS] Erro ao consultar historico_ordem_servico:', relatoQueryError.message);
     } else {
-      const latestRelatoMap = new Map<number, string>();
+      const latestRelatoMap = new Map<number, { text: string; date: string | null }>();
       if (existingRelatos && existingRelatos.length > 0) {
         for (const r of existingRelatos) {
           if (!latestRelatoMap.has(r.nr_sequencia)) {
-            latestRelatoMap.set(r.nr_sequencia, (r.ds_relat_tecnico || '').trim());
+            latestRelatoMap.set(r.nr_sequencia, {
+              text: (r.ds_relat_tecnico || '').trim(),
+              date: r.dt_historico ? new Date(r.dt_historico).toISOString() : null
+            });
           }
         }
       }
@@ -320,22 +339,38 @@ Deno.serve(async (req: Request) => {
       const relatosToInsert: Array<{
         nr_sequencia: number;
         ds_relat_tecnico: string;
+        dt_historico: string | null;
         nm_usuario: string | null;
       }> = [];
 
       for (const item of rawDataToUpdate) {
         const nrSeq = Number(item.NR_SEQUENCIA);
-        const novoRelato = item.DS_RELAT_TECNICO ? cleanHTML(item.DS_RELAT_TECNICO) : '';
+        const novoRelato = item.HISTORICO ? cleanHTML(item.HISTORICO) : '';
+        const novaDataStr = item.DT_HISTORICO ? new Date(item.DT_HISTORICO).toISOString() : null;
 
         if (novoRelato !== '') {
-          const ultimoGravado = latestRelatoMap.get(nrSeq) || '';
-          if (novoRelato !== ultimoGravado) {
+          const ultimoGravado = latestRelatoMap.get(nrSeq);
+          
+          let isDifferent = true;
+          if (ultimoGravado) {
+            if (novaDataStr && ultimoGravado.date) {
+              isDifferent = new Date(novaDataStr).getTime() !== new Date(ultimoGravado.date).getTime();
+            } else {
+              isDifferent = novoRelato !== ultimoGravado.text;
+            }
+          }
+
+          if (isDifferent) {
             relatosToInsert.push({
               nr_sequencia: nrSeq,
               ds_relat_tecnico: novoRelato,
+              dt_historico: novaDataStr,
               nm_usuario: item.NM_USUARIO ? String(item.NM_USUARIO).trim() : null
             });
-            latestRelatoMap.set(nrSeq, novoRelato);
+            latestRelatoMap.set(nrSeq, {
+              text: novoRelato,
+              date: novaDataStr
+            });
           }
         }
       }
