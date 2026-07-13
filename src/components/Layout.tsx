@@ -16,7 +16,6 @@ const Layout: React.FC = () => {
     location.pathname.startsWith('/gestao-prontuarios') ||
     location.pathname.startsWith('/internato-secretaria') ||
     location.pathname.startsWith('/internato-notas') ||
-<<<<<<< HEAD
     location.pathname.startsWith('/internato-agenda') ||
     location.pathname.startsWith('/financeiro');
 
