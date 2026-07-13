@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { 
-  DollarSign, Search, Filter, RefreshCw, FileText, 
-  Calendar, CheckCircle2, Clock, AlertCircle, FileSpreadsheet 
+import {
+  DollarSign, Search, Filter, RefreshCw, FileText,
+  Calendar, CheckCircle2, Clock, AlertCircle, FileSpreadsheet
 } from 'lucide-react';
 import { webhookService } from '../../services/webhookService';
 import { supabase } from '../../lib/supabase';
@@ -64,7 +64,7 @@ const formatCompactCurrency = (value: number) => {
 // Auxiliar para converter formato de referência em data para comparação de períodos
 const parseReferenceMonth = (str: string): Date | null => {
   if (!str) return null;
-  
+
   // Formato: data ISO completa ou contendo YYYY-MM-DD (ex: 2026-04-08T00:00:00.000Z ou 2026-04-30)
   const matchIsoDate = str.match(/^(\d{4})-(\d{2})-(\d{2})/);
   if (matchIsoDate) {
@@ -73,19 +73,19 @@ const parseReferenceMonth = (str: string): Date | null => {
     const day = Number(matchIsoDate[3]);
     return new Date(year, month - 1, day);
   }
-  
+
   // Formato: YYYY-MM
   if (/^\d{4}-\d{2}$/.test(str)) {
     const [year, month] = str.split('-').map(Number);
     return new Date(year, month - 1, 1);
   }
-  
+
   // Formato: MM/YYYY
   if (/^\d{2}\/\d{4}$/.test(str)) {
     const [month, year] = str.split('/').map(Number);
     return new Date(year, month - 1, 1);
   }
-  
+
   // Formato: data ISO geral ou qualquer string parseável por Date
   const parsed = Date.parse(str);
   if (!isNaN(parsed)) {
@@ -97,19 +97,19 @@ const parseReferenceMonth = (str: string): Date | null => {
     }
     return new Date(d.getFullYear(), d.getMonth(), d.getDate());
   }
-  
+
   return null;
 };
 
 // Formata a data de referência para exibição na grid (ex: ISO -> DD/MM/YYYY, MM/YYYY -> MM/YYYY)
 const formatReferenceDate = (str: string): string => {
   if (!str) return '-';
-  
+
   // Se já for formato MM/YYYY
   if (/^\d{2}\/\d{4}$/.test(str)) {
     return str;
   }
-  
+
   // Se for data ISO ou YYYY-MM-DD
   const matchIsoDate = str.match(/^(\d{4})-(\d{2})-(\d{2})/);
   if (matchIsoDate) {
@@ -118,7 +118,7 @@ const formatReferenceDate = (str: string): string => {
     const day = matchIsoDate[3];
     return `${day}/${month}/${year}`;
   }
-  
+
   return str;
 };
 
@@ -154,7 +154,7 @@ const ConsultaFaturamentos: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [convenioFilter, setConvenioFilter] = useState<string>('Todos');
   const [statusFilter, setStatusFilter] = useState<string>('Todos');
-  
+
   // Filtros de período (Mesmo formato de Gestão de Pendência: date)
   const [periodFrom, setPeriodFrom] = useState<string>(() => getDefaultDates().from);
   const [periodTo, setPeriodTo] = useState<string>(() => getDefaultDates().to);
@@ -315,7 +315,7 @@ const ConsultaFaturamentos: React.FC = () => {
       // 1. Busca Livre por número de protocolo ou convênio
       if (searchTerm) {
         const term = searchTerm.toLowerCase();
-        const matchesSearch = 
+        const matchesSearch =
           item.nrProtocolo.toLowerCase().includes(term) ||
           item.convenio.toLowerCase().includes(term);
         if (!matchesSearch) return false;
@@ -405,7 +405,7 @@ const ConsultaFaturamentos: React.FC = () => {
   // Exportar Relatório em PDF
   const exportarPDF = async () => {
     const doc = new jsPDF();
-    
+
     try {
       const img = new Image();
       img.src = '/LOGO_HSC_PRIMARY.png';
@@ -426,12 +426,12 @@ const ConsultaFaturamentos: React.FC = () => {
     doc.setFont('helvetica', 'normal');
     doc.setTextColor(100);
     doc.text(`Data de Geração: ${new Date().toLocaleDateString('pt-BR')} às ${new Date().toLocaleTimeString('pt-BR')}`, 14, 38);
-    
+
     // Filtros aplicados no PDF
     const activeFilters = [];
     if (convenioFilter !== 'Todos') activeFilters.push(`Convênio: ${convenioFilter}`);
     if (statusFilter !== 'Todos') activeFilters.push(`Status: ${statusFilter === '2' ? 'Definitivo' : 'Provisório'}`);
-    
+
     // Período formatado no PDF
     if (periodFrom || periodTo) {
       const formatPeriod = (p: string) => {
@@ -440,9 +440,9 @@ const ConsultaFaturamentos: React.FC = () => {
       };
       activeFilters.push(`Período: ${formatPeriod(periodFrom)} a ${formatPeriod(periodTo)}`);
     }
-    
+
     if (searchTerm) activeFilters.push(`Busca: "${searchTerm}"`);
-    
+
     if (activeFilters.length > 0) {
       doc.text(`Filtros Aplicados: ${activeFilters.join(' | ')}`, 14, 43);
     }
@@ -679,31 +679,31 @@ const ConsultaFaturamentos: React.FC = () => {
                   margin={{ top: 5, right: 10, left: 10, bottom: 5 }}
                 >
                   <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#52525b" opacity={0.15} />
-                  <XAxis 
-                    type="number" 
-                    tickFormatter={formatCompactCurrency} 
-                    stroke="#a1a1aa" 
-                    fontSize={11} 
-                    tickLine={false} 
-                    axisLine={false} 
+                  <XAxis
+                    type="number"
+                    tickFormatter={formatCompactCurrency}
+                    stroke="#a1a1aa"
+                    fontSize={11}
+                    tickLine={false}
+                    axisLine={false}
                   />
-                  <YAxis 
-                    type="category" 
-                    dataKey="name" 
-                    stroke="#a1a1aa" 
-                    fontSize={10} 
-                    tickLine={false} 
-                    axisLine={false} 
+                  <YAxis
+                    type="category"
+                    dataKey="name"
+                    stroke="#a1a1aa"
+                    fontSize={10}
+                    tickLine={false}
+                    axisLine={false}
                     width={180}
                     interval={0}
                   />
                   <Tooltip
                     formatter={(value: number) => [formatCurrency(value), 'Faturado']}
-                    contentStyle={{ 
-                      backgroundColor: 'var(--color-card)', 
-                      borderColor: 'var(--color-border)', 
-                      color: 'var(--color-foreground)', 
-                      borderRadius: '8px' 
+                    contentStyle={{
+                      backgroundColor: 'var(--color-card)',
+                      borderColor: 'var(--color-border)',
+                      color: 'var(--color-foreground)',
+                      borderRadius: '8px'
                     }}
                     itemStyle={{ color: 'var(--color-foreground)' }}
                   />
@@ -845,11 +845,10 @@ const ConsultaFaturamentos: React.FC = () => {
                           {formatReferenceDate(item.dtMesanoReferencia)}
                         </td>
                         <td className="px-6 py-4 text-center">
-                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold border ${
-                            item.ieStatusProtocolo === 2
+                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold border ${item.ieStatusProtocolo === 2
                               ? 'bg-emerald-50 border-emerald-200 text-emerald-700 dark:bg-emerald-950/20 dark:border-emerald-800/50 dark:text-emerald-400'
                               : 'bg-amber-50 border-amber-200 text-amber-700 dark:bg-amber-950/20 dark:border-amber-800/50 dark:text-amber-400'
-                          }`}>
+                            }`}>
                             {item.ieStatusProtocolo === 2 ? 'Definitivo' : 'Provisório'}
                           </span>
                         </td>

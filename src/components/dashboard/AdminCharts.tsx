@@ -55,7 +55,7 @@ export const AdminCharts: React.FC<AdminChartsProps> = ({ data }) => {
   // 3. Volume de Importações por Mês (Baseado no created_at)
   const volumeData = useMemo(() => {
     const grouped: Record<string, { holerites: number, informes: number }> = {};
-    
+
     const addToGroup = (dateString: string | undefined, type: 'holerites' | 'informes') => {
       if (!dateString) return;
       const date = new Date(dateString);
@@ -83,14 +83,14 @@ export const AdminCharts: React.FC<AdminChartsProps> = ({ data }) => {
             <AreaChart data={payrollData} margin={{ top: 10, right: 30, left: 20, bottom: 0 }}>
               <defs>
                 <linearGradient id="colorTotal" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3}/>
-                  <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/>
+                  <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3} />
+                  <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
                 </linearGradient>
               </defs>
               <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#52525b" opacity={0.4} />
               <XAxis dataKey="mes_ano" stroke="#a1a1aa" fontSize={12} tickLine={false} axisLine={false} />
               <YAxis tickFormatter={formatCurrency} stroke="#a1a1aa" fontSize={12} tickLine={false} axisLine={false} width={80} />
-              <Tooltip 
+              <Tooltip
                 formatter={(value: number) => [formatCurrency(value), 'Total Líquido']}
                 contentStyle={{ backgroundColor: 'hsl(var(--card))', borderColor: 'hsl(var(--border))', color: 'hsl(var(--foreground))', borderRadius: '8px' }}
                 itemStyle={{ color: 'hsl(var(--foreground))' }}
@@ -110,20 +110,20 @@ export const AdminCharts: React.FC<AdminChartsProps> = ({ data }) => {
           ) : (
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
-                <text 
-                  x="50%" 
-                  y="45%" 
-                  textAnchor="middle" 
-                  dominantBaseline="middle" 
+                <text
+                  x="50%"
+                  y="45%"
+                  textAnchor="middle"
+                  dominantBaseline="middle"
                   className="fill-foreground text-4xl font-bold font-sans"
                 >
                   {`${taxaEnvio}%`}
                 </text>
-                <text 
-                  x="50%" 
-                  y="55%" 
-                  textAnchor="middle" 
-                  dominantBaseline="middle" 
+                <text
+                  x="50%"
+                  y="55%"
+                  textAnchor="middle"
+                  dominantBaseline="middle"
                   className="fill-muted-foreground text-xs font-medium"
                 >
                   Entregues
@@ -144,7 +144,7 @@ export const AdminCharts: React.FC<AdminChartsProps> = ({ data }) => {
                     <Cell key={`cell-${index}`} fill={entry.color} />
                   ))}
                 </Pie>
-                <Tooltip 
+                <Tooltip
                   contentStyle={{ backgroundColor: 'hsl(var(--card))', borderColor: 'hsl(var(--border))', borderRadius: '8px' }}
                 />
                 <Legend verticalAlign="bottom" height={36} iconType="circle" />
@@ -163,12 +163,12 @@ export const AdminCharts: React.FC<AdminChartsProps> = ({ data }) => {
               <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#52525b" opacity={0.4} />
               <XAxis dataKey="name" stroke="#a1a1aa" fontSize={12} tickLine={false} axisLine={false} />
               <YAxis stroke="#a1a1aa" fontSize={12} tickLine={false} axisLine={false} />
-              <Tooltip 
+              <Tooltip
                 cursor={{ fill: 'transparent' }}
                 contentStyle={{ backgroundColor: 'hsl(var(--card))', borderColor: 'hsl(var(--border))', borderRadius: '8px', color: 'hsl(var(--foreground))' }}
                 itemStyle={{ color: 'hsl(var(--foreground))' }}
               />
-              <Legend wrapperStyle={{ paddingTop: '20px' }}/>
+              <Legend wrapperStyle={{ paddingTop: '20px' }} />
               <Bar dataKey="holerites" name="Holerites" fill="#3b82f6" radius={[4, 4, 0, 0]} />
               <Bar dataKey="informes" name="Informes de IR" fill="#8b5cf6" radius={[4, 4, 0, 0]} />
             </BarChart>

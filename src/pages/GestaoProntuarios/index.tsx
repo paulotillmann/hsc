@@ -186,6 +186,7 @@ export default function GestaoProntuarios() {
         return;
       }
       setArquivoSelecionado(file);
+      setNovoStatusSelecionado('Documento Disponibilizado');
       setErroAcao('');
     }
   };

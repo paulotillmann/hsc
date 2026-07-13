@@ -766,8 +766,11 @@ export async function atualizarSolicitacaoCompleta(
   let pdfUrl: string | null = null;
   let pdfName: string | null = null;
 
+  // Se um arquivo PDF for enviado, forçamos o status final para 'Documento Disponibilizado'
+  const statusEfetivo = arquivoPDF ? 'Documento Disponibilizado' : novoStatus;
+
   // 1. Se foi enviado um arquivo PDF, realizar o upload
-  if (arquivoPDF && (novoStatus === 'Documento Disponibilizado' || novoStatus === 'Aprovado')) {
+  if (arquivoPDF) {
     const cleanCpf = arquivoPDF.name.replace(/[^a-zA-Z0-9]/g, '_').toUpperCase();
     const storagePath = `${solicitacaoId}/${cleanCpf}`;
     try {
@@ -793,7 +796,7 @@ export async function atualizarSolicitacaoCompleta(
     }
   }
 
-  const descricao = `Solicitação atualizada para '${novoStatus}' pelo gestor.${
+  const descricao = `Solicitação atualizada para '${statusEfetivo}' pelo gestor.${
     justificativaRejeicao ? ` Motivo: ${justificativaRejeicao}` : ''
   }${pdfName ? ` Arquivo anexado: ${pdfName}` : ''}`;
 
@@ -809,22 +812,22 @@ export async function atualizarSolicitacaoCompleta(
 
     // Monta o payload de update
     const updateData: any = {
-      status: novoStatus,
+      status: statusEfetivo,
       responsavel_id: usuarioId,
       responsavel_nome: usuarioNome,
       updated_at: dataAtual
     };
 
-    if (novoStatus === 'Rejeitado') {
+    if (statusEfetivo === 'Rejeitado') {
       updateData.justificativa_rejeicao = justificativaRejeicao || null;
       updateData.data_finalizacao = dataAtual;
-    } else if (novoStatus === 'Documento Disponibilizado') {
+    } else if (statusEfetivo === 'Documento Disponibilizado') {
       updateData.data_finalizacao = dataAtual;
       if (pdfUrl) {
         updateData.arquivo_url = pdfUrl;
         updateData.arquivo_nome = pdfName;
       }
-    } else if (novoStatus === 'Aprovado') {
+    } else if (statusEfetivo === 'Aprovado') {
       if (pdfUrl) {
         updateData.arquivo_url = pdfUrl;
         updateData.arquivo_nome = pdfName;
