@@ -267,6 +267,7 @@ export default function InternatoAgenda() {
   const [formSala, setFormSala] = useState('');
   const [formProfessorId, setFormProfessorId] = useState('');
   const [formHorario, setFormHorario] = useState('Manhã');
+  const [formHorarioPersonalizado, setFormHorarioPersonalizado] = useState('');
   const [formObservacao, setFormObservacao] = useState('');
 
   // Toast
@@ -416,6 +417,7 @@ export default function InternatoAgenda() {
     setFormSala('');
     setFormProfessorId('');
     setFormHorario('Manhã');
+    setFormHorarioPersonalizado('08:00 às 12:00');
     setFormObservacao('');
     setShowFormModal(true);
   };
@@ -424,18 +426,36 @@ export default function InternatoAgenda() {
     if (!temPermissaoEscrita) return;
     setIsEditing(true);
     setEditingId(evento.id);
-    setFormTurmaId(evento.turma_id || '');
+    setFormTurmaId(evento.turma_id || 'acolhimento');
     setFormClinica(evento.clinica || '');
     setFormSala(evento.sala);
     setFormProfessorId(evento.professor_id || '');
-    setFormHorario(evento.horario);
+    
+    setFormHorarioPersonalizado(evento.horario);
+    
+    const hor = evento.horario.toLowerCase();
+    if (hor.includes('08:00 às 12:00') || hor.includes('manhã') || hor.startsWith('07:') || hor.startsWith('08:') || hor.startsWith('09:') || hor.startsWith('10:') || hor.startsWith('11:')) {
+      setFormHorario('Manhã');
+    } else if (hor.includes('13:00 às 17:00') || hor.includes('tarde') || hor.startsWith('12:') || hor.startsWith('13:') || hor.startsWith('14:') || hor.startsWith('15:') || hor.startsWith('16:') || hor.startsWith('17:')) {
+      setFormHorario('Tarde');
+    } else if (hor.includes('18:00 às 22:00') || hor.includes('noite') || hor.startsWith('18:') || hor.startsWith('19:') || hor.startsWith('20:') || hor.startsWith('21:') || hor.startsWith('22:')) {
+      setFormHorario('Noite');
+    } else if (hor.includes('08:00 às 18:00') || hor.includes('dia todo') || hor.includes('dia inteiro')) {
+      setFormHorario('Dia todo');
+    } else {
+      setFormHorario('Manhã');
+    }
+
     setFormObservacao(evento.observacao || '');
     setShowFormModal(true);
   };
 
   const handleSaveEvento = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formSala || !formHorario || !formTurmaId || !formClinica) {
+    const clinicaObrigatoria = formTurmaId !== 'acolhimento';
+    const horarioParaSalvar = formHorarioPersonalizado;
+
+    if (!formSala || !horarioParaSalvar || !formTurmaId || (clinicaObrigatoria && !formClinica)) {
       showToast('error', 'Preencha todos os campos obrigatórios.');
       return;
     }
@@ -443,11 +463,11 @@ export default function InternatoAgenda() {
     setOperando(true);
     const payload = {
       data: selectedDateString,
-      turma_id: formTurmaId || null,
+      turma_id: formTurmaId === 'acolhimento' ? null : (formTurmaId || null),
       clinica: formClinica || null,
       sala: formSala,
       professor_id: formProfessorId || null,
-      horario: formHorario,
+      horario: horarioParaSalvar,
       observacao: formObservacao || null
     };
 
@@ -659,18 +679,18 @@ export default function InternatoAgenda() {
                       </div>
 
                       {/* Mini lista de agendamentos */}
-                      <div className="flex-1 mt-1.5 space-y-1 overflow-y-auto max-h-[55px] pr-0.5 scrollbar-thin">
-                        {diaEventos.slice(0, 3).map(evento => {
+                      <div className="flex-1 mt-1.5 space-y-1 pr-0.5">
+                        {diaEventos.map(evento => {
                           const estilo = getLocalEstilo(evento.sala);
                           return (
                             <div
                               key={evento.id}
-                              className={`flex items-center gap-1 px-1 py-0.5 rounded text-[10px] font-semibold border ${estilo.bg} ${estilo.border} ${estilo.text}`}
-                              title={`${evento.internato_turmas?.nome || 'Turma N/D'} - ${evento.sala} (${evento.horario})`}
+                              className={`flex items-center flex-wrap gap-1 px-1 py-0.5 rounded text-[10px] font-semibold border ${estilo.bg} ${estilo.border} ${estilo.text}`}
+                              title={`${evento.internato_turmas?.nome || 'Acolhimento'} - ${evento.sala} (${evento.horario})`}
                             >
-                              <span className={`h-1.5 w-1.5 rounded-full ${estilo.bullet}`} />
-                              <span className="truncate flex-1">
-                                {evento.internato_turmas?.nome || 'Turma N/D'}
+                              <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${estilo.bullet}`} />
+                              <span className="flex-1 break-words">
+                                {evento.internato_turmas?.nome || 'Acolhimento'}
                               </span>
                               <span className="text-[9.5px] opacity-90 font-medium shrink-0 ml-1 border-l border-current/20 pl-1">
                                 {evento.sala}
@@ -678,11 +698,6 @@ export default function InternatoAgenda() {
                             </div>
                           );
                         })}
-                        {diaEventos.length > 3 && (
-                          <div className="text-[9px] text-muted-foreground font-semibold text-center mt-0.5">
-                            + {diaEventos.length - 3} mais
-                          </div>
-                        )}
                       </div>
                     </button>
                   );
@@ -712,7 +727,7 @@ export default function InternatoAgenda() {
             )}
           </div>
 
-          <div className="space-y-3 overflow-y-auto max-h-[420px] pr-1">
+          <div className="space-y-3 pr-1">
             {eventosDoDiaSelecionado.length === 0 ? (
               <div className="h-[200px] flex flex-col items-center justify-center text-muted-foreground gap-2 border border-dashed border-border rounded-xl bg-muted/5">
                 <CalendarIcon className="h-8 w-8 text-muted-foreground/50" />
@@ -767,24 +782,30 @@ export default function InternatoAgenda() {
                     <div>
                       <h3 className="text-sm font-bold text-foreground flex items-center gap-1.5">
                         <Users className="h-4 w-4 text-muted-foreground/80" />
-                        {evento.internato_turmas?.nome || 'Turma N/D'}
-                        <span className="text-xs font-normal text-muted-foreground">
-                          ({evento.internato_turmas?.periodo || 'Período N/D'})
-                        </span>
+                        {evento.internato_turmas ? (
+                          <>
+                            {evento.internato_turmas.nome}
+                            <span className="text-xs font-normal text-muted-foreground">
+                              {' '}({evento.internato_turmas.periodo})
+                            </span>
+                          </>
+                        ) : (
+                          'Acolhimento'
+                        )}
                       </h3>
                     </div>
 
                     {/* Detalhes específicos */}
                     <div className="grid grid-cols-2 gap-2 text-xs text-muted-foreground pt-1 border-t border-border/20">
-                      <div className="flex items-center gap-1.5 min-w-0">
+                      <div className="flex items-center gap-1.5">
                         <Clock className="h-3.5 w-3.5 shrink-0 text-muted-foreground/75" />
-                        <span className="truncate" title={evento.horario}>
+                        <span className="break-words" title={evento.horario}>
                           {evento.horario}
                         </span>
                       </div>
-                      <div className="flex items-center gap-1.5 min-w-0">
+                      <div className="flex items-center gap-1.5">
                         <MapPin className="h-3.5 w-3.5 shrink-0 text-muted-foreground/75" />
-                        <span className="truncate" title={evento.sala}>
+                        <span className="break-words" title={evento.sala}>
                           {evento.sala}
                         </span>
                       </div>
@@ -793,7 +814,7 @@ export default function InternatoAgenda() {
                     {evento.internato_professores && (
                       <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                         <BookOpen className="h-3.5 w-3.5 shrink-0 text-muted-foreground/75" />
-                        <span className="truncate" title={`${evento.internato_professores.nome || 'Sem nome'}${evento.internato_professores.especialidade ? ` - ${evento.internato_professores.especialidade}` : ''}`}>
+                        <span className="break-words" title={`${evento.internato_professores.nome || 'Sem nome'}${evento.internato_professores.especialidade ? ` - ${evento.internato_professores.especialidade}` : ''}`}>
                           Prof. {evento.internato_professores.nome || 'Sem nome'}
                           {evento.internato_professores.especialidade && (
                             <span className="text-[10px] text-muted-foreground/70 font-normal"> ({evento.internato_professores.especialidade})</span>
@@ -852,6 +873,7 @@ export default function InternatoAgenda() {
                     required
                   >
                     <option value="" disabled>Selecione uma turma</option>
+                    <option value="acolhimento">Acolhimento</option>
                     {turmas.map(t => (
                       <option key={t.id} value={t.id}>
                         {t.nome} ({t.periodo})
@@ -864,39 +886,60 @@ export default function InternatoAgenda() {
                   {/* Sala */}
                   <div className="flex flex-col gap-1.5">
                     <label className="text-xs font-bold text-muted-foreground uppercase">Sala / Setor *</label>
-                    <input
-                      type="text"
+                    <select
                       value={formSala}
                       onChange={e => setFormSala(e.target.value)}
-                      placeholder="Ex: Sala A3, Ambulatório"
                       className="w-full px-3 py-2 text-sm rounded-lg border border-border bg-background focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all"
                       required
-                    />
+                    >
+                      <option value="" disabled>Selecione</option>
+                      <option value="Auditório">Auditório</option>
+                      <option value="Sala de Estudo">Sala de Estudo</option>
+                    </select>
                   </div>
 
                   {/* Horário */}
                   <div className="flex flex-col gap-1.5">
-                    <label className="text-xs font-bold text-muted-foreground uppercase">Horário *</label>
+                    <label className="text-xs font-bold text-muted-foreground uppercase">Turno *</label>
                     <select
                       value={formHorario}
-                      onChange={e => setFormHorario(e.target.value)}
+                      onChange={e => {
+                        const val = e.target.value;
+                        setFormHorario(val);
+                        if (val === 'Manhã') setFormHorarioPersonalizado('08:00 às 12:00');
+                        else if (val === 'Tarde') setFormHorarioPersonalizado('13:00 às 17:00');
+                        else if (val === 'Noite') setFormHorarioPersonalizado('18:00 às 22:00');
+                        else if (val === 'Dia todo') setFormHorarioPersonalizado('08:00 às 18:00');
+                      }}
                       className="w-full px-3 py-2 text-sm rounded-lg border border-border bg-background focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all"
                       required
                     >
                       <option value="Manhã">Manhã</option>
                       <option value="Tarde">Tarde</option>
                       <option value="Noite">Noite</option>
+                      <option value="Dia todo">Dia todo</option>
                     </select>
+
+                    <input
+                      type="text"
+                      value={formHorarioPersonalizado}
+                      onChange={e => setFormHorarioPersonalizado(e.target.value)}
+                      placeholder="Horário da aula (Ex: 08:30 às 11:30)"
+                      className="w-full px-3 py-2 mt-1.5 text-sm rounded-lg border border-border bg-background focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all"
+                      required
+                    />
                   </div>
                 </div>
 
                 <div className="flex flex-col gap-1.5">
-                  <label className="text-xs font-bold text-muted-foreground uppercase">Clínica *</label>
+                  <label className="text-xs font-bold text-muted-foreground uppercase">
+                    Clínica {formTurmaId !== 'acolhimento' && '*'}
+                  </label>
                   <select
                     value={formClinica}
                     onChange={e => setFormClinica(e.target.value)}
                     className="w-full px-3 py-2 text-sm rounded-lg border border-border bg-background focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all"
-                    required
+                    required={formTurmaId !== 'acolhimento'}
                   >
                     <option value="" disabled>Selecione uma clínica</option>
                     {CLINICAS.map(c => (

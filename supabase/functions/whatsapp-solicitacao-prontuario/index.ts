@@ -120,6 +120,16 @@ Deno.serve(async (req: Request) => {
   const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
   const EVOLUTION_API_URL = Deno.env.get('EVOLUTION_API_URL') || '';
   const EVOLUTION_API_KEY = Deno.env.get('EVOLUTION_API_KEY') || '';
+
+  // --- Validação de Autorização ---
+  const authHeader = req.headers.get('Authorization') || '';
+  const token = authHeader.replace(/^Bearer\s+/i, '');
+  if (token !== SUPABASE_SERVICE_ROLE_KEY) {
+    return new Response(
+      JSON.stringify({ error: 'Acesso não autorizado. Chave do sistema (Service Role) inválida ou ausente.' }),
+      { status: 401, headers: corsHeaders }
+    );
+  }
   
   // Conforme a especificação, remetente (instância) e destinatário fixos:
   const SENDER_INSTANCE = 'HSC TI';

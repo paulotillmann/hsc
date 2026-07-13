@@ -191,7 +191,35 @@ Deno.serve(async (req: Request) => {
   const corsHeaders = {
     'Content-Type': 'application/json',
     'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
   };
+
+  // --- Validação de Autorização ---
+  const authHeader = req.headers.get('Authorization') || '';
+  const token = authHeader.replace(/^Bearer\s+/i, '');
+  let isAuthorized = token === SUPABASE_SERVICE_ROLE_KEY;
+
+  if (!isAuthorized && token) {
+    try {
+      const supabaseClient = createClient(SUPABASE_URL, Deno.env.get('SUPABASE_ANON_KEY') || '', {
+        global: { headers: { Authorization: authHeader } }
+      });
+      const { data: { user }, error: userError } = await supabaseClient.auth.getUser();
+      if (!userError && user) {
+        isAuthorized = true;
+      }
+    } catch (e) {
+      console.error('[SMTP Auth] Erro ao verificar JWT:', e);
+    }
+  }
+
+  if (!isAuthorized) {
+    return new Response(
+      JSON.stringify({ error: 'Acesso não autorizado. É necessário um token de usuário válido ou chave do sistema.' }),
+      { status: 401, headers: corsHeaders }
+    );
+  }
 
   try {
     const payload: EmailPayload = await req.json();
