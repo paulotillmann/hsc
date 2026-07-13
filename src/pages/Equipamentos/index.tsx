@@ -52,7 +52,6 @@ export default function Equipamentos() {
   
   // Filtros
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedTipo, setSelectedTipo] = useState('');
   const [selectedPropriedade, setSelectedPropriedade] = useState('');
   const [selectedLocalizacoes, setSelectedLocalizacoes] = useState<string[]>([]);
   const [selectedCategorias, setSelectedCategorias] = useState<string[]>([]);
@@ -116,7 +115,6 @@ export default function Equipamentos() {
   // Resetar todos os filtros
   const handleResetFilters = () => {
     setSearchTerm('');
-    setSelectedTipo('');
     setSelectedPropriedade('');
     setSelectedLocalizacoes([]);
     setSelectedCategorias([]);
@@ -128,14 +126,12 @@ export default function Equipamentos() {
 
   // Listas de opções para filtros (obtidas dinamicamente a partir dos dados)
   const filterOptions = useMemo(() => {
-    const tipos = new Set<string>();
     const propriedades = new Set<string>();
     const localizacoes = new Set<string>();
     const categorias = new Set<string>();
     const fornecedores = new Set<string>();
  
     equipamentos.forEach(e => {
-      if (e.TIPO) tipos.add(e.TIPO.trim());
       if (e.PROPRIEDADE) propriedades.add(e.PROPRIEDADE.trim());
       if (e.LOCALIZACAO) localizacoes.add(e.LOCALIZACAO.trim());
       if (e.DS_CATEGORIA) categorias.add(e.DS_CATEGORIA.trim());
@@ -145,7 +141,6 @@ export default function Equipamentos() {
     });
 
     return {
-      tipos: Array.from(tipos).sort(),
       propriedades: Array.from(propriedades).sort(),
       localizacoes: Array.from(localizacoes).sort(),
       categorias: Array.from(categorias).sort(),
@@ -187,7 +182,6 @@ export default function Equipamentos() {
           e['OBTER_NOME_PJ(CD_CGC_TERC)']?.toLowerCase().includes(term);
 
         // Filtros estruturados
-        const matchesTipo = !selectedTipo || e.TIPO?.trim() === selectedTipo;
         const matchesPropriedade = !selectedPropriedade || e.PROPRIEDADE?.trim() === selectedPropriedade;
         const matchesLocalizacao = selectedLocalizacoes.length === 0 || 
           (e.LOCALIZACAO && selectedLocalizacoes.includes(e.LOCALIZACAO.trim()));
@@ -221,7 +215,7 @@ export default function Equipamentos() {
           }
         }
 
-        return matchesSearch && matchesTipo && matchesPropriedade && matchesLocalizacao && matchesCategoria && matchesFornecedor && matchesGarantia;
+        return matchesSearch && matchesPropriedade && matchesLocalizacao && matchesCategoria && matchesFornecedor && matchesGarantia;
       })
       .sort((a, b) => {
         let valA = a[sortField];
@@ -243,7 +237,7 @@ export default function Equipamentos() {
 
         return 0;
       });
-  }, [equipamentos, searchTerm, selectedTipo, selectedPropriedade, selectedLocalizacoes, selectedCategorias, selectedFornecedores, startGarantia, endGarantia, sortField, sortDirection]);
+  }, [equipamentos, searchTerm, selectedPropriedade, selectedLocalizacoes, selectedCategorias, selectedFornecedores, startGarantia, endGarantia, sortField, sortDirection]);
 
   // Estatísticas / KPIs calculadas dinamicamente com base nos dados filtrados
   const stats = useMemo(() => {
@@ -312,21 +306,6 @@ export default function Equipamentos() {
               className="w-full bg-background border border-border rounded-lg pl-8 pr-3 py-1.5 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary transition-all h-[34px]"
             />
           </div>
-
-          {/* 2. Tipo */}
-          <select
-            value={selectedTipo}
-            onChange={(e) => {
-              setSelectedTipo(e.target.value);
-              setCurrentPage(1);
-            }}
-            className="w-full sm:w-32 bg-background border border-border rounded-lg px-2.5 py-1.5 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary transition-all font-medium h-[34px]"
-          >
-            <option value="">Todos os Tipos</option>
-            {filterOptions.tipos.map(tipo => (
-              <option key={tipo} value={tipo}>{tipo}</option>
-            ))}
-          </select>
 
           {/* 3. Categoria (Multi-seleção Checkbox) */}
           <div className="relative w-full sm:w-40 categoria-dropdown-container">
@@ -515,7 +494,7 @@ export default function Equipamentos() {
           </div>
 
           {/* Botão de Limpar Filtros */}
-          {(searchTerm || selectedTipo || selectedPropriedade || selectedLocalizacoes.length > 0 || selectedCategorias.length > 0 || selectedFornecedores.length > 0 || startGarantia || endGarantia) && (
+          {(searchTerm || selectedPropriedade || selectedLocalizacoes.length > 0 || selectedCategorias.length > 0 || selectedFornecedores.length > 0 || startGarantia || endGarantia) && (
             <button
               onClick={handleResetFilters}
               title="Limpar Filtros"
