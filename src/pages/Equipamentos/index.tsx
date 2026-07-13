@@ -41,6 +41,8 @@ interface Equipamento {
   DS_OBSERVACAO_TENSAO: string | null;
   INICIO_CONTRATO: string | null;
   FIM_CONTRATO: string | null;
+  FORNECEDOR?: string | null;
+  fornecedor?: string | null;
 }
 
 export default function Equipamentos() {
@@ -167,7 +169,11 @@ export default function Equipamentos() {
           e.PROCESSADOR?.toLowerCase().includes(term) ||
           e.MEMORIA?.toLowerCase().includes(term) ||
           e.DS_CATEGORIA?.toLowerCase().includes(term) ||
-          e.NR_SEQUENCIA?.toString().includes(term);
+          e.NR_SEQUENCIA?.toString().includes(term) ||
+          e.FORNECEDOR?.toLowerCase().includes(term) ||
+          e.fornecedor?.toLowerCase().includes(term) ||
+          e['OBTER_NOME_PJ(A.CD_CGC_TERC)']?.toLowerCase().includes(term) ||
+          e['OBTER_NOME_PJ(CD_CGC_TERC)']?.toLowerCase().includes(term);
 
         // Filtros estruturados
         const matchesTipo = !selectedTipo || e.TIPO?.trim() === selectedTipo;
@@ -563,6 +569,12 @@ export default function Equipamentos() {
                       Propriedade {sortField === 'PROPRIEDADE' && (sortDirection === 'asc' ? '↑' : '↓')}
                     </th>
                     <th 
+                      onClick={() => handleSort('FORNECEDOR' as any)} 
+                      className="px-6 py-3.5 cursor-pointer hover:text-foreground transition-colors select-none"
+                    >
+                      Fornecedor {sortField === 'FORNECEDOR' && (sortDirection === 'asc' ? '↑' : '↓')}
+                    </th>
+                    <th 
                       onClick={() => handleSort('LOCALIZACAO')} 
                       className="px-6 py-3.5 cursor-pointer hover:text-foreground transition-colors select-none"
                     >
@@ -580,7 +592,6 @@ export default function Equipamentos() {
                     >
                       AnyDesk {sortField === 'ANYDESK' && (sortDirection === 'asc' ? '↑' : '↓')}
                     </th>
-                    <th className="px-6 py-3.5 text-right">Ações</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border/40">
@@ -622,6 +633,9 @@ export default function Equipamentos() {
                           {eq.PROPRIEDADE}
                         </span>
                       </td>
+                      <td className="px-6 py-4 text-muted-foreground max-w-[180px] truncate" title={eq.FORNECEDOR || eq.fornecedor || eq['OBTER_NOME_PJ(A.CD_CGC_TERC)'] || eq['OBTER_NOME_PJ(CD_CGC_TERC)'] || ''}>
+                        {eq.FORNECEDOR || eq.fornecedor || eq['OBTER_NOME_PJ(A.CD_CGC_TERC)'] || eq['OBTER_NOME_PJ(CD_CGC_TERC)'] || <span className="text-muted-foreground/45">—</span>}
+                      </td>
                       <td className="px-6 py-4 text-muted-foreground max-w-[200px] truncate" title={eq.LOCALIZACAO}>
                         {eq.LOCALIZACAO}
                       </td>
@@ -630,14 +644,6 @@ export default function Equipamentos() {
                       </td>
                       <td className="px-6 py-4 font-mono text-xs text-foreground">
                         {eq.ANYDESK || <span className="text-muted-foreground/45">—</span>}
-                      </td>
-                      <td className="px-6 py-4 text-right" onClick={(e) => e.stopPropagation()}>
-                        <button
-                          onClick={() => setSelectedEquipamento(eq)}
-                          className="text-xs font-semibold px-3 py-1.5 rounded-md bg-secondary text-secondary-foreground hover:bg-secondary/80 border border-border transition-colors opacity-80 group-hover:opacity-100"
-                        >
-                          Visualizar
-                        </button>
                       </td>
                     </tr>
                   ))}
