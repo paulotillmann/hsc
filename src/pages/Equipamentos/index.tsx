@@ -56,8 +56,10 @@ export default function Equipamentos() {
   const [selectedPropriedade, setSelectedPropriedade] = useState('');
   const [selectedLocalizacoes, setSelectedLocalizacoes] = useState<string[]>([]);
   const [selectedCategorias, setSelectedCategorias] = useState<string[]>([]);
+  const [selectedFornecedores, setSelectedFornecedores] = useState<string[]>([]);
   const [isCategoriaDropdownOpen, setIsCategoriaDropdownOpen] = useState(false);
   const [isLocalizacaoDropdownOpen, setIsLocalizacaoDropdownOpen] = useState(false);
+  const [isFornecedorDropdownOpen, setIsFornecedorDropdownOpen] = useState(false);
   const [startGarantia, setStartGarantia] = useState('');
   const [endGarantia, setEndGarantia] = useState('');
   
@@ -103,6 +105,9 @@ export default function Equipamentos() {
       if (!target.closest('.localizacao-dropdown-container')) {
         setIsLocalizacaoDropdownOpen(false);
       }
+      if (!target.closest('.fornecedor-dropdown-container')) {
+        setIsFornecedorDropdownOpen(false);
+      }
     };
     document.addEventListener('mousedown', handleOutsideClick);
     return () => document.removeEventListener('mousedown', handleOutsideClick);
@@ -115,6 +120,7 @@ export default function Equipamentos() {
     setSelectedPropriedade('');
     setSelectedLocalizacoes([]);
     setSelectedCategorias([]);
+    setSelectedFornecedores([]);
     setStartGarantia('');
     setEndGarantia('');
     setCurrentPage(1);
@@ -126,19 +132,24 @@ export default function Equipamentos() {
     const propriedades = new Set<string>();
     const localizacoes = new Set<string>();
     const categorias = new Set<string>();
-
+    const fornecedores = new Set<string>();
+ 
     equipamentos.forEach(e => {
       if (e.TIPO) tipos.add(e.TIPO.trim());
       if (e.PROPRIEDADE) propriedades.add(e.PROPRIEDADE.trim());
       if (e.LOCALIZACAO) localizacoes.add(e.LOCALIZACAO.trim());
       if (e.DS_CATEGORIA) categorias.add(e.DS_CATEGORIA.trim());
+      
+      const forn = e.FORNECEDOR || e.fornecedor || e['OBTER_NOME_PJ(A.CD_CGC_TERC)'] || e['OBTER_NOME_PJ(CD_CGC_TERC)'];
+      if (forn) fornecedores.add(forn.trim());
     });
 
     return {
       tipos: Array.from(tipos).sort(),
       propriedades: Array.from(propriedades).sort(),
       localizacoes: Array.from(localizacoes).sort(),
-      categorias: Array.from(categorias).sort()
+      categorias: Array.from(categorias).sort(),
+      fornecedores: Array.from(fornecedores).sort()
     };
   }, [equipamentos]);
 
@@ -182,6 +193,11 @@ export default function Equipamentos() {
           (e.LOCALIZACAO && selectedLocalizacoes.includes(e.LOCALIZACAO.trim()));
         const matchesCategoria = selectedCategorias.length === 0 || 
           (e.DS_CATEGORIA && selectedCategorias.includes(e.DS_CATEGORIA.trim()));
+        const matchesFornecedor = selectedFornecedores.length === 0 || 
+          (() => {
+            const forn = e.FORNECEDOR || e.fornecedor || e['OBTER_NOME_PJ(A.CD_CGC_TERC)'] || e['OBTER_NOME_PJ(CD_CGC_TERC)'];
+            return !!forn && selectedFornecedores.includes(forn.trim());
+          })();
 
         // Filtro de Datas de Contrato/Garantia
         let matchesGarantia = true;
@@ -205,7 +221,7 @@ export default function Equipamentos() {
           }
         }
 
-        return matchesSearch && matchesTipo && matchesPropriedade && matchesLocalizacao && matchesCategoria && matchesGarantia;
+        return matchesSearch && matchesTipo && matchesPropriedade && matchesLocalizacao && matchesCategoria && matchesFornecedor && matchesGarantia;
       })
       .sort((a, b) => {
         let valA = a[sortField];
@@ -227,7 +243,7 @@ export default function Equipamentos() {
 
         return 0;
       });
-  }, [equipamentos, searchTerm, selectedTipo, selectedPropriedade, selectedLocalizacoes, selectedCategorias, startGarantia, endGarantia, sortField, sortDirection]);
+  }, [equipamentos, searchTerm, selectedTipo, selectedPropriedade, selectedLocalizacoes, selectedCategorias, selectedFornecedores, startGarantia, endGarantia, sortField, sortDirection]);
 
   // Estatísticas / KPIs calculadas dinamicamente com base nos dados filtrados
   const stats = useMemo(() => {
@@ -361,6 +377,55 @@ export default function Equipamentos() {
             )}
           </div>
 
+          {/* 4. Fornecedor (Multi-seleção Checkbox) */}
+          <div className="relative w-full sm:w-44 fornecedor-dropdown-container">
+            <button
+              type="button"
+              onClick={() => setIsFornecedorDropdownOpen(!isFornecedorDropdownOpen)}
+              className="w-full bg-background border border-border rounded-lg px-2.5 py-1.5 text-xs text-foreground text-left flex justify-between items-center focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary transition-all font-medium h-[34px]"
+            >
+              <span className="truncate max-w-[85%]">
+                {selectedFornecedores.length === 0
+                  ? 'Fornecedores'
+                  : selectedFornecedores.length === 1
+                  ? selectedFornecedores[0]
+                  : `${selectedFornecedores.length} selecionados`}
+              </span>
+              <ChevronRight className={`h-3 w-3 transform transition-transform text-muted-foreground ${isFornecedorDropdownOpen ? 'rotate-90' : ''}`} />
+            </button>
+
+            {isFornecedorDropdownOpen && (
+              <div className="absolute top-[100%] left-0 right-0 z-20 mt-1 bg-card border border-border rounded-lg shadow-lg py-1.5 max-h-48 overflow-y-auto animate-in fade-in slide-in-from-top-1 duration-150 min-w-[200px]">
+                <div className="flex flex-col px-1">
+                  {filterOptions.fornecedores.map(forn => {
+                    const isChecked = selectedFornecedores.includes(forn);
+                    return (
+                      <label
+                        key={forn}
+                        className="flex items-center gap-2 px-2 py-1 hover:bg-muted rounded cursor-pointer text-xs transition-colors select-none font-medium text-foreground"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          onChange={() => {
+                            if (isChecked) {
+                              setSelectedFornecedores(prev => prev.filter(f => f !== forn));
+                            } else {
+                              setSelectedFornecedores(prev => [...prev, forn]);
+                            }
+                            setCurrentPage(1);
+                          }}
+                          className="h-3.5 w-3.5 rounded border-border text-primary focus:ring-primary"
+                        />
+                        <span className="truncate" title={forn}>{forn}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+
           {/* 4. Propriedade */}
           <select
             value={selectedPropriedade}
@@ -450,7 +515,7 @@ export default function Equipamentos() {
           </div>
 
           {/* Botão de Limpar Filtros */}
-          {(searchTerm || selectedTipo || selectedPropriedade || selectedLocalizacoes.length > 0 || selectedCategorias.length > 0 || startGarantia || endGarantia) && (
+          {(searchTerm || selectedTipo || selectedPropriedade || selectedLocalizacoes.length > 0 || selectedCategorias.length > 0 || selectedFornecedores.length > 0 || startGarantia || endGarantia) && (
             <button
               onClick={handleResetFilters}
               title="Limpar Filtros"
@@ -633,7 +698,7 @@ export default function Equipamentos() {
                           {eq.PROPRIEDADE}
                         </span>
                       </td>
-                      <td className="px-6 py-4 text-muted-foreground max-w-[180px] truncate" title={eq.FORNECEDOR || eq.fornecedor || eq['OBTER_NOME_PJ(A.CD_CGC_TERC)'] || eq['OBTER_NOME_PJ(CD_CGC_TERC)'] || ''}>
+                      <td className="px-6 py-4 text-muted-foreground text-xs font-medium whitespace-normal break-words max-w-[240px]">
                         {eq.FORNECEDOR || eq.fornecedor || eq['OBTER_NOME_PJ(A.CD_CGC_TERC)'] || eq['OBTER_NOME_PJ(CD_CGC_TERC)'] || <span className="text-muted-foreground/45">—</span>}
                       </td>
                       <td className="px-6 py-4 text-muted-foreground max-w-[200px] truncate" title={eq.LOCALIZACAO}>
