@@ -152,11 +152,12 @@ Deno.serve(async (req: Request) => {
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
-    // 3. Buscar todas as OS atualmente cadastradas no banco de dados do Supabase
-    console.log('[Sync Status OS] Buscando OS existentes no banco de dados...');
+    // 3. Buscar apenas as OS ativas (não encerradas/finalizadas) atualmente cadastradas no banco de dados do Supabase
+    console.log('[Sync Status OS] Buscando OS ativas no banco de dados...');
     const { data: existingOS, error: queryError } = await supabase
       .from('ordem_servico')
-      .select('nr_sequencia, dt_atualizacao, ds_situacao, ds_estagio, nm_usuario_encer');
+      .select('nr_sequencia, dt_atualizacao, ds_situacao, ds_estagio, nm_usuario_encer')
+      .or('ds_situacao.is.null,and(ds_situacao.not.ilike.%finalizada%,ds_situacao.not.ilike.%finalizado%,ds_situacao.not.ilike.%encerrada%,ds_situacao.not.ilike.%concluída%,ds_situacao.not.ilike.%concluido%)');
 
     if (queryError) {
       throw new Error(`Erro ao buscar OS existentes do banco: ${queryError.message}`);
@@ -220,7 +221,9 @@ Deno.serve(async (req: Request) => {
       }
 
       const existing = existingMap.get(nrSeq);
-      const isNew = !existing;
+      if (!existing) {
+        continue; // Ignora se não existir no banco (criação é responsabilidade de sync-ordem-servico)
+      }
 
       // Validação de Alterações
       const newDtAtualizacao = item.DT_ATUALIZACAO ? new Date(item.DT_ATUALIZACAO).toISOString() : null;
@@ -228,27 +231,22 @@ Deno.serve(async (req: Request) => {
       const newDsEstagio = item.DS_ESTAGIO ? String(item.DS_ESTAGIO).trim() : null;
       const newNmUsuarioEncer = item.NM_USUARIO_ENCER ? String(item.NM_USUARIO_ENCER).trim() : null;
 
+      // Comparar datas (seguro contra fusos e nulos)
+      let datesDiffer = false;
+      if (newDtAtualizacao && existing.dt_atualizacao) {
+        datesDiffer = new Date(newDtAtualizacao).getTime() !== new Date(existing.dt_atualizacao).getTime();
+      } else if (newDtAtualizacao !== existing.dt_atualizacao) {
+        datesDiffer = true;
+      }
+
+      const statusDiffer = datesDiffer ||
+        existing.ds_situacao !== newDsSituacao ||
+        existing.ds_estagio !== newDsEstagio ||
+        existing.nm_usuario_encer !== newNmUsuarioEncer;
+
       let shouldUpsert = false;
-
-      if (isNew) {
+      if (statusDiffer) {
         shouldUpsert = true;
-      } else {
-        // Comparar datas (seguro contra fusos e nulos)
-        let datesDiffer = false;
-        if (newDtAtualizacao && existing.dt_atualizacao) {
-          datesDiffer = new Date(newDtAtualizacao).getTime() !== new Date(existing.dt_atualizacao).getTime();
-        } else if (newDtAtualizacao !== existing.dt_atualizacao) {
-          datesDiffer = true;
-        }
-
-        const statusDiffer = datesDiffer ||
-          existing.ds_situacao !== newDsSituacao ||
-          existing.ds_estagio !== newDsEstagio ||
-          existing.nm_usuario_encer !== newNmUsuarioEncer;
-
-        if (statusDiffer) {
-          shouldUpsert = true;
-        }
       }
 
       // Só atualiza ou insere se houver alteração ou for nova
