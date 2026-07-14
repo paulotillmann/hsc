@@ -24,6 +24,8 @@ import {
 import { webhookService } from '../../services/webhookService';
 import { VisaoGeralCard } from '../../components/recepcao/VisaoGeralCard';
 
+const months = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+
 interface Equipamento {
   NR_SEQUENCIA: number;
   DS_EQUIPAMENTO: string;
@@ -59,8 +61,9 @@ export default function Equipamentos() {
   const [isCategoriaDropdownOpen, setIsCategoriaDropdownOpen] = useState(false);
   const [isLocalizacaoDropdownOpen, setIsLocalizacaoDropdownOpen] = useState(false);
   const [isFornecedorDropdownOpen, setIsFornecedorDropdownOpen] = useState(false);
-  const [startGarantia, setStartGarantia] = useState('');
-  const [endGarantia, setEndGarantia] = useState('');
+  const [selectedMonth, setSelectedMonth] = useState<number | null>(null);
+  const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
+  const [isDatePickerOpen, setIsDatePickerOpen] = useState(false);
   
   // Paginação e Ordenação
   const [currentPage, setCurrentPage] = useState(1);
@@ -107,6 +110,9 @@ export default function Equipamentos() {
       if (!target.closest('.fornecedor-dropdown-container')) {
         setIsFornecedorDropdownOpen(false);
       }
+      if (!target.closest('.datepicker-dropdown-container')) {
+        setIsDatePickerOpen(false);
+      }
     };
     document.addEventListener('mousedown', handleOutsideClick);
     return () => document.removeEventListener('mousedown', handleOutsideClick);
@@ -119,8 +125,8 @@ export default function Equipamentos() {
     setSelectedLocalizacoes([]);
     setSelectedCategorias([]);
     setSelectedFornecedores([]);
-    setStartGarantia('');
-    setEndGarantia('');
+    setSelectedMonth(null);
+    setSelectedYear(new Date().getFullYear());
     setCurrentPage(1);
   };
 
@@ -193,23 +199,25 @@ export default function Equipamentos() {
             return !!forn && selectedFornecedores.includes(forn.trim());
           })();
 
-        // Filtro de Datas de Contrato/Garantia
+        // Filtro de Mês/Ano de Fim de Contrato
         let matchesGarantia = true;
-        if (startGarantia) {
-          if (e.INICIO_CONTRATO) {
-            const dateEquipStart = new Date(e.INICIO_CONTRATO).getTime();
-            const filterStart = new Date(startGarantia + 'T00:00:00').getTime();
-            if (dateEquipStart < filterStart) matchesGarantia = false;
-          } else {
-            matchesGarantia = false;
-          }
-        }
-
-        if (endGarantia) {
+        if (selectedMonth !== null) {
           if (e.FIM_CONTRATO) {
-            const dateEquipEnd = new Date(e.FIM_CONTRATO).getTime();
-            const filterEnd = new Date(endGarantia + 'T23:59:59').getTime();
-            if (dateEquipEnd > filterEnd) matchesGarantia = false;
+            const dateParts = e.FIM_CONTRATO.split('-');
+            if (dateParts.length >= 2) {
+              const year = parseInt(dateParts[0], 10);
+              const month = parseInt(dateParts[1], 10) - 1; // 0-indexed
+              if (year !== selectedYear || month !== selectedMonth) {
+                matchesGarantia = false;
+              }
+            } else {
+              const date = new Date(e.FIM_CONTRATO);
+              const year = date.getFullYear();
+              const month = date.getMonth();
+              if (year !== selectedYear || month !== selectedMonth) {
+                matchesGarantia = false;
+              }
+            }
           } else {
             matchesGarantia = false;
           }
@@ -237,7 +245,7 @@ export default function Equipamentos() {
 
         return 0;
       });
-  }, [equipamentos, searchTerm, selectedPropriedade, selectedLocalizacoes, selectedCategorias, selectedFornecedores, startGarantia, endGarantia, sortField, sortDirection]);
+  }, [equipamentos, searchTerm, selectedPropriedade, selectedLocalizacoes, selectedCategorias, selectedFornecedores, selectedMonth, selectedYear, sortField, sortDirection]);
 
   // Estatísticas / KPIs calculadas dinamicamente com base nos dados filtrados
   const stats = useMemo(() => {
@@ -469,32 +477,86 @@ export default function Equipamentos() {
             )}
           </div>
 
-          {/* 6. Datas de Contrato */}
-          <div className="flex items-center gap-1 bg-background border border-border rounded-lg px-2 py-1 text-xs text-foreground h-[34px]">
-            <span className="text-muted-foreground shrink-0 font-medium">Contrato:</span>
-            <input
-              type="date"
-              value={startGarantia}
-              onChange={(e) => {
-                setStartGarantia(e.target.value);
-                setCurrentPage(1);
-              }}
-              className="bg-transparent border-none p-0 focus:ring-0 w-24 focus:outline-none text-foreground font-medium text-xs shadow-none outline-none border-0"
-            />
-            <span className="text-muted-foreground shrink-0 font-medium">até</span>
-            <input
-              type="date"
-              value={endGarantia}
-              onChange={(e) => {
-                setEndGarantia(e.target.value);
-                setCurrentPage(1);
-              }}
-              className="bg-transparent border-none p-0 focus:ring-0 w-24 focus:outline-none text-foreground font-medium text-xs shadow-none outline-none border-0"
-            />
+          {/* 6. Filtro de Mês/Ano do Contrato */}
+          <div className="relative w-full sm:w-48 datepicker-dropdown-container">
+            <button
+              type="button"
+              onClick={() => setIsDatePickerOpen(!isDatePickerOpen)}
+              className="w-full bg-background border border-border rounded-lg px-2.5 py-1.5 text-xs text-foreground text-left flex justify-between items-center focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary transition-all font-medium h-[34px]"
+            >
+              <span className="flex items-center gap-1.5 truncate">
+                <Calendar className="h-3.5 w-3.5 text-muted-foreground" />
+                {selectedMonth !== null
+                  ? `${months[selectedMonth]} ${selectedYear}`
+                  : 'Todos os Períodos'}
+              </span>
+              <ChevronRight className={`h-3 w-3 transform transition-transform text-muted-foreground ${isDatePickerOpen ? 'rotate-90' : ''}`} />
+            </button>
+
+            {isDatePickerOpen && (
+              <div className="absolute top-[100%] right-0 z-20 mt-1 bg-card border border-border rounded-lg shadow-lg p-3 w-64 animate-in fade-in slide-in-from-top-1 duration-150">
+                {/* Cabeçalho do Ano */}
+                <div className="flex items-center justify-between mb-3 px-1">
+                  <button
+                    type="button"
+                    onClick={() => setSelectedYear(prev => prev - 1)}
+                    className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                  </button>
+                  <span className="text-xs font-bold text-foreground">{selectedYear}</span>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedYear(prev => prev + 1)}
+                    className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    <ChevronRight className="h-4 w-4" />
+                  </button>
+                </div>
+
+                {/* Grade de Meses */}
+                <div className="grid grid-cols-3 gap-1.5 mb-3">
+                  {months.map((m, idx) => {
+                    const isSelected = selectedMonth === idx;
+                    return (
+                      <button
+                        key={m}
+                        type="button"
+                        onClick={() => {
+                          setSelectedMonth(idx);
+                          setIsDatePickerOpen(false);
+                          setCurrentPage(1);
+                        }}
+                        className={`py-1.5 text-2xs font-semibold rounded-md transition-all ${
+                          isSelected
+                            ? 'bg-primary text-primary-foreground shadow-sm shadow-primary/20'
+                            : 'hover:bg-muted text-foreground'
+                        }`}
+                      >
+                        {m}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Botão Todos os Períodos */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedMonth(null);
+                    setIsDatePickerOpen(false);
+                    setCurrentPage(1);
+                  }}
+                  className="w-full py-1.5 text-2xs font-bold text-center border border-border rounded-md hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
+                >
+                  Todos os Períodos
+                </button>
+              </div>
+            )}
           </div>
 
           {/* Botão de Limpar Filtros */}
-          {(searchTerm || selectedPropriedade || selectedLocalizacoes.length > 0 || selectedCategorias.length > 0 || selectedFornecedores.length > 0 || startGarantia || endGarantia) && (
+          {(searchTerm || selectedPropriedade || selectedLocalizacoes.length > 0 || selectedCategorias.length > 0 || selectedFornecedores.length > 0 || selectedMonth !== null) && (
             <button
               onClick={handleResetFilters}
               title="Limpar Filtros"
@@ -619,6 +681,12 @@ export default function Equipamentos() {
                       Fornecedor {sortField === 'FORNECEDOR' && (sortDirection === 'asc' ? '↑' : '↓')}
                     </th>
                     <th 
+                      onClick={() => handleSort('FIM_CONTRATO')} 
+                      className="px-6 py-3.5 cursor-pointer hover:text-foreground transition-colors select-none"
+                    >
+                      Fim do Contrato {sortField === 'FIM_CONTRATO' && (sortDirection === 'asc' ? '↑' : '↓')}
+                    </th>
+                    <th 
                       onClick={() => handleSort('LOCALIZACAO')} 
                       className="px-6 py-3.5 cursor-pointer hover:text-foreground transition-colors select-none"
                     >
@@ -629,12 +697,6 @@ export default function Equipamentos() {
                       className="px-6 py-3.5 cursor-pointer hover:text-foreground transition-colors select-none"
                     >
                       IP {sortField === 'IP' && (sortDirection === 'asc' ? '↑' : '↓')}
-                    </th>
-                    <th 
-                      onClick={() => handleSort('ANYDESK')} 
-                      className="px-6 py-3.5 cursor-pointer hover:text-foreground transition-colors select-none"
-                    >
-                      AnyDesk {sortField === 'ANYDESK' && (sortDirection === 'asc' ? '↑' : '↓')}
                     </th>
                   </tr>
                 </thead>
@@ -680,14 +742,14 @@ export default function Equipamentos() {
                       <td className="px-6 py-4 text-muted-foreground text-xs font-medium whitespace-normal break-words max-w-[240px]">
                         {eq.FORNECEDOR || eq.fornecedor || eq['OBTER_NOME_PJ(A.CD_CGC_TERC)'] || eq['OBTER_NOME_PJ(CD_CGC_TERC)'] || <span className="text-muted-foreground/45">—</span>}
                       </td>
+                      <td className="px-6 py-4 font-medium text-foreground text-xs">
+                        {eq.FIM_CONTRATO ? formatDate(eq.FIM_CONTRATO) : <span className="text-muted-foreground/45">—</span>}
+                      </td>
                       <td className="px-6 py-4 text-muted-foreground max-w-[200px] truncate" title={eq.LOCALIZACAO}>
                         {eq.LOCALIZACAO}
                       </td>
                       <td className="px-6 py-4 font-mono text-xs text-foreground">
                         {eq.IP || <span className="text-muted-foreground/45">—</span>}
-                      </td>
-                      <td className="px-6 py-4 font-mono text-xs text-foreground">
-                        {eq.ANYDESK || <span className="text-muted-foreground/45">—</span>}
                       </td>
                     </tr>
                   ))}
