@@ -70,6 +70,38 @@ export const webhookService = {
   },
 
   /**
+   * Trigger the "Consulta Equipamento TI" webhook
+   */
+  async fetchEquipamentosTi(payload: any = {}): Promise<any[]> {
+    const webhookUrl = import.meta.env.VITE_N8N_WEBHOOK_CONSULTA_EQUIPAMENTO_TI || 'https://n8n-n8n.7woir1.easypanel.host/webhook/consuta_equipamento_ti';
+    
+    if (!webhookUrl) {
+      console.error('Webhook URL (VITE_N8N_WEBHOOK_CONSULTA_EQUIPAMENTO_TI) is not configured.');
+      return [];
+    }
+
+    try {
+      const response = await fetch(webhookUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Error triggering webhook: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      return Array.isArray(data) ? data : [];
+    } catch (error) {
+      console.error('Error in webhook fetchEquipamentosTi:', error);
+      return [];
+    }
+  },
+
+  /**
    * Trigger the "Financeiro" webhook
    * @param payload Data containing filters like dateFrom, dateTo, etc.
    */
@@ -102,3 +134,4 @@ export const webhookService = {
     }
   }
 };
+

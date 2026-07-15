@@ -766,8 +766,11 @@ export async function atualizarSolicitacaoCompleta(
   let pdfUrl: string | null = null;
   let pdfName: string | null = null;
 
+  // Se um arquivo PDF for enviado, forçamos o status final para 'Documento Disponibilizado'
+  const statusEfetivo = arquivoPDF ? 'Documento Disponibilizado' : novoStatus;
+
   // 1. Se foi enviado um arquivo PDF, realizar o upload
-  if (arquivoPDF && (novoStatus === 'Documento Disponibilizado' || novoStatus === 'Aprovado')) {
+  if (arquivoPDF) {
     const cleanCpf = arquivoPDF.name.replace(/[^a-zA-Z0-9]/g, '_').toUpperCase();
     const storagePath = `${solicitacaoId}/${cleanCpf}`;
     try {
@@ -793,7 +796,7 @@ export async function atualizarSolicitacaoCompleta(
     }
   }
 
-  const descricao = `Solicitação atualizada para '${novoStatus}' pelo gestor.${
+  const descricao = `Solicitação atualizada para '${statusEfetivo}' pelo gestor.${
     justificativaRejeicao ? ` Motivo: ${justificativaRejeicao}` : ''
   }${pdfName ? ` Arquivo anexado: ${pdfName}` : ''}`;
 
@@ -809,22 +812,22 @@ export async function atualizarSolicitacaoCompleta(
 
     // Monta o payload de update
     const updateData: any = {
-      status: novoStatus,
+      status: statusEfetivo,
       responsavel_id: usuarioId,
       responsavel_nome: usuarioNome,
       updated_at: dataAtual
     };
 
-    if (novoStatus === 'Rejeitado') {
+    if (statusEfetivo === 'Rejeitado') {
       updateData.justificativa_rejeicao = justificativaRejeicao || null;
       updateData.data_finalizacao = dataAtual;
-    } else if (novoStatus === 'Documento Disponibilizado') {
+    } else if (statusEfetivo === 'Documento Disponibilizado') {
       updateData.data_finalizacao = dataAtual;
       if (pdfUrl) {
         updateData.arquivo_url = pdfUrl;
         updateData.arquivo_nome = pdfName;
       }
-    } else if (novoStatus === 'Aprovado') {
+    } else if (statusEfetivo === 'Aprovado') {
       if (pdfUrl) {
         updateData.arquivo_url = pdfUrl;
         updateData.arquivo_nome = pdfName;
@@ -879,4 +882,39 @@ export async function atualizarSolicitacaoCompleta(
       registrarLocalHistorico(solicitacaoId, status_anterior, novoStatus, descricao, usuarioId, usuarioNome);
     }
   }
+}
+
+
+/**
+ * Cria uma solicitação de teste no banco de dados.
+ */
+export async function criarSolicitacaoTeste(): Promise<void> {
+  const nomesTeste = ['Antônio da Silva Santos', 'Regina Célia de Souza', 'Cláudio Ferreira Lima', 'Beatriz Rocha Melo'];
+  const cpfsTeste = ['111.222.333-44', '555.666.777-88', '999.888.777-66', '333.444.555-66'];
+  const contatosTeste = ['(34) 98888-7777', '(34) 99999-8888', '(34) 97777-6666', '(34) 96666-5555'];
+  const motivosTeste = [
+    'Consulta com cardiologista em outra clínica médica.',
+    'Necessidade de histórico cirúrgico completo para perícia médica.',
+    'Apresentação de prontuário em processo judicial de aposentadoria.',
+    'Acompanhamento de tratamento oncológico de rotina.'
+  ];
+
+  const indice = Math.floor(Math.random() * nomesTeste.length);
+
+  const novaSolicitacao = {
+    paciente_nome: nomesTeste[indice],
+    paciente_cpf: cpfsTeste[indice],
+    paciente_data_nascimento: '1980-01-01',
+    paciente_contato: contatosTeste[indice],
+    motivo: motivosTeste[indice],
+    observacoes: 'SOLICITAÇÃO DE TESTE DO SISTEMA',
+    status: 'Pendente',
+    tipo_solicitacao: Math.random() > 0.5 ? 'Digital' : 'Físico'
+  };
+
+  const { error } = await supabase
+    .from('solicitacoes_prontuario')
+    .insert(novaSolicitacao);
+
+  if (error) throw error;
 }

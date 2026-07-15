@@ -52,7 +52,7 @@ export default function VisaoGeral() {
           .limit(1);
 
         if (errLatest) throw errLatest;
-        
+
         if (latestRecords && latestRecords.length > 0) {
           setDataFiltro(latestRecords[0].data);
           setHorarioFiltro(latestRecords[0].horario_envio);
@@ -97,7 +97,7 @@ export default function VisaoGeral() {
           .eq('horario_envio', horarioFiltro);
 
         if (errRecords) throw errRecords;
-        
+
         setLancamentos((records as unknown as OcupacaoDia[]) || []);
         setDadosNaoEncontrados(!records || records.length === 0);
       } catch (error) {
@@ -113,7 +113,7 @@ export default function VisaoGeral() {
     // Totais
     let leitosGeral = 0;
     let ocupadosGeral = 0;
-    
+
     let leitosSUS = 0;
     let ocupadosSUS = 0;
 
@@ -131,7 +131,7 @@ export default function VisaoGeral() {
       const baseLeitosExibicao = isSUS ? Number(record.total_leitos_sus || 0) : Number(record.total_leitos || 0);
 
       // Regra Filtro Geral
-      const isFiltroGeral = 
+      const isFiltroGeral =
         (record.taxa_setores?.leitos_tipo === 'SUS' && record.taxa_setores?.calcular_taxa === 'Ambos') ||
         (record.taxa_setores?.leitos_tipo === 'Particular ou convênio' && record.taxa_setores?.calcular_taxa === 'Geral') ||
         (record.taxa_setores?.leitos_tipo === 'Ambos' && record.taxa_setores?.calcular_taxa === 'Geral');
@@ -202,7 +202,7 @@ export default function VisaoGeral() {
             Indicadores consolidados de ocupação por data e horário.
           </p>
         </div>
-        
+
         <div className="flex items-center gap-3">
           {/* Botão Config - Apenas Admin */}
           {isAdmin && (
@@ -214,46 +214,46 @@ export default function VisaoGeral() {
               <Settings2 className="h-5 w-5 text-muted-foreground" />
             </button>
           )}
-        
-        {/* Painel de Filtros */}
-        <div className="bg-card shadow-sm border border-border rounded-xl px-4 py-2 flex flex-col sm:flex-row items-center gap-4 w-full xl:w-auto">
-          <div className="flex items-center gap-2 w-full sm:w-auto">
-            <CalendarIcon className="h-4 w-4 text-muted-foreground" />
-            <input 
-              type="date" 
-              className="bg-transparent border-none text-sm font-medium focus:ring-0 cursor-pointer w-full"
-              value={dataFiltro}
-              onChange={(e) => setDataFiltro(e.target.value)}
-            />
+
+          {/* Painel de Filtros */}
+          <div className="bg-card shadow-sm border border-border rounded-xl px-4 py-2 flex flex-col sm:flex-row items-center gap-4 w-full xl:w-auto">
+            <div className="flex items-center gap-2 w-full sm:w-auto">
+              <CalendarIcon className="h-4 w-4 text-muted-foreground" />
+              <input
+                type="date"
+                className="bg-transparent border-none text-sm font-medium focus:ring-0 cursor-pointer w-full"
+                value={dataFiltro}
+                onChange={(e) => setDataFiltro(e.target.value)}
+              />
+            </div>
+            <div className="hidden sm:block w-px h-6 bg-border"></div>
+            <div className="flex items-center gap-2 w-full sm:w-auto">
+              <Clock className="h-4 w-4 text-muted-foreground" />
+              <select
+                className="bg-transparent border-none text-sm font-medium focus:ring-0 cursor-pointer w-full"
+                value={horarioFiltro}
+                onChange={(e) => setHorarioFiltro(e.target.value)}
+              >
+                <option value="10:00" className="bg-background text-foreground">10:00</option>
+                <option value="20:00" className="bg-background text-foreground">20:00</option>
+              </select>
+            </div>
+            <div className="hidden sm:block w-px h-6 bg-border"></div>
+            <div className="flex items-center gap-2 w-full sm:w-auto">
+              <Filter className="h-4 w-4 text-muted-foreground" />
+              <select
+                className="bg-transparent border-none text-sm font-medium focus:ring-0 cursor-pointer w-full"
+                value={visaoFiltro}
+                onChange={(e) => setVisaoFiltro(e.target.value)}
+              >
+                <option value="Hospital Geral" className="bg-background text-foreground">Hospital Geral</option>
+                <option value="SUS" className="bg-background text-foreground">SUS</option>
+              </select>
+            </div>
           </div>
-          <div className="hidden sm:block w-px h-6 bg-border"></div>
-          <div className="flex items-center gap-2 w-full sm:w-auto">
-            <Clock className="h-4 w-4 text-muted-foreground" />
-            <select 
-              className="bg-transparent border-none text-sm font-medium focus:ring-0 cursor-pointer w-full"
-              value={horarioFiltro}
-              onChange={(e) => setHorarioFiltro(e.target.value)}
-            >
-              <option value="10:00" className="bg-background text-foreground">10:00</option>
-              <option value="20:00" className="bg-background text-foreground">20:00</option>
-            </select>
-          </div>
-          <div className="hidden sm:block w-px h-6 bg-border"></div>
-          <div className="flex items-center gap-2 w-full sm:w-auto">
-            <Filter className="h-4 w-4 text-muted-foreground" />
-            <select 
-              className="bg-transparent border-none text-sm font-medium focus:ring-0 cursor-pointer w-full"
-              value={visaoFiltro}
-              onChange={(e) => setVisaoFiltro(e.target.value)}
-            >
-              <option value="Hospital Geral" className="bg-background text-foreground">Hospital Geral</option>
-              <option value="SUS" className="bg-background text-foreground">SUS</option>
-            </select>
-          </div>
-        </div>
         </div>
       </div>
-      
+
       {loading ? (
         <div className="flex flex-1 items-center justify-center min-h-[400px]">
           <Loader2 className="h-8 w-8 text-primary animate-spin" />
@@ -269,13 +269,13 @@ export default function VisaoGeral() {
         </div>
       ) : (
         <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 mt-4 w-full items-start">
-          
+
           <div className="xl:col-span-4 w-full flex flex-col gap-6">
             {/* Card GERAL (Exibido apenas em Hospital Geral) */}
             {visaoFiltro === 'Hospital Geral' && (
               <div className="bg-card rounded-2xl shadow-sm border p-4 flex flex-col items-center">
                 <h2 className="text-lg font-bold text-foreground mb-2 uppercase tracking-wider text-center">Taxa de Ocupação Geral</h2>
-                
+
                 <div className="relative w-48 h-48">
                   <ResponsiveContainer width="100%" height="100%">
                     <PieChart>
@@ -322,7 +322,7 @@ export default function VisaoGeral() {
             {(visaoFiltro === 'SUS' || visaoFiltro === 'Hospital Geral') && (
               <div className="bg-card rounded-2xl shadow-sm border p-4 flex flex-col items-center">
                 <h2 className="text-lg font-bold text-foreground mb-2 uppercase tracking-wider text-center">Taxa de Ocupação SUS</h2>
-                
+
                 <div className="relative w-48 h-48">
                   <ResponsiveContainer width="100%" height="100%">
                     <PieChart>

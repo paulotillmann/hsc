@@ -30,10 +30,12 @@ import {
   rejeitarSolicitacao, 
   atualizarSolicitacaoCompleta,
   fetchHistorico,
+  criarSolicitacaoTeste,
   SolicitacaoProntuario, 
   HistoricoSolicitacao, 
   IndicadoresProntuario 
 } from '../../services/prontuarioService';
+
 
 export default function GestaoProntuarios() {
   const { profile } = useAuth();
@@ -66,6 +68,21 @@ export default function GestaoProntuarios() {
 
   // Feedbacks gerais da página
   const [notificacao, setNotificacao] = useState<{ tipo: 'sucesso' | 'erro'; mensagem: string } | null>(null);
+  const [criandoTeste, setCriandoTeste] = useState(false);
+
+  const handleCriarSolicitacaoTeste = async () => {
+    setCriandoTeste(true);
+    try {
+      await criarSolicitacaoTeste();
+      mostrarNotificacao('sucesso', 'Solicitação de teste criada com sucesso! O webhook de WhatsApp foi disparado.');
+      carregarDados();
+    } catch (err: any) {
+      console.error(err);
+      mostrarNotificacao('erro', `Erro ao criar solicitação de teste: ${err.message || err}`);
+    } finally {
+      setCriandoTeste(false);
+    }
+  };
 
   const carregarDados = async () => {
     setLoading(true);
@@ -168,6 +185,7 @@ export default function GestaoProntuarios() {
         return;
       }
       setArquivoSelecionado(file);
+      setNovoStatusSelecionado('Documento Disponibilizado');
       setErroAcao('');
     }
   };
@@ -311,13 +329,24 @@ export default function GestaoProntuarios() {
           </p>
         </div>
         
-        <button
-          onClick={carregarDados}
-          className="inline-flex items-center justify-center rounded-xl text-sm font-semibold transition-all border border-border bg-card hover:bg-muted text-foreground px-4 py-2.5 shadow-md gap-2 cursor-pointer"
-        >
-          <RotateCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-          Atualizar Lista
-        </button>
+        <div className="flex flex-wrap gap-3">
+          <button
+            onClick={handleCriarSolicitacaoTeste}
+            disabled={criandoTeste}
+            className="inline-flex items-center justify-center rounded-xl text-sm font-semibold transition-all bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2.5 shadow-md gap-2 cursor-pointer disabled:opacity-50"
+          >
+            <Play className={`h-4 w-4 ${criandoTeste ? 'animate-pulse' : ''}`} />
+            {criandoTeste ? 'Criando Teste...' : 'Criar Solicitação Teste'}
+          </button>
+          
+          <button
+            onClick={carregarDados}
+            className="inline-flex items-center justify-center rounded-xl text-sm font-semibold transition-all border border-border bg-card hover:bg-muted text-foreground px-4 py-2.5 shadow-md gap-2 cursor-pointer"
+          >
+            <RotateCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+            Atualizar Lista
+          </button>
+        </div>
       </div>
 
       {/* FEEDBACK TOAST */}
