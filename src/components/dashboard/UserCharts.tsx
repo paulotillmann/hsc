@@ -49,33 +49,33 @@ export const UserCharts: React.FC<UserChartsProps> = ({ data, hideValues }) => {
         <div className="flex justify-between items-center mb-4">
           <h3 className="text-lg font-bold text-foreground">Minha Evolução Salarial</h3>
         </div>
-        
+
         {myPayrollData.length === 0 ? (
           <div className="flex-1 min-h-[300px] flex items-center justify-center text-muted-foreground text-sm">
             Histórico insuficiente para gerar o gráfico.
           </div>
         ) : (
           <div className="flex-1 min-h-[300px] relative">
-             {hideValues && (
-                <div className="absolute inset-0 z-10 backdrop-blur-sm bg-background/30 flex items-center justify-center rounded-lg border border-border/50">
-                  <span className="bg-background px-4 py-2 rounded-full text-sm font-medium border border-border shadow-sm flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full bg-primary animate-pulse"></span>
-                    Valores ofuscados por privacidade
-                  </span>
-                </div>
-              )}
+            {hideValues && (
+              <div className="absolute inset-0 z-10 backdrop-blur-sm bg-background/30 flex items-center justify-center rounded-lg border border-border/50">
+                <span className="bg-background px-4 py-2 rounded-full text-sm font-medium border border-border shadow-sm flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-primary animate-pulse"></span>
+                  Valores ofuscados por privacidade
+                </span>
+              </div>
+            )}
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={myPayrollData} margin={{ top: 10, right: 30, left: 10, bottom: 0 }}>
                 <defs>
                   <linearGradient id="colorTotalUser" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#10b981" stopOpacity={0.3}/>
-                    <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
+                    <stop offset="5%" stopColor="#10b981" stopOpacity={0.3} />
+                    <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
                   </linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#52525b" opacity={0.4} />
                 <XAxis dataKey="mes_ano" stroke="#a1a1aa" fontSize={12} tickLine={false} axisLine={false} />
                 <YAxis tickFormatter={formatCurrency} stroke="#a1a1aa" fontSize={12} tickLine={false} axisLine={false} width={80} />
-                <Tooltip 
+                <Tooltip
                   formatter={(value: number) => [formatCurrency(value), 'Valor Líquido']}
                   contentStyle={{ backgroundColor: 'hsl(var(--card))', borderColor: 'hsl(var(--border))', borderRadius: '8px' }}
                 />
@@ -89,7 +89,7 @@ export const UserCharts: React.FC<UserChartsProps> = ({ data, hideValues }) => {
       {/* Lista 2: Holerites Recentes */}
       <div className="bg-card p-6 rounded-xl border border-border flex flex-col shadow-sm">
         <h3 className="text-lg font-bold text-foreground mb-4">Holerites Recentes</h3>
-        
+
         {recentHolerites.length === 0 ? (
           <div className="flex-1 flex flex-col items-center justify-center text-muted-foreground gap-2">
             <Receipt className="h-8 w-8 opacity-20" />
@@ -106,16 +106,16 @@ export const UserCharts: React.FC<UserChartsProps> = ({ data, hideValues }) => {
                   <div>
                     <h4 className="text-sm font-semibold text-foreground">Ref: {holerite.mes_ano}</h4>
                     {holerite.email_enviado_em ? (
-                       <span className="text-xs text-green-600 dark:text-green-400 font-medium">Notificado</span>
+                      <span className="text-xs text-green-600 dark:text-green-400 font-medium">Notificado</span>
                     ) : (
-                       <span className="text-xs text-muted-foreground">Adicionado</span>
+                      <span className="text-xs text-muted-foreground">Adicionado</span>
                     )}
                   </div>
                 </div>
                 {holerite.pdf_url ? (
-                  <a 
-                    href={holerite.pdf_url} 
-                    target="_blank" 
+                  <a
+                    href={holerite.pdf_url}
+                    target="_blank"
                     rel="noopener noreferrer"
                     className="p-2 text-muted-foreground hover:text-primary transition-colors cursor-pointer group"
                     title="Baixar PDF"
@@ -123,7 +123,7 @@ export const UserCharts: React.FC<UserChartsProps> = ({ data, hideValues }) => {
                     <Download className="h-5 w-5 group-hover:scale-110 transition-transform" />
                   </a>
                 ) : (
-                   <span className="text-xs text-muted-foreground italic px-2">Anexo indisp.</span>
+                  <span className="text-xs text-muted-foreground italic px-2">Anexo indisp.</span>
                 )}
               </div>
             ))}

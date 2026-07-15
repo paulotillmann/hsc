@@ -1,13 +1,13 @@
 import React, { useEffect, useState, useMemo } from 'react';
-import { 
-  Users, 
-  Activity, 
-  BedDouble, 
-  UserCheck, 
-  DoorOpen, 
-  ClipboardList, 
-  History, 
-  Calendar, 
+import {
+  Users,
+  Activity,
+  BedDouble,
+  UserCheck,
+  DoorOpen,
+  ClipboardList,
+  History,
+  Calendar,
   RefreshCw,
   PieChart as PieIcon,
   BarChart3,
@@ -17,18 +17,18 @@ import { supabase } from '../../lib/supabase';
 import { buscarPacientes } from '../../services/pacienteService';
 import { VisaoGeralCard } from '../../components/recepcao/VisaoGeralCard';
 import RelatorioVisitasModal from '../../components/recepcao/RelatorioVisitasModal';
-import { 
-  BarChart, 
-  Bar, 
-  XAxis, 
-  YAxis, 
-  CartesianGrid, 
-  Tooltip, 
-  ResponsiveContainer, 
-  PieChart, 
-  Pie, 
-  Cell, 
-  Legend 
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  PieChart,
+  Pie,
+  Cell,
+  Legend
 } from 'recharts';
 
 export default function VisaoGeral() {
@@ -60,7 +60,7 @@ export default function VisaoGeral() {
     const d = new Date();
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
   });
-  
+
   const [weeklyDataset, setWeeklyDataset] = useState<any[]>([]);
   const [monthlyDataset, setMonthlyDataset] = useState<any[]>([]);
   const [donutDataset, setDonutDataset] = useState<any[]>([]);
@@ -75,9 +75,9 @@ export default function VisaoGeral() {
       const d = new Date(currentDate.getFullYear(), currentDate.getMonth() - i, 1);
       const label = d.toLocaleString('pt-BR', { month: 'long', year: 'numeric' });
       const value = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-      options.push({ 
-        label: label.charAt(0).toUpperCase() + label.slice(1), 
-        value 
+      options.push({
+        label: label.charAt(0).toUpperCase() + label.slice(1),
+        value
       });
     }
     return options;
@@ -151,17 +151,17 @@ export default function VisaoGeral() {
 
       // Query aggregated charts data via RPC functions (Server-Side Group By)
       const [weekRes, dailyRes, atendentesRes] = await Promise.all([
-        supabase.rpc('get_visits_by_type_and_date', { 
-          p_start_date: startOfWeek.toISOString(), 
-          p_end_date: endOfWeek.toISOString() 
+        supabase.rpc('get_visits_by_type_and_date', {
+          p_start_date: startOfWeek.toISOString(),
+          p_end_date: endOfWeek.toISOString()
         }),
-        supabase.rpc('get_daily_visits', { 
-          p_start_date: startOfMonth, 
-          p_end_date: endOfMonth 
+        supabase.rpc('get_daily_visits', {
+          p_start_date: startOfMonth,
+          p_end_date: endOfMonth
         }),
-        supabase.rpc('get_atendente_visits', { 
-          p_start_date: startOfWeek.toISOString(), 
-          p_end_date: endOfWeek.toISOString() 
+        supabase.rpc('get_atendente_visits', {
+          p_start_date: startOfWeek.toISOString(),
+          p_end_date: endOfWeek.toISOString()
         })
       ]);
 
@@ -184,11 +184,11 @@ export default function VisaoGeral() {
         const dateString = `${y}-${m}-${dateDay}`; // YYYY-MM-DD
 
         const dayRows = weekVisitsData.filter((r: any) => r.dia === dateString);
-        
+
         const acompanhantes = dayRows
           .filter((r: any) => r.tipo.toUpperCase() === 'ACOMPANHANTE')
           .reduce((acc: number, r: any) => acc + parseInt(r.total, 10), 0);
-          
+
         const visitantes = dayRows
           .filter((r: any) => r.tipo.toUpperCase() === 'VISITANTE')
           .reduce((acc: number, r: any) => acc + parseInt(r.total, 10), 0);
@@ -204,15 +204,15 @@ export default function VisaoGeral() {
       // ── Process Donut Dataset (Grouped by Atendente First Name - Week Limit) ──
       let totalWeek = 0;
       const userCounts: Record<string, number> = {};
-      
+
       atendenteVisitsData.forEach((r: any) => {
         const count = parseInt(r.total_visitas, 10);
         totalWeek += count;
-        
+
         const atendente = r.atendente_name ? r.atendente_name.trim() : 'Não Informado';
         const firstName = atendente.split(' ')[0] || 'Não Informado';
         const formattedName = firstName.charAt(0).toUpperCase() + firstName.slice(1).toLowerCase();
-        
+
         userCounts[formattedName] = (userCounts[formattedName] || 0) + count;
       });
 
@@ -233,10 +233,10 @@ export default function VisaoGeral() {
       const processedMonth = Array.from({ length: daysInMonth }, (_, index) => {
         const dayNum = index + 1;
         const dayString = `${yearStr}-${monthStr}-${String(dayNum).padStart(2, '0')}`;
-        
+
         const matchingRow = dailyVisitsData.find((r: any) => r.dia === dayString);
         const count = matchingRow ? parseInt(matchingRow.total_visitas, 10) : 0;
-        
+
         return {
           day: String(dayNum),
           Visitas: count
@@ -279,7 +279,7 @@ export default function VisaoGeral() {
             Acompanhe em tempo real os dados de visitas, acompanhantes, prestadores de serviço e pacientes internados.
           </p>
         </div>
-        
+
         <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto">
           <button
             onClick={() => setIsReportModalOpen(true)}
@@ -301,50 +301,50 @@ export default function VisaoGeral() {
 
       {/* KPIs GRID (Layout inspirado no Anexo 1 - Suporta modo Claro e Escuro) */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-5">
-        <VisaoGeralCard 
-          title="Pacientes Internados" 
-          value={pacientesCount} 
-          icon={BedDouble} 
+        <VisaoGeralCard
+          title="Pacientes Internados"
+          value={pacientesCount}
+          icon={BedDouble}
           subtext="🏨 Em leitos/apartamentos"
           subtextColorClass="text-red-700 dark:text-red-400"
           isLoading={loading}
         />
-        <VisaoGeralCard 
-          title="Visitas no Dia" 
-          value={totalVisitsToday} 
-          icon={ClipboardList} 
+        <VisaoGeralCard
+          title="Visitas no Dia"
+          value={totalVisitsToday}
+          icon={ClipboardList}
           subtext="↗ Registros efetuados hoje"
           subtextColorClass="text-rose-600 dark:text-rose-400"
           isLoading={loading}
         />
-        <VisaoGeralCard 
-          title="Acompanhantes Atuais" 
-          value={currentCompanions} 
-          icon={Users} 
+        <VisaoGeralCard
+          title="Acompanhantes Atuais"
+          value={currentCompanions}
+          icon={Users}
           subtext="👥 Presentes no hospital"
           subtextColorClass="text-red-800 dark:text-[#fda4af]"
           isLoading={loading}
         />
-        <VisaoGeralCard 
-          title="Visitantes no Dia" 
-          value={totalVisitorsToday} 
-          icon={UserCheck} 
+        <VisaoGeralCard
+          title="Visitantes no Dia"
+          value={totalVisitorsToday}
+          icon={UserCheck}
           subtext="👤 Total registrado hoje"
           subtextColorClass="text-rose-700 dark:text-rose-300"
           isLoading={loading}
         />
-        <VisaoGeralCard 
-          title="Visitantes Atuais" 
-          value={currentVisitors} 
-          icon={DoorOpen} 
+        <VisaoGeralCard
+          title="Visitantes Atuais"
+          value={currentVisitors}
+          icon={DoorOpen}
           subtext="🚪 Em visita neste momento"
           subtextColorClass="text-red-600 dark:text-[#fecdd3]"
           isLoading={loading}
         />
-        <VisaoGeralCard 
-          title="Terceiros no Dia" 
-          value={totalThirdsToday} 
-          icon={History} 
+        <VisaoGeralCard
+          title="Terceiros no Dia"
+          value={totalThirdsToday}
+          icon={History}
           subtext="⚙️ Prestadores de serviço hoje"
           subtextColorClass="text-rose-800 dark:text-rose-500"
           isLoading={loading}
@@ -353,7 +353,7 @@ export default function VisaoGeral() {
 
       {/* CHARTS CONTAINER */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        
+
         {/* Gráfico 1: Acompanhantes vs Visitantes Semanal (Barras Verticais lado a lado em tons de Vermelho) */}
         <div className="lg:col-span-2 bg-card p-6 rounded-2xl border border-border flex flex-col shadow-md dark:shadow-xl min-h-[420px]">
           <div className="flex justify-between items-center mb-6">
@@ -367,7 +367,7 @@ export default function VisaoGeral() {
               </p>
             </div>
           </div>
-          
+
           <div className="flex-1 min-h-[300px]">
             {loadingCharts ? (
               <div className="w-full h-full flex flex-col items-center justify-center gap-3">
@@ -384,19 +384,19 @@ export default function VisaoGeral() {
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={isDark ? '#1f293d' : '#e2e8f0'} />
                   <XAxis dataKey="name" stroke={isDark ? '#64748b' : '#94a3b8'} fontSize={11} tickLine={false} axisLine={false} />
                   <YAxis stroke={isDark ? '#64748b' : '#94a3b8'} fontSize={11} tickLine={false} axisLine={false} />
-                  <Tooltip 
+                  <Tooltip
                     cursor={{ fill: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)' }}
-                    contentStyle={{ 
-                      backgroundColor: 'var(--card)', 
-                      borderColor: 'var(--border)', 
+                    contentStyle={{
+                      backgroundColor: 'var(--card)',
+                      borderColor: 'var(--border)',
                       borderRadius: '12px',
                       color: 'var(--card-foreground)',
                       boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)'
                     }}
                   />
-                  <Legend 
-                    verticalAlign="top" 
-                    height={36} 
+                  <Legend
+                    verticalAlign="top"
+                    height={36}
                     iconType="circle"
                     wrapperStyle={{ fontSize: '12px', paddingBottom: '10px' }}
                   />
@@ -431,20 +431,20 @@ export default function VisaoGeral() {
             ) : (
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
-                  <text 
-                    x="50%" 
-                    y="43%" 
-                    textAnchor="middle" 
-                    dominantBaseline="middle" 
+                  <text
+                    x="50%"
+                    y="43%"
+                    textAnchor="middle"
+                    dominantBaseline="middle"
                     className="fill-foreground text-3xl font-extrabold font-sans"
                   >
                     {totalWeekVisits}
                   </text>
-                  <text 
-                    x="50%" 
-                    y="53%" 
-                    textAnchor="middle" 
-                    dominantBaseline="middle" 
+                  <text
+                    x="50%"
+                    y="53%"
+                    textAnchor="middle"
+                    dominantBaseline="middle"
                     className="fill-muted-foreground text-[11px] font-bold uppercase tracking-wider"
                   >
                     Acessos
@@ -465,18 +465,18 @@ export default function VisaoGeral() {
                       <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                     ))}
                   </Pie>
-                  <Tooltip 
-                    contentStyle={{ 
-                      backgroundColor: 'var(--card)', 
-                      borderColor: 'var(--border)', 
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: 'var(--card)',
+                      borderColor: 'var(--border)',
                       borderRadius: '12px',
                       color: 'var(--card-foreground)',
                       boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)'
                     }}
                   />
-                  <Legend 
-                    verticalAlign="bottom" 
-                    height={36} 
+                  <Legend
+                    verticalAlign="bottom"
+                    height={36}
                     iconType="circle"
                     wrapperStyle={{ fontSize: '11px', paddingTop: '10px' }}
                   />
@@ -534,11 +534,11 @@ export default function VisaoGeral() {
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={isDark ? '#1f293d' : '#e2e8f0'} />
                   <XAxis dataKey="day" stroke={isDark ? '#64748b' : '#94a3b8'} fontSize={11} tickLine={false} axisLine={false} />
                   <YAxis stroke={isDark ? '#64748b' : '#94a3b8'} fontSize={11} tickLine={false} axisLine={false} />
-                  <Tooltip 
+                  <Tooltip
                     cursor={{ fill: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)' }}
-                    contentStyle={{ 
-                      backgroundColor: 'var(--card)', 
-                      borderColor: 'var(--border)', 
+                    contentStyle={{
+                      backgroundColor: 'var(--card)',
+                      borderColor: 'var(--border)',
                       borderRadius: '12px',
                       color: 'var(--card-foreground)',
                       boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)'
@@ -553,9 +553,9 @@ export default function VisaoGeral() {
 
       </div>
 
-      <RelatorioVisitasModal 
-        isOpen={isReportModalOpen} 
-        onClose={() => setIsReportModalOpen(false)} 
+      <RelatorioVisitasModal
+        isOpen={isReportModalOpen}
+        onClose={() => setIsReportModalOpen(false)}
       />
     </div>
   );
