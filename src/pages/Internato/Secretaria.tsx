@@ -1115,8 +1115,6 @@ const Secretaria: React.FC = () => {
               <Plus className="h-4 w-4" /> Registrar Atestado
             </button>
           )}
-<<<<<<< HEAD
-=======
           {activeTab === 'professores' && (
             <button 
               onClick={() => setShowProfessorModal(true)}
@@ -1125,7 +1123,6 @@ const Secretaria: React.FC = () => {
               <Plus className="h-4 w-4" /> Novo Professor
             </button>
           )}
->>>>>>> origin/main
         </div>
       </div>
 
