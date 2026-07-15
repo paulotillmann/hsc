@@ -22,8 +22,13 @@ const PrivateRoute: React.FC = () => {
     );
   }
 
-  if (session && profileLoaded && profile?.setor_usuarios && location.pathname !== '/pacientes-internados') {
-    return <Navigate to="/pacientes-internados" replace />;
+  if (session && profileLoaded) {
+    if ((session.user?.email === 'pa@email.com' || profile?.email === 'pa@email.com') && location.pathname !== '/pronto-atendimento') {
+      return <Navigate to="/pronto-atendimento" replace />;
+    }
+    if (profile?.setor_usuarios && location.pathname !== '/pacientes-internados') {
+      return <Navigate to="/pacientes-internados" replace />;
+    }
   }
 
   return session ? <Outlet /> : <Navigate to="/" replace />;

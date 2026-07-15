@@ -41,6 +41,10 @@ const Login: React.FC = () => {
         navigate('/totem', { replace: true });
         return;
       }
+      if (session.user.email === 'pa@email.com') {
+        navigate('/pronto-atendimento', { replace: true });
+        return;
+      }
       if (profile?.setor_usuarios) {
         navigate('/pacientes-internados', { replace: true });
         return;

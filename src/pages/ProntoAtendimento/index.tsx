@@ -18,7 +18,8 @@ import {
   Sun,
   User,
   HeartPulse,
-  Hourglass
+  Hourglass,
+  LogOut
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
@@ -103,7 +104,7 @@ export default function ProntoAtendimento() {
   const [syncSuccess, setSyncSuccess] = useState<string | null>(null);
   const syncIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const { profile } = useAuth();
+  const { profile, signOut } = useAuth();
 
   // Tema Escuro / Claro
   const [isDarkMode, setIsDarkMode] = useState(() => {
@@ -463,13 +464,15 @@ export default function ProntoAtendimento() {
       <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-6">
         <div className="flex flex-col gap-2 w-full xl:w-auto">
           <div className="flex items-center gap-4 flex-wrap justify-between md:justify-start">
-            <button
-              onClick={() => navigate(-1)}
-              className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-all border border-transparent hover:border-border text-muted-foreground hover:text-foreground flex items-center justify-center shrink-0"
-              title="Voltar para a tela anterior"
-            >
-              <ArrowLeft className="h-5 w-5" />
-            </button>
+            {profile?.email !== 'pa@email.com' && (
+              <button
+                onClick={() => navigate(-1)}
+                className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-all border border-transparent hover:border-border text-muted-foreground hover:text-foreground flex items-center justify-center shrink-0"
+                title="Voltar para a tela anterior"
+              >
+                <ArrowLeft className="h-5 w-5" />
+              </button>
+            )}
             <div className="flex items-center pr-4 md:border-r md:border-border h-10">
               <img src="/LOGO_HSC_PRIMARY.png" alt="Santa Casa" className="h-10 w-auto dark:hidden object-contain" />
               <img src="/LOGO_HSC_WHITE.png" alt="Santa Casa" className="h-10 w-auto hidden dark:block object-contain" />
@@ -961,6 +964,18 @@ export default function ProntoAtendimento() {
             title="Alternar Tema"
           >
             {isDarkMode ? <Sun className="h-4 w-4 text-amber-500" /> : <Moon className="h-4 w-4 text-slate-600" />}
+          </button>
+
+          {/* Botão Sair */}
+          <button
+            onClick={async () => {
+              await signOut();
+              navigate('/', { replace: true });
+            }}
+            className="p-2.5 rounded-lg border bg-background hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/20 dark:hover:text-red-400 text-foreground transition-all shadow-sm flex items-center justify-center h-10 w-10 cursor-pointer"
+            title="Sair do Sistema"
+          >
+            <LogOut className="h-4 w-4" />
           </button>
 
           {/* Informação Adicional do Perfil */}
