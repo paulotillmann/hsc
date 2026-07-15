@@ -132,6 +132,39 @@ export const webhookService = {
       console.error('Error in webhook triggerFinanceiro:', error);
       return null;
     }
+  },
+
+  /**
+   * Trigger the "Indicadores Qualidade" webhook
+   * @param payload { indicador: string, data_inicio: string, data_fim: string }
+   */
+  async fetchIndicadoresQualidade(payload: { indicador: string; data_inicio: string; data_fim: string }): Promise<any[]> {
+    const webhookUrl = import.meta.env.VITE_N8N_WEBHOOK_QUALIDADE || 'https://n8n-n8n.7woir1.easypanel.host/webhook/indicadores_qualidade';
+    
+    if (!webhookUrl) {
+      console.error('Webhook URL (VITE_N8N_WEBHOOK_QUALIDADE) is not configured.');
+      return [];
+    }
+
+    try {
+      const response = await fetch(webhookUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Error triggering webhook: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      return Array.isArray(data) ? data : [];
+    } catch (error) {
+      console.error('Error in webhook fetchIndicadoresQualidade:', error);
+      return [];
+    }
   }
 };
 
