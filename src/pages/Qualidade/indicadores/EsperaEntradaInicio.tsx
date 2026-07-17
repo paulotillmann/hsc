@@ -51,58 +51,106 @@ export default function EsperaEntradaInicio({ dataInicio, dataFim, onKpiChange }
     carregarDados();
   }, [dataInicio, dataFim]);
 
-  // Eixo X dinâmico para o gráfico
-  const eixoxKey = useMemo(() => {
-    if (dados.length === 0) return 'classificacao';
+  // Verifica se os dados recebidos são detalhados (um registro por atendimento individual)
+  const isDadosDetalhados = useMemo(() => {
+    if (dados.length === 0) return false;
     const first = dados[0];
-    if ('classificacao' in first) return 'classificacao';
-    if ('CLASSIFICACAO' in first) return 'CLASSIFICACAO';
-    return 'data';
+    return 'NR_ATENDIMENTO' in first || 'nr_atendimento' in first || 'NM_PACIENTE' in first || 'nm_paciente' in first;
   }, [dados]);
 
-  // Eixo Y/Valor dinâmico para o gráfico
-  const valorYKey = useMemo(() => {
-    if (dados.length === 0) return 'tempo_medio_minutos';
-    const first = dados[0];
-    if ('tempo_medio_minutos' in first) return 'tempo_medio_minutos';
-    if ('TEMPO_MEDIO_MINUTOS' in first) return 'TEMPO_MEDIO_MINUTOS';
-    if ('tempo_medio' in first) return 'tempo_medio';
-    if ('TEMPO_MEDIO' in first) return 'TEMPO_MEDIO';
-    if ('tempo' in first) return 'tempo';
-    if ('TEMPO' in first) return 'TEMPO';
-    return 'tempo_medio_minutos';
-  }, [dados]);
+  // Dados processados para o gráfico (agrupados por dia caso os dados sejam detalhados)
+  const dadosGraficoAgrupados = useMemo(() => {
+    if (dados.length === 0) return [];
 
-  const parsedDadosGrafico = useMemo(() => {
-    return dados.map(item => {
-      const val = item[valorYKey];
-      let numVal = 0;
-      if (typeof val === 'number') {
-        numVal = val;
-      } else if (typeof val === 'string') {
-        numVal = parseFloat(val) || 0;
+    if (!isDadosDetalhados) {
+      // Caso já venha agrupado (ex: mock ou query pré-agrupada)
+      const first = dados[0];
+      const valYKey = 'tempo_medio_minutos' in first ? 'tempo_medio_minutos' : 
+                      ('TEMPO_MEDIO_MINUTOS' in first ? 'TEMPO_MEDIO_MINUTOS' : 
+                      ('tempo_medio' in first ? 'tempo_medio' : 
+                      ('TEMPO_MEDIO' in first ? 'TEMPO_MEDIO' : 
+                      ('tempo' in first ? 'tempo' : 
+                      ('TEMPO' in first ? 'TEMPO' : 'tempo_medio_minutos')))));
+      
+      const xKey = 'classificacao' in first ? 'classificacao' : 
+                   ('CLASSIFICACAO' in first ? 'CLASSIFICACAO' : 'data');
+
+      return dados.map(item => {
+        const val = item[valYKey];
+        let numVal = 0;
+        if (typeof val === 'number') {
+          numVal = val;
+        } else if (typeof val === 'string') {
+          numVal = parseFloat(val) || 0;
+        }
+        return {
+          ...item,
+          eixoX: item[xKey] || '',
+          valorGrafico: numVal
+        };
+      });
+    }
+
+    // Caso os dados sejam detalhados, agrupamos por dia da DT_ENTRADA
+    const grupos: Record<string, { dataStr: string; totalMinutos: number; count: number }> = {};
+
+    dados.forEach(item => {
+      const dtEntradaRaw = item.DT_ENTRADA || item.dt_entrada || '';
+      if (!dtEntradaRaw) return;
+      
+      // Extrai apenas a data YYYY-MM-DD
+      const dateKey = dtEntradaRaw.substring(0, 10);
+      
+      // Converte tempo_medio_minutos ou calcula a partir de tempo_medio_hhmi
+      let tempoMinutos = 0;
+      if ('tempo_medio_minutos' in item || 'TEMPO_MEDIO_MINUTOS' in item) {
+        tempoMinutos = Number(item.tempo_medio_minutos || item.TEMPO_MEDIO_MINUTOS) || 0;
+      } else if (item.tempo_medio_hhmi || item.TEMPO_MEDIO_HHMI) {
+        const hhmi = String(item.tempo_medio_hhmi || item.TEMPO_MEDIO_HHMI);
+        if (hhmi.includes(':')) {
+          const [h, m] = hhmi.split(':').map(Number);
+          tempoMinutos = (h * 60) + (m || 0);
+        }
       }
-      return {
-        ...item,
-        valorGrafico: numVal
-      };
+
+      if (!grupos[dateKey]) {
+        grupos[dateKey] = { dataStr: dateKey, totalMinutos: 0, count: 0 };
+      }
+      grupos[dateKey].totalMinutos += tempoMinutos;
+      grupos[dateKey].count += 1;
     });
-  }, [dados, valorYKey]);
+
+    // Gera lista agrupada e ordenada por data
+    return Object.values(grupos)
+      .map(g => ({
+        eixoX: g.dataStr, // ex: "2026-07-15"
+        valorGrafico: Number((g.totalMinutos / g.count).toFixed(1)),
+        atendimentos: g.count
+      }))
+      .sort((a, b) => a.eixoX.localeCompare(b.eixoX));
+  }, [dados, isDadosDetalhados]);
 
   const kpi = useMemo(() => {
     if (dados.length === 0) return { tempoMedio: 0, totalAtendimentos: 0, tendencia: 'baixa' };
     
-    const first = dados[0];
-    const atendimentosKey = 'atendimentos' in first ? 'atendimentos' : ('ATENDIMENTOS' in first ? 'ATENDIMENTOS' : ('total_atendimentos' in first ? 'total_atendimentos' : ('QT_ATENDIMENTOS' in first ? 'QT_ATENDIMENTOS' : '')));
-    const totalAtendimentos = atendimentosKey ? dados.reduce((acc, curr) => acc + (Number(curr[atendimentosKey]) || 0), 0) : 0;
-    
+    let totalAtendimentos = 0;
     let tempoMedio = 0;
-    const tempoKey = valorYKey;
-    if (tempoKey) {
+
+    if (!isDadosDetalhados) {
+      const first = dados[0];
+      const atendimentosKey = 'atendimentos' in first ? 'atendimentos' : 
+                              ('ATENDIMENTOS' in first ? 'ATENDIMENTOS' : 
+                              ('total_atendimentos' in first ? 'total_atendimentos' : 
+                              ('QT_ATENDIMENTOS' in first ? 'QT_ATENDIMENTOS' : '')));
+      totalAtendimentos = atendimentosKey ? dados.reduce((acc, curr) => acc + (Number(curr[atendimentosKey]) || 0), 0) : 0;
+      
+      const valYKey = 'tempo_medio_minutos' in first ? 'tempo_medio_minutos' : 
+                      ('TEMPO_MEDIO_MINUTOS' in first ? 'TEMPO_MEDIO_MINUTOS' : 'tempo_medio_minutos');
+      
       let soma = 0;
       let count = 0;
       dados.forEach(item => {
-        const val = item[tempoKey];
+        const val = item[valYKey];
         if (val !== null && val !== undefined) {
           soma += Number(val) || 0;
           count++;
@@ -110,13 +158,31 @@ export default function EsperaEntradaInicio({ dataInicio, dataFim, onKpiChange }
       });
       tempoMedio = count > 0 ? Number((soma / count).toFixed(1)) : 0;
     } else {
-      const somaEspera = dados.reduce((acc, curr) => acc + (curr.tempo_medio_minutos || 0), 0);
-      tempoMedio = Number((somaEspera / dados.length).toFixed(1));
+      // Para dados detalhados (registros de pacientes):
+      totalAtendimentos = dados.length;
+      
+      let somaMinutos = 0;
+      let count = 0;
+      dados.forEach(item => {
+        let tempoMinutos = 0;
+        if ('tempo_medio_minutos' in item || 'TEMPO_MEDIO_MINUTOS' in item) {
+          tempoMinutos = Number(item.tempo_medio_minutos || item.TEMPO_MEDIO_MINUTOS) || 0;
+        } else if (item.tempo_medio_hhmi || item.TEMPO_MEDIO_HHMI) {
+          const hhmi = String(item.tempo_medio_hhmi || item.TEMPO_MEDIO_HHMI);
+          if (hhmi.includes(':')) {
+            const [h, m] = hhmi.split(':').map(Number);
+            tempoMinutos = (h * 60) + (m || 0);
+          }
+        }
+        somaMinutos += tempoMinutos;
+        count++;
+      });
+      tempoMedio = count > 0 ? Number((somaMinutos / count).toFixed(1)) : 0;
     }
     
     const tendencia = tempoMedio > 45 ? 'alta' : 'baixa';
     return { tempoMedio, totalAtendimentos, tendencia };
-  }, [dados, valorYKey]);
+  }, [dados, isDadosDetalhados]);
 
   // Efeito para notificar o componente pai sobre os KPIs calculados
   useEffect(() => {
@@ -144,7 +210,15 @@ export default function EsperaEntradaInicio({ dataInicio, dataFim, onKpiChange }
   // Colunas dinâmicas para a tabela
   const colunas = useMemo(() => {
     if (dados.length === 0) return [];
-    return Object.keys(dados[0]).filter(k => k !== 'SORT_ORDER' && k !== 'sort_order');
+    // Ocultar códigos internos do Oracle e a coluna auxiliar do gráfico
+    const ocultar = [
+      'SORT_ORDER', 'sort_order', 
+      'IE_CLINICA', 'ie_clinica', 
+      'IE_TIPO_ATENDIMENTO', 'ie_tipo_atendimento',
+      'tempo_medio_minutos', 'TEMPO_MEDIO_MINUTOS',
+      'valorGrafico'
+    ];
+    return Object.keys(dados[0]).filter(k => !ocultar.includes(k));
   }, [dados]);
 
   const obterLabelCabecalho = (key: string) => {
@@ -156,7 +230,21 @@ export default function EsperaEntradaInicio({ dataInicio, dataFim, onKpiChange }
       ATENDIMENTOS: 'Consultas Médicas',
       QT_ATENDIMENTOS: 'Consultas Médicas',
       tempo_medio_minutos: 'Espera Média (min)',
-      TEMPO_MEDIO_MINUTOS: 'Espera Média (min)'
+      TEMPO_MEDIO_MINUTOS: 'Espera Média (min)',
+      NR_ATENDIMENTO: 'Nº Atendimento',
+      nr_atendimento: 'Nº Atendimento',
+      NM_PACIENTE: 'Paciente',
+      nm_paciente: 'Paciente',
+      DT_ENTRADA: 'Data/Hora Entrada',
+      dt_entrada: 'Data/Hora Entrada',
+      DT_ATEND_MEDICO: 'Data/Hora Atend. Médico',
+      dt_atend_medico: 'Data/Hora Atend. Médico',
+      tempo_medio_hhmi: 'Tempo de Espera',
+      TEMPO_MEDIO_HHMI: 'Tempo de Espera',
+      medico: 'Médico Responsável',
+      MEDICO: 'Médico Responsável',
+      DS_CLINICA: 'Especialidade Clínica',
+      ds_clinica: 'Especialidade Clínica'
     };
     return mapeamento[key] || key.replace(/_/g, ' ').toUpperCase();
   };
@@ -166,7 +254,20 @@ export default function EsperaEntradaInicio({ dataInicio, dataFim, onKpiChange }
     
     const keyLower = key.toLowerCase();
     
-    if (keyLower.includes('data') || keyLower === 'dt') {
+    // Formatar datas no padrão local
+    if (keyLower === 'dt_entrada' || keyLower === 'dt_atend_medico' || keyLower === 'dt') {
+      try {
+        const date = new Date(val);
+        if (!isNaN(date.getTime())) {
+          return date.toLocaleString('pt-BR');
+        }
+        return String(val);
+      } catch {
+        return String(val);
+      }
+    }
+    
+    if (keyLower.includes('data')) {
       try {
         const strVal = String(val);
         if (strVal.includes('-')) {
@@ -178,14 +279,20 @@ export default function EsperaEntradaInicio({ dataInicio, dataFim, onKpiChange }
       }
     }
     
-    if (keyLower.includes('tempo') || keyLower.includes('minutos') || keyLower.includes('espera') || keyLower.includes('media')) {
+    // Formatar tempos em minutos/horas
+    if (keyLower.includes('tempo_medio_minutos') || keyLower.includes('tempo_medio_min') || keyLower.includes('minutos')) {
       return <span className="font-semibold text-primary">{val} min</span>;
+    }
+    
+    if (keyLower === 'tempo_medio_hhmi' || keyLower === 'tempo_medio_hhmm') {
+      return <span className="font-semibold text-primary">{val} hs</span>;
     }
     
     if (keyLower.includes('atendimento') || keyLower.includes('total') || keyLower.includes('qt')) {
       return <span>{val} consultas</span>;
     }
     
+    // Protocolo de Manchester / Classificações de Urgência
     if (keyLower.includes('classificacao') || keyLower.includes('manchester') || keyLower.includes('protocolo')) {
       const strVal = String(val).toLowerCase();
       const isUrgent = strVal.includes('vermelho') || strVal.includes('emergência') || strVal.includes('laranja');
@@ -250,10 +357,10 @@ export default function EsperaEntradaInicio({ dataInicio, dataFim, onKpiChange }
             </div>
           ) : (
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={parsedDadosGrafico} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+              <BarChart data={dadosGraficoAgrupados} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" className="stroke-muted/40" vertical={false} />
                 <XAxis 
-                  dataKey={eixoxKey} 
+                  dataKey="eixoX" 
                   tickFormatter={(str) => {
                     if (!str) return '';
                     try {
