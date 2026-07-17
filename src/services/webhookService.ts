@@ -2,6 +2,9 @@
  * Service to handle generic webhook integrations (like n8n)
  */
 
+const qualidadeCache = new Map<string, { timestamp: number; data: any[] }>();
+const CACHE_TTL = 30 * 1000; // 30 segundos de cache
+
 export const webhookService = {
   /**
    * Trigger the "Gestão de Pendências" webhook
@@ -146,6 +149,17 @@ export const webhookService = {
       return [];
     }
 
+    const cacheKey = `${payload.indicador}_${payload.data_inicio}_${payload.data_fim}`;
+    const cached = qualidadeCache.get(cacheKey);
+    const now = Date.now();
+
+    if (cached && (now - cached.timestamp < CACHE_TTL)) {
+      return cached.data;
+    }
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 3000); // Timeout de 3 segundos
+
     try {
       const response = await fetch(webhookUrl, {
         method: 'POST',
@@ -153,16 +167,36 @@ export const webhookService = {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(payload),
+        signal: controller.signal
       });
+
+      clearTimeout(timeoutId);
 
       if (!response.ok) {
         throw new Error(`Error triggering webhook: ${response.statusText}`);
       }
 
-      const data = await response.json();
-      return Array.isArray(data) ? data : [];
-    } catch (error) {
-      console.error('Error in webhook fetchIndicadoresQualidade:', error);
+      const text = await response.text();
+      if (!text || text.trim() === '') {
+        return []; // Retorna vazio se o body estiver vazio, ativando o mock no front
+      }
+
+      const data = JSON.parse(text);
+      const dataArray = Array.isArray(data) ? data : [];
+      
+      // Salva no cache apenas se tivermos dados reais
+      if (dataArray.length > 0) {
+        qualidadeCache.set(cacheKey, { timestamp: now, data: dataArray });
+      }
+
+      return dataArray;
+    } catch (error: any) {
+      clearTimeout(timeoutId);
+      if (error.name === 'AbortError') {
+        console.warn('Webhook fetchIndicadoresQualidade: timeout de 3s atingido. Abortando requisição.');
+      } else {
+        console.error('Error in webhook fetchIndicadoresQualidade:', error);
+      }
       return [];
     }
   }
