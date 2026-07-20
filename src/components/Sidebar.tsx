@@ -703,6 +703,17 @@ const Sidebar: React.FC = () => {
                         Pacientes
                       </NavLink>
                       <NavLink
+                        to="/recepcao/relatorio"
+                        className={({ isActive }) =>
+                          `text-sm px-3 py-2 rounded-md transition-colors ${isActive
+                            ? 'bg-primary text-primary-foreground shadow-sm font-medium'
+                            : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
+                          }`
+                        }
+                      >
+                        Relatório de Visitas
+                      </NavLink>
+                      <NavLink
                         to="/senhas-atendente"
                         className={({ isActive }) =>
                           `text-sm px-3 py-2 rounded-md transition-colors ${isActive
