@@ -347,8 +347,9 @@ const Sidebar: React.FC = () => {
           const hasPlantaoTiAccess = userModules.some(m => m.slug === 'plantao-ti');
           const hasOrdemServicoAccess = userModules.some(m => m.slug === 'ordem-servico');
           const hasEquipamentosAccess = userModules.some(m => m.slug === 'equipamentos');
-          const showTI = hasPlantaoTiAccess || hasOrdemServicoAccess || hasEquipamentosAccess;
-          const isTIActive = location.pathname.startsWith('/plantao-ti') || location.pathname.startsWith('/ordem-servico') || location.pathname.startsWith('/ordem-servico-mobile') || location.pathname.startsWith('/equipamentos');
+          const hasCustosTiAccess = userModules.some(m => m.slug === 'custos-ti');
+          const showTI = hasPlantaoTiAccess || hasOrdemServicoAccess || hasEquipamentosAccess || hasCustosTiAccess;
+          const isTIActive = location.pathname.startsWith('/plantao-ti') || location.pathname.startsWith('/ordem-servico') || location.pathname.startsWith('/ordem-servico-mobile') || location.pathname.startsWith('/equipamentos') || location.pathname.startsWith('/custos-ti');
 
           if (!showTI) return null;
 
@@ -356,7 +357,7 @@ const Sidebar: React.FC = () => {
             <div className="flex flex-col">
               {isCollapsed ? (
                 <NavLink
-                  to={hasPlantaoTiAccess ? "/plantao-ti" : (hasOrdemServicoAccess ? "/ordem-servico" : "/equipamentos")}
+                  to={hasPlantaoTiAccess ? "/plantao-ti" : (hasOrdemServicoAccess ? "/ordem-servico" : (hasEquipamentosAccess ? "/equipamentos" : "/custos-ti"))}
                   title="T.I"
                   className={navLinkClass(isTIActive)}
                 >
@@ -432,6 +433,19 @@ const Sidebar: React.FC = () => {
                       }
                     >
                       Equipamentos
+                    </NavLink>
+                  )}
+                  {hasCustosTiAccess && (
+                    <NavLink
+                      to="/custos-ti"
+                      className={({ isActive }) =>
+                        `text-sm px-3 py-2 rounded-md transition-colors ${isActive
+                          ? 'bg-primary text-primary-foreground shadow-sm font-medium'
+                          : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
+                        }`
+                      }
+                    >
+                      Custos TI
                     </NavLink>
                   )}
                 </div>
@@ -621,7 +635,7 @@ const Sidebar: React.FC = () => {
         })()}
 
         {userModules
-          .filter(m => m.slug !== 'configuracoes' && m.slug !== 'pacientes-internados' && m.slug !== 'centro-cirurgico' && m.slug !== 'pronto-atendimento' && m.slug !== 'plantao-ti' && m.slug !== 'ordem-servico' && m.slug !== 'dashboard' && m.slug !== 'holerites' && m.slug !== 'informes' && m.slug !== 'notificacoes' && m.slug !== 'taxa-ocupacao' && m.slug !== 'internato-secretaria' && m.slug !== 'internato-notas' && m.slug !== 'internato-agenda' && m.slug !== 'equipamentos') // Configurações fica na área inferior, e assistenciais, TI, RH, notificações, taxas e internato ficam agrupados
+          .filter(m => m.slug !== 'configuracoes' && m.slug !== 'pacientes-internados' && m.slug !== 'centro-cirurgico' && m.slug !== 'pronto-atendimento' && m.slug !== 'plantao-ti' && m.slug !== 'ordem-servico' && m.slug !== 'dashboard' && m.slug !== 'holerites' && m.slug !== 'informes' && m.slug !== 'notificacoes' && m.slug !== 'taxa-ocupacao' && m.slug !== 'internato-secretaria' && m.slug !== 'internato-notas' && m.slug !== 'internato-agenda' && m.slug !== 'equipamentos' && m.slug !== 'custos-ti') // Configurações fica na área inferior, e assistenciais, TI, RH, notificações, taxas e internato ficam agrupados
           .map(module => {
 
             if (module.slug === 'recepcao') {
