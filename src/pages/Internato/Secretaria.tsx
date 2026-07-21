@@ -43,7 +43,6 @@ const TABS = [
   { id: 'atestados', label: 'Atestados' },
   { id: 'professores', label: 'Professores' }
 ] as const;
-
 const CLINICAS = [
   { id: 'GO', nome: 'Ginecologia e Obstetrícia (G.O.)' },
   { id: 'Pediatria', nome: 'Pediatria' },
@@ -137,7 +136,6 @@ const Secretaria: React.FC = () => {
   const [showEditProfessorModal, setShowEditProfessorModal] = useState(false);
   const [professorForm, setProfessorForm] = useState({ nome: '', email: '', especialidade: '' });
   const [editProfessorForm, setEditProfessorForm] = useState({ id: '', nome: '', email: '', especialidade: '' });
-
   // Estados de dados
   const [turmas, setTurmas] = useState<Turma[]>([]);
   const [alunos, setAlunos] = useState<Aluno[]>([]);
@@ -339,7 +337,6 @@ const Secretaria: React.FC = () => {
       showToast(error.message || 'Erro ao remover professor', 'error');
     }
   };
-
   // ----------------------------------------------------
   // BUSCA DE DADOS
   // ----------------------------------------------------
@@ -2367,7 +2364,6 @@ const Secretaria: React.FC = () => {
             </div>
           </div>
         )}
-
       </div>
 
       {/* ----------------------------------------------------
@@ -2960,7 +2956,6 @@ const Secretaria: React.FC = () => {
           </div>
         </div>
       )}
-
     </div>
   );
 };

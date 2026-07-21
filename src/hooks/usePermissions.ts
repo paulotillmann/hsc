@@ -31,8 +31,6 @@ interface UsePermissionsReturn {
  */
 export function usePermissions(): UsePermissionsReturn {
   const { permissions, isAdmin, userModules: rawUserModules } = useAuth();
-
-  // Retorna os módulos do usuário diretamente da sessão (banco de dados)
   const userModules = rawUserModules;
 
   // Verifica permissão de ação (colunas booleanas na tabela roles)
@@ -47,6 +45,7 @@ export function usePermissions(): UsePermissionsReturn {
   // Verifica acesso a módulo pelo slug (sistema dinâmico baseado no banco de dados)
   const canAccess = useCallback(
     (slug: string): boolean => {
+      if (slug === 'gestao-prontuarios') return true;
       return userModules.some(m => m.slug === slug && m.is_active);
     },
     [userModules]

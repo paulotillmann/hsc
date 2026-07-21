@@ -354,6 +354,7 @@ export default function OrdemServico() {
         });
         setOrdersWithHistory(hasHistorySet);
 
+
       } else {
         setOrders([]);
         setOrdersWithHistory(new Set());

@@ -138,6 +138,7 @@ export const webhookService = {
   },
 
   /**
+  /**
    * Trigger the "Indicadores Qualidade" webhook
    * @param payload { indicador: string, data_inicio: string, data_fim: string }
    */
@@ -197,6 +198,39 @@ export const webhookService = {
       } else {
         console.error('Error in webhook fetchIndicadoresQualidade:', error);
       }
+      return [];
+    }
+  },
+
+  /**
+   * Fetch IT costs / Accounts Payable from n8n webhook
+   * @param payload Filters: dt_inicio, dt_fim, situacao
+   */
+  async fetchCustosTi(payload: { dt_inicio?: string; dt_fim?: string; situacao?: string | null } = {}): Promise<any[]> {
+    const webhookUrl = import.meta.env.VITE_N8N_WEBHOOK_CUSTOS_TI || 'https://n8n-n8n.7woir1.easypanel.host/webhook/custos';
+    
+    if (!webhookUrl) {
+      console.error('Webhook URL (VITE_N8N_WEBHOOK_CUSTOS_TI) is not configured.');
+      return [];
+    }
+
+    try {
+      const response = await fetch(webhookUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Error triggering webhook: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      return Array.isArray(data) ? data : (data.data && Array.isArray(data.data) ? data.data : []);
+    } catch (error) {
+      console.error('Error in webhook fetchCustosTi:', error);
       return [];
     }
   }

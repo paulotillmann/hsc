@@ -188,13 +188,31 @@ const formatCompactCurrency = (value: number) => {
 
 const formatDate = (dateStr: string | null) => {
   if (!dateStr) return '-';
-  const cleanStr = String(dateStr).trim().toLowerCase();
-  if (cleanStr === 'null' || cleanStr === 'undefined' || cleanStr === '') return '-';
-  const cleanDate = dateStr.split('T')[0];
-  const parts = cleanDate.split('-');
-  if (parts.length !== 3) return dateStr;
-  const [year, month, day] = parts;
-  return `${day}/${month}/${year}`;
+  const cleanStr = String(dateStr).trim();
+  const lower = cleanStr.toLowerCase();
+  if (lower === 'null' || lower === 'undefined' || lower === '') return '-';
+  
+  // Exemplo: "2026-06-25T14:12:02.000Z" -> ["2026-06-25", "14:12:02.000Z"]
+  const partsT = cleanStr.split(/[T ]/);
+  const datePart = partsT[0];
+  const timePart = partsT[1];
+  
+  const dateSubparts = datePart.split('-');
+  if (dateSubparts.length !== 3) return dateStr;
+  const [year, month, day] = dateSubparts;
+  
+  let formatted = `${day}/${month}/${year}`;
+  
+  if (timePart) {
+    const timeSubparts = timePart.split(':');
+    if (timeSubparts.length >= 2) {
+      const hours = timeSubparts[0];
+      const minutes = timeSubparts[1];
+      formatted += ` ${hours}:${minutes}`;
+    }
+  }
+  
+  return formatted;
 };
 
 const getExibidosRecebimentos = (t: TransacaoFaturamento, filter: string) => {
@@ -605,7 +623,7 @@ const Tesouraria: React.FC = () => {
     const activeFilters = [];
     if (convenioFilter !== 'Todos') activeFilters.push(`Convênio: ${convenioFilter}`);
     if (medicoFilter !== 'Todos') activeFilters.push(`Médico: ${medicoFilter}`);
-    if (statusFilter !== 'Todos') activeFilters.push(`Status: ${statusFilter}`);
+    if (statusFilter !== 'Todos') activeFilters.push(`Status: ${statusFilter === 'PAGO' ? 'Definitivo' : 'Provisório'}`);
     if (tipoRecebimentoFilter !== 'Todos') activeFilters.push(`Tipo Rec.: ${tipoRecebimentoFilter}`);
     if (periodFrom || periodTo) {
       const format = (p: string) => p.split('-').reverse().join('/');
@@ -657,7 +675,7 @@ const Tesouraria: React.FC = () => {
         formatCurrency(t.valorConta),
         vlsStr || formatCurrency(0),
         tiposStr || '-',
-        t.ieStatusAcerto === 2 ? 'Pago' : 'Pendente'
+        t.ieStatusAcerto === 2 ? 'Definitivo' : 'Provisório'
       ];
     });
 
@@ -941,8 +959,8 @@ const Tesouraria: React.FC = () => {
               className="px-3 py-1.5 text-sm rounded-md border border-border bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-[#8a1515]"
             >
               <option value="Todos">Todos</option>
-              <option value="PAGO">PAGO</option>
-              <option value="PENDENTE">PENDENTE</option>
+              <option value="PAGO">Definitivo</option>
+              <option value="PENDENTE">Provisório</option>
             </select>
           </div>
 
@@ -1066,7 +1084,7 @@ const Tesouraria: React.FC = () => {
                               : 'bg-amber-50 text-amber-700 border border-amber-200 dark:bg-amber-950/20 dark:text-amber-400'
                           }`}>
                             {isPago ? <CheckCircle2 className="w-3.5 h-3.5" /> : <Clock className="w-3.5 h-3.5" />}
-                            {isPago ? 'PAGO' : 'PENDENTE'}
+                            {isPago ? 'Definitivo' : 'Provisório'}
                           </span>
                         </div>
                       </td>
@@ -1224,7 +1242,7 @@ const Tesouraria: React.FC = () => {
                   <div>
                     <span className="text-[10px] text-muted-foreground uppercase font-bold block mb-1">Status da Conta</span>
                     <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold ${selectedTransacao.ieStatusAcerto === 2 ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/20 dark:text-emerald-400' : 'bg-amber-100 text-amber-800 dark:bg-amber-950/20 dark:text-amber-400'}`}>
-                      {selectedTransacao.ieStatusAcerto === 2 ? 'PAGO' : 'PENDENTE'}
+                      {selectedTransacao.ieStatusAcerto === 2 ? 'Definitivo' : 'Provisório'}
                     </span>
                   </div>
                 </div>

@@ -69,6 +69,8 @@ async function runSeed() {
     { name: 'Gestão Escuta Santa Casa', slug: 'gestao-escuta-santa-casa', icon: 'ShieldAlert', description: 'Canal de ética confidencial para relatar desvios de conduta, fraudes ou violações das políticas internas', is_active: true, sort_order: 80, is_system: false },
     { name: 'Gestão de Prontuários', slug: 'gestao-prontuarios', icon: 'FileSpreadsheet', description: 'Recebimento, análise, aprovação ou rejeição de solicitações de prontuários com entrega segura de documentos.', is_active: true, sort_order: 85, is_system: false },
     { name: 'Financeiro', slug: 'financeiro', icon: 'Wallet', description: 'Módulo financeiro e tesouraria do hospital', is_active: true, sort_order: 86, is_system: false },
+    { name: 'Equipamentos', slug: 'equipamentos', icon: 'Monitor', description: 'Módulo de consulta e indicadores de equipamentos de TI', is_active: true, sort_order: 38, is_system: false },
+    { name: 'Custos TI', slug: 'custos-ti', icon: 'Coins', description: 'Módulo de conciliação de contas a pagar e despesas de TI', is_active: true, sort_order: 39, is_system: false },
     { name: 'Configurações', slug: 'configuracoes', icon: 'Settings', description: 'Gestão de perfis, módulos e usuários do sistema', is_active: true, sort_order: 90, is_system: true }
   ];
 

@@ -884,6 +884,7 @@ export async function atualizarSolicitacaoCompleta(
   }
 }
 
+
 /**
  * Cria uma solicitação de teste no banco de dados.
  */
@@ -917,4 +918,3 @@ export async function criarSolicitacaoTeste(): Promise<void> {
 
   if (error) throw error;
 }
-

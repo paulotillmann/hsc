@@ -84,7 +84,6 @@ export default function GestaoProntuarios() {
     }
   };
 
-
   const carregarDados = async () => {
     setLoading(true);
     try {
@@ -348,7 +347,6 @@ export default function GestaoProntuarios() {
             Atualizar Lista
           </button>
         </div>
-
       </div>
 
       {/* FEEDBACK TOAST */}
