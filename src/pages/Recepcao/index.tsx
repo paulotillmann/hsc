@@ -4,6 +4,7 @@ import VisaoGeral from './VisaoGeral';
 import Visitantes from './Visitantes';
 import Terceiros from './Terceiros';
 import Pacientes from './Pacientes';
+import Relatorio from './Relatorio';
 
 import VisitanteForm from './VisitanteForm';
 
@@ -18,6 +19,7 @@ const Recepcao: React.FC = () => {
       <Route path="terceiros/novo" element={<VisitanteForm />} />
       <Route path="terceiros/editar/:id" element={<VisitanteForm />} />
       <Route path="pacientes" element={<Pacientes />} />
+      <Route path="relatorio" element={<Relatorio />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );

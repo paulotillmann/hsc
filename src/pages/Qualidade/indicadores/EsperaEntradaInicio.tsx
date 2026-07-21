@@ -22,6 +22,26 @@ export default function EsperaEntradaInicio({ dataInicio, dataFim, onKpiChange }
   const [usingMock, setUsingMock] = useState(false);
   const [dados, setDados] = useState<any[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
+  const [selectedClinica, setSelectedClinica] = useState('');
+
+  // Lista de clínicas únicas disponíveis nos dados
+  const listClinicas = useMemo(() => {
+    const clinicasSet = new Set<string>();
+    dados.forEach(item => {
+      const clinica = item.DS_CLINICA || item.ds_clinica;
+      if (clinica) clinicasSet.add(clinica);
+    });
+    return Array.from(clinicasSet).sort();
+  }, [dados]);
+
+  // Filtra os dados pela clínica selecionada
+  const dadosFiltradosClinica = useMemo(() => {
+    if (!selectedClinica) return dados;
+    return dados.filter(item => {
+      const clinica = item.DS_CLINICA || item.ds_clinica;
+      return clinica === selectedClinica;
+    });
+  }, [dados, selectedClinica]);
 
   const carregarDados = async () => {
     setLoading(true);
@@ -48,6 +68,7 @@ export default function EsperaEntradaInicio({ dataInicio, dataFim, onKpiChange }
   };
 
   useEffect(() => {
+    setSelectedClinica('');
     carregarDados();
   }, [dataInicio, dataFim]);
 
@@ -60,11 +81,11 @@ export default function EsperaEntradaInicio({ dataInicio, dataFim, onKpiChange }
 
   // Dados processados para o gráfico (agrupados por dia caso os dados sejam detalhados)
   const dadosGraficoAgrupados = useMemo(() => {
-    if (dados.length === 0) return [];
+    if (dadosFiltradosClinica.length === 0) return [];
 
     if (!isDadosDetalhados) {
       // Caso já venha agrupado (ex: mock ou query pré-agrupada)
-      const first = dados[0];
+      const first = dadosFiltradosClinica[0];
       const valYKey = 'tempo_medio_minutos' in first ? 'tempo_medio_minutos' : 
                       ('TEMPO_MEDIO_MINUTOS' in first ? 'TEMPO_MEDIO_MINUTOS' : 
                       ('tempo_medio' in first ? 'tempo_medio' : 
@@ -75,7 +96,7 @@ export default function EsperaEntradaInicio({ dataInicio, dataFim, onKpiChange }
       const xKey = 'classificacao' in first ? 'classificacao' : 
                    ('CLASSIFICACAO' in first ? 'CLASSIFICACAO' : 'data');
 
-      return dados.map(item => {
+      return dadosFiltradosClinica.map(item => {
         const val = item[valYKey];
         let numVal = 0;
         if (typeof val === 'number') {
@@ -94,7 +115,7 @@ export default function EsperaEntradaInicio({ dataInicio, dataFim, onKpiChange }
     // Caso os dados sejam detalhados, agrupamos por dia da DT_ENTRADA
     const grupos: Record<string, { dataStr: string; totalMinutos: number; count: number }> = {};
 
-    dados.forEach(item => {
+    dadosFiltradosClinica.forEach(item => {
       const dtEntradaRaw = item.DT_ENTRADA || item.dt_entrada || '';
       if (!dtEntradaRaw) return;
       
@@ -128,28 +149,28 @@ export default function EsperaEntradaInicio({ dataInicio, dataFim, onKpiChange }
         atendimentos: g.count
       }))
       .sort((a, b) => a.eixoX.localeCompare(b.eixoX));
-  }, [dados, isDadosDetalhados]);
+  }, [dadosFiltradosClinica, isDadosDetalhados]);
 
   const kpi = useMemo(() => {
-    if (dados.length === 0) return { tempoMedio: 0, totalAtendimentos: 0, tendencia: 'baixa' };
+    if (dadosFiltradosClinica.length === 0) return { tempoMedio: 0, totalAtendimentos: 0, tendencia: 'baixa' };
     
     let totalAtendimentos = 0;
     let tempoMedio = 0;
 
     if (!isDadosDetalhados) {
-      const first = dados[0];
+      const first = dadosFiltradosClinica[0];
       const atendimentosKey = 'atendimentos' in first ? 'atendimentos' : 
                               ('ATENDIMENTOS' in first ? 'ATENDIMENTOS' : 
                               ('total_atendimentos' in first ? 'total_atendimentos' : 
                               ('QT_ATENDIMENTOS' in first ? 'QT_ATENDIMENTOS' : '')));
-      totalAtendimentos = atendimentosKey ? dados.reduce((acc, curr) => acc + (Number(curr[atendimentosKey]) || 0), 0) : 0;
+      totalAtendimentos = atendimentosKey ? dadosFiltradosClinica.reduce((acc, curr) => acc + (Number(curr[atendimentosKey]) || 0), 0) : 0;
       
       const valYKey = 'tempo_medio_minutos' in first ? 'tempo_medio_minutos' : 
                       ('TEMPO_MEDIO_MINUTOS' in first ? 'TEMPO_MEDIO_MINUTOS' : 'tempo_medio_minutos');
       
       let soma = 0;
       let count = 0;
-      dados.forEach(item => {
+      dadosFiltradosClinica.forEach(item => {
         const val = item[valYKey];
         if (val !== null && val !== undefined) {
           soma += Number(val) || 0;
@@ -159,11 +180,11 @@ export default function EsperaEntradaInicio({ dataInicio, dataFim, onKpiChange }
       tempoMedio = count > 0 ? Number((soma / count).toFixed(1)) : 0;
     } else {
       // Para dados detalhados (registros de pacientes):
-      totalAtendimentos = dados.length;
+      totalAtendimentos = dadosFiltradosClinica.length;
       
       let somaMinutos = 0;
       let count = 0;
-      dados.forEach(item => {
+      dadosFiltradosClinica.forEach(item => {
         let tempoMinutos = 0;
         if ('tempo_medio_minutos' in item || 'TEMPO_MEDIO_MINUTOS' in item) {
           tempoMinutos = Number(item.tempo_medio_minutos || item.TEMPO_MEDIO_MINUTOS) || 0;
@@ -182,7 +203,7 @@ export default function EsperaEntradaInicio({ dataInicio, dataFim, onKpiChange }
     
     const tendencia = tempoMedio > 45 ? 'alta' : 'baixa';
     return { tempoMedio, totalAtendimentos, tendencia };
-  }, [dados, isDadosDetalhados]);
+  }, [dadosFiltradosClinica, isDadosDetalhados]);
 
   // Efeito para notificar o componente pai sobre os KPIs calculados
   useEffect(() => {
@@ -200,12 +221,12 @@ export default function EsperaEntradaInicio({ dataInicio, dataFim, onKpiChange }
   }, [kpi, usingMock, loading]);
 
   const filteredDados = useMemo(() => {
-    if (!searchTerm.trim()) return dados;
+    if (!searchTerm.trim()) return dadosFiltradosClinica;
     const term = searchTerm.toLowerCase();
-    return dados.filter(item => 
+    return dadosFiltradosClinica.filter(item => 
       Object.values(item).some(val => String(val).toLowerCase().includes(term))
     );
-  }, [dados, searchTerm]);
+  }, [dadosFiltradosClinica, searchTerm]);
 
   // Colunas dinâmicas para a tabela
   const colunas = useMemo(() => {
@@ -312,10 +333,10 @@ export default function EsperaEntradaInicio({ dataInicio, dataFim, onKpiChange }
   };
 
   const exportarCSV = () => {
-    if (dados.length === 0) return;
+    if (filteredDados.length === 0) return;
     const headers = colunas.map(c => obterLabelCabecalho(c));
     const csvRows = [headers.join(';')];
-    for (const row of dados) {
+    for (const row of filteredDados) {
       csvRows.push(colunas.map(col => {
         const val = row[col];
         return typeof val === 'string' ? `"${val}"` : val ?? '-';
@@ -350,7 +371,7 @@ export default function EsperaEntradaInicio({ dataInicio, dataFim, onKpiChange }
             <div className="h-full w-full flex items-center justify-center">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
             </div>
-          ) : dados.length === 0 ? (
+          ) : dadosFiltradosClinica.length === 0 ? (
             <div className="h-full w-full flex flex-col items-center justify-center text-muted-foreground gap-2">
               <Clock className="h-8 w-8 opacity-45" />
               <span className="text-sm">Nenhum data encontrado para o período.</span>
@@ -403,21 +424,40 @@ export default function EsperaEntradaInicio({ dataInicio, dataFim, onKpiChange }
 
       {/* Tabela Detalhada */}
       <div className="bg-card border rounded-xl shadow-sm overflow-hidden">
-        <div className="p-5 border-b flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div className="p-5 border-b flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
           <div>
             <h3 className="font-bold text-base">Registros de Fluxo de Entrada</h3>
             <p className="text-xs text-muted-foreground mt-0.5">Visão consolidada de tempos de atendimento.</p>
           </div>
-          <div className="relative w-full sm:w-64">
-            <input
-              type="text"
-              placeholder="Buscar registros..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-9 pr-4 py-1.5 text-xs bg-background border rounded-lg focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
-            />
-            <div className="absolute inset-y-0 left-0 flex items-center pl-3 text-muted-foreground pointer-events-none">
-              <Search className="h-3.5 w-3.5" />
+          <div className="flex flex-col sm:flex-row items-center gap-3 w-full lg:w-auto">
+            {/* Filtro de Especialidade Clínica */}
+            {listClinicas.length > 0 && (
+              <div className="w-full sm:w-48">
+                <select
+                  value={selectedClinica}
+                  onChange={(e) => setSelectedClinica(e.target.value)}
+                  className="w-full bg-background border border-border rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary cursor-pointer font-medium h-8"
+                >
+                  <option value="">Todas as Especialidades</option>
+                  {listClinicas.map(c => (
+                    <option key={c} value={c}>{c}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {/* Busca textual */}
+            <div className="relative w-full sm:w-64">
+              <input
+                type="text"
+                placeholder="Buscar registros..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full pl-9 pr-4 py-1.5 text-xs bg-background border rounded-lg focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary h-8"
+              />
+              <div className="absolute inset-y-0 left-0 flex items-center pl-3 text-muted-foreground pointer-events-none">
+                <Search className="h-3.5 w-3.5" />
+              </div>
             </div>
           </div>
         </div>
@@ -454,6 +494,74 @@ export default function EsperaEntradaInicio({ dataInicio, dataFim, onKpiChange }
                   </tr>
                 ))}
               </tbody>
+              <tfoot>
+                <tr className="bg-muted/30 font-bold border-t-2 border-border/80">
+                  {colunas.map((col, idx) => {
+                    const colLower = col.toLowerCase();
+                    if (idx === 0) {
+                      return (
+                        <td key={col} className="p-4 text-xs uppercase tracking-wider text-muted-foreground font-bold">
+                          Geral / Média
+                        </td>
+                      );
+                    }
+                    if (colLower === 'nm_paciente' || colLower === 'paciente' || colLower === 'nome') {
+                      return (
+                        <td key={col} className="p-4 text-muted-foreground font-medium">
+                          {isDadosDetalhados ? `${filteredDados.length} pacientes` : `${filteredDados.length} dias`}
+                        </td>
+                      );
+                    }
+                    if (colLower === 'nr_atendimento' || colLower === 'atendimentos' || colLower === 'consultas_medicas') {
+                      if (isDadosDetalhados) {
+                        return <td key={col} className="p-4 text-muted-foreground font-medium">{filteredDados.length} atendimentos</td>;
+                      } else {
+                        const totalAtend = filteredDados.reduce((acc, curr) => {
+                          const val = curr.atendimentos || curr.ATENDIMENTOS || curr.QT_ATENDIMENTOS || 0;
+                          return acc + Number(val);
+                        }, 0);
+                        return <td key={col} className="p-4 text-primary font-bold">{totalAtend} consultas</td>;
+                      }
+                    }
+                    if (colLower === 'tempo_medio_hhmi' || colLower === 'tempo_medio_hhmm' || colLower === 'tempo_de_espera' || colLower === 'tempo_medio_minutos') {
+                      let somaMinutos = 0;
+                      let count = 0;
+                      filteredDados.forEach(item => {
+                        let mins = 0;
+                        if ('tempo_medio_minutos' in item || 'TEMPO_MEDIO_MINUTOS' in item) {
+                          mins = Number(item.tempo_medio_minutos || item.TEMPO_MEDIO_MINUTOS) || 0;
+                        } else if (item.tempo_medio_hhmi || item.TEMPO_MEDIO_HHMI) {
+                          const hhmi = String(item.tempo_medio_hhmi || item.TEMPO_MEDIO_HHMI);
+                          if (hhmi.includes(':')) {
+                            const [h, m] = hhmi.split(':').map(Number);
+                            mins = (h * 60) + (m || 0);
+                          }
+                        }
+                        somaMinutos += mins;
+                        count++;
+                      });
+                      const mediaMinutos = count > 0 ? Math.round(somaMinutos / count) : 0;
+                      const h = Math.floor(mediaMinutos / 60);
+                      const m = mediaMinutos % 60;
+                      const hhmiStr = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+                      
+                      if (colLower.includes('hhmi') || colLower.includes('hhmm')) {
+                        return (
+                          <td key={col} className="p-4 text-primary font-extrabold">
+                            {hhmiStr} hs
+                          </td>
+                        );
+                      }
+                      return (
+                        <td key={col} className="p-4 text-primary font-extrabold">
+                          {mediaMinutos} min
+                        </td>
+                      );
+                    }
+                    return <td key={col} className="p-4"></td>;
+                  })}
+                </tr>
+              </tfoot>
             </table>
           )}
         </div>
