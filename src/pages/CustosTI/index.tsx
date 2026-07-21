@@ -54,6 +54,18 @@ const formatCompactCurrency = (value: number) => {
   }).format(value);
 };
 
+const parseTasyDate = (dateStr: string | null): Date | null => {
+  if (!dateStr) return null;
+  // Se for uma data simples YYYY-MM-DD, força a interpretação no fuso de Brasília
+  if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+    return new Date(`${dateStr}T00:00:00-03:00`);
+  }
+  // Se contiver timezone UTC (Z, +00:00, etc), substitui por -03:00 (Brasília)
+  const normalizedStr = dateStr.replace(/(Z|\+00:00|\+00)$/i, '-03:00');
+  const d = new Date(normalizedStr);
+  return isNaN(d.getTime()) ? null : d;
+};
+
 const formatDate = (dateStr: string | null) => {
   if (!dateStr) return '-';
   const cleanStr = String(dateStr).trim().toLowerCase();
@@ -84,20 +96,23 @@ const getValorExibido = (t: TituloPagar): number => {
 
 const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ec4899', '#8b5cf6', '#06b6d4', '#34d399', '#f87171'];
 
-// Default dates: start of current year to last day of previous month
+// Default dates: first day of previous month to last day of current month
 const getDefaultDates = () => {
   const today = new Date();
-  const lastDayPrevMonth = new Date(today.getFullYear(), today.getMonth(), 0);
-  const prevMonthYear = lastDayPrevMonth.getFullYear();
-  const prevMonth = String(lastDayPrevMonth.getMonth() + 1).padStart(2, '0');
-  const prevDay = String(lastDayPrevMonth.getDate()).padStart(2, '0');
   
-  // Se estamos em Janeiro, o ano de início deve ser o mesmo do final (ano anterior) para evitar datas invertidas
-  const fromYear = today.getMonth() === 0 ? prevMonthYear : today.getFullYear();
+  const firstDayPrevMonth = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+  const fromYear = firstDayPrevMonth.getFullYear();
+  const fromMonth = String(firstDayPrevMonth.getMonth() + 1).padStart(2, '0');
+  const fromDay = '01';
+  
+  const lastDayCurrentMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+  const toYear = lastDayCurrentMonth.getFullYear();
+  const toMonth = String(lastDayCurrentMonth.getMonth() + 1).padStart(2, '0');
+  const toDay = String(lastDayCurrentMonth.getDate()).padStart(2, '0');
   
   return {
-    from: `${fromYear}-01-01`,
-    to: `${prevMonthYear}-${prevMonth}-${prevDay}`
+    from: `${fromYear}-${fromMonth}-${fromDay}`,
+    to: `${toYear}-${toMonth}-${toDay}`
   };
 };
 
@@ -295,11 +310,11 @@ const CustosTI: React.FC = () => {
   const { monthlyChartData, averageMonthlyCost } = useMemo(() => {
     const dataMap: Record<string, number> = {};
     
-    // Calculate total months in the filtered period
-    const fromDate = new Date(periodFrom);
-    const toDate = new Date(periodTo);
+    // Calculate total months in the filtered period using parseTasyDate
+    const fromDate = parseTasyDate(periodFrom) || new Date();
+    const toDate = parseTasyDate(periodTo) || new Date();
     let totalMonths = 1;
-    if (!isNaN(fromDate.getTime()) && !isNaN(toDate.getTime())) {
+    if (fromDate && toDate && !isNaN(fromDate.getTime()) && !isNaN(toDate.getTime())) {
       const yearsDiff = toDate.getFullYear() - fromDate.getFullYear();
       const monthsDiff = toDate.getMonth() - fromDate.getMonth();
       totalMonths = (yearsDiff * 12) + monthsDiff + 1;
@@ -309,8 +324,8 @@ const CustosTI: React.FC = () => {
     // Group titles by month
     titulosFiltrados.forEach(t => {
       if (!t.DT_EMISSAO) return;
-      const date = new Date(t.DT_EMISSAO);
-      if (isNaN(date.getTime())) return;
+      const date = parseTasyDate(t.DT_EMISSAO);
+      if (!date || isNaN(date.getTime())) return;
       
       const year = date.getFullYear();
       const month = String(date.getMonth() + 1).padStart(2, '0');
@@ -320,7 +335,7 @@ const CustosTI: React.FC = () => {
     });
 
     // Generate all months in the selected period to show continuous zero costs if applicable
-    if (!isNaN(fromDate.getTime()) && !isNaN(toDate.getTime())) {
+    if (fromDate && toDate && !isNaN(fromDate.getTime()) && !isNaN(toDate.getTime())) {
       const current = new Date(fromDate.getFullYear(), fromDate.getMonth(), 1);
       const end = new Date(toDate.getFullYear(), toDate.getMonth(), 1);
       let limit = 0;
