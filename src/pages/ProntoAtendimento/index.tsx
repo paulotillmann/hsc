@@ -32,6 +32,7 @@ interface PacientePA {
   dt_entrada: string | null;
   dt_alta: string | null;
   ds_clinica: string | null;
+  ds_convenio?: string | null;
   hr_inicio_consulta: string | null;
   dt_lib_medico: string | null;
   ie_status: string | null;
@@ -365,6 +366,7 @@ export default function ProntoAtendimento() {
   const filteredPacientes = pacientes.filter(p => {
     const matchSearch =
       p.nm_paciente.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (p.ds_convenio && p.ds_convenio.toLowerCase().includes(searchTerm.toLowerCase())) ||
       p.nr_atendimento.toString().includes(searchTerm);
 
     const matchClinica = clinicaFilter === '' || p.ds_clinica === clinicaFilter;
@@ -721,6 +723,8 @@ export default function ProntoAtendimento() {
                     </div>
                   </th>
 
+                  <th className="px-5 py-2.5 font-semibold">Convênio</th>
+
                   <th
                     className="px-5 py-2.5 font-semibold cursor-pointer hover:text-foreground transition-colors"
                     onClick={() => handleSort('dt_entrada')}
@@ -796,6 +800,11 @@ export default function ProntoAtendimento() {
                           </div>
                           <span className="font-semibold text-foreground truncate">{getPatientInitials(p.nm_paciente)}</span>
                         </div>
+                      </td>
+
+                      {/* Convênio */}
+                      <td className="px-5 py-3 font-medium text-foreground max-w-[160px] truncate" title={p.ds_convenio || ''}>
+                        {p.ds_convenio || <span className="text-muted-foreground/40">-</span>}
                       </td>
 
                       {/* Horário de Entrada */}
