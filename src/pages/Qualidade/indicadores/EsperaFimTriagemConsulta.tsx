@@ -253,8 +253,8 @@ export default function EsperaFimTriagemConsulta({ dataInicio, dataFim, onKpiCha
               <AreaChart data={parsedDadosGrafico} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                 <defs>
                   <linearGradient id="colorEsperaConsulta" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.2}/>
-                    <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0}/>
+                    <stop offset="5%" stopColor="#851c1c" stopOpacity={0.4}/>
+                    <stop offset="95%" stopColor="#851c1c" stopOpacity={0.02}/>
                   </linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" className="stroke-muted/40" />
@@ -291,10 +291,10 @@ export default function EsperaFimTriagemConsulta({ dataInicio, dataFim, onKpiCha
                   type="monotone" 
                   dataKey="valorGrafico" 
                   name="Tempo Médio (minutos)" 
-                  stroke="hsl(var(--primary))" 
+                  stroke="#851c1c" 
                   fillOpacity={1} 
                   fill="url(#colorEsperaConsulta)" 
-                  strokeWidth={2} 
+                  strokeWidth={2.5} 
                 />
               </AreaChart>
             </ResponsiveContainer>

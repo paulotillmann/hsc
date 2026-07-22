@@ -159,7 +159,7 @@ export const webhookService = {
     }
 
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 3000); // Timeout de 3 segundos
+    const timeoutId = setTimeout(() => controller.abort(), 30000); // Timeout de 30 segundos
 
     try {
       const response = await fetch(webhookUrl, {
@@ -194,7 +194,7 @@ export const webhookService = {
     } catch (error: any) {
       clearTimeout(timeoutId);
       if (error.name === 'AbortError') {
-        console.warn('Webhook fetchIndicadoresQualidade: timeout de 3s atingido. Abortando requisição.');
+        console.warn('Webhook fetchIndicadoresQualidade: timeout de 30s atingido. Abortando requisição.');
       } else {
         console.error('Error in webhook fetchIndicadoresQualidade:', error);
       }

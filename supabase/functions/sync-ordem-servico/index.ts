@@ -281,7 +281,7 @@ Deno.serve(async (req: Request) => {
         }
 
         const nrSeq = Number(item.NR_SEQUENCIA);
-        const novoRelato = item.HISTORICO ? cleanHTML(item.HISTORICO) : '';
+        const novoRelato = (item.HISTORICO || item.DS_RELAT_TECNICO) ? cleanHTML(item.HISTORICO || item.DS_RELAT_TECNICO) : '';
         const novaDataStr = item.DT_HISTORICO ? new Date(item.DT_HISTORICO).toISOString() : null;
 
         // Só insere se houver relato técnico não nulo/vazio e for diferente do último gravado
@@ -290,11 +290,11 @@ Deno.serve(async (req: Request) => {
           
           let isDifferent = true;
           if (ultimoGravado) {
-            if (novaDataStr && ultimoGravado.date) {
-              isDifferent = new Date(novaDataStr).getTime() !== new Date(ultimoGravado.date).getTime();
-            } else {
-              isDifferent = novoRelato !== ultimoGravado.text;
-            }
+            const dateChanged = novaDataStr && ultimoGravado.date
+              ? new Date(novaDataStr).getTime() !== new Date(ultimoGravado.date).getTime()
+              : false;
+            const textChanged = novoRelato !== ultimoGravado.text;
+            isDifferent = dateChanged || textChanged;
           }
 
           if (isDifferent) {

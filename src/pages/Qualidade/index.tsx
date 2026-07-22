@@ -90,12 +90,12 @@ const MENU_INDICADORES: IndicadorMenu[] = [
     descricao: 'Média de tempo decorrido da conclusão da triagem até o início da consulta.'
   },
   {
-    id: 'media_interncacao',
+    id: 'media_internacao',
     name: 'Tempo Médio de Internação',
     shortName: 'Permanência Geral',
     path: 'tempo-medio-internacao',
     icon: Calendar,
-    meta: '< 5.5 dias',
+    meta: '<= 5 dias',
     descricao: 'Média de permanência de pacientes em leitos de internação geral e crítica.'
   },
   {
@@ -104,7 +104,7 @@ const MENU_INDICADORES: IndicadorMenu[] = [
     shortName: 'Permanência Emergência',
     path: 'tempo-medio-permanencia-emergencia',
     icon: Clock,
-    meta: '< 4.0 horas',
+    meta: '<= 8.0 horas',
     descricao: 'Tempo médio de pacientes em observação na emergência/pronto atendimento.'
   }
 ];

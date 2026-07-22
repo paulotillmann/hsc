@@ -412,7 +412,7 @@ export default function EsperaEntradaInicio({ dataInicio, dataFim, onKpiChange }
                 <Bar 
                   dataKey="valorGrafico" 
                   name="Espera Média (minutos)" 
-                  fill="var(--primary)"
+                  fill="#5A1010"
                   radius={[4, 4, 0, 0]}
                   maxBarSize={50}
                 />

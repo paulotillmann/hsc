@@ -19,8 +19,12 @@ import {
   Database, 
   FileText,
   AlertTriangle,
-  Filter
+  Filter,
+  FileSpreadsheet,
+  Download
 } from 'lucide-react';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 import { webhookService } from '../../services/webhookService';
 import { VisaoGeralCard } from '../../components/recepcao/VisaoGeralCard';
 
@@ -74,6 +78,7 @@ export default function Equipamentos() {
   // Modal de Detalhes
   const [selectedEquipamento, setSelectedEquipamento] = useState<Equipamento | null>(null);
   const [copiedAnydesk, setCopiedAnydesk] = useState(false);
+  const [isExportingPdf, setIsExportingPdf] = useState(false);
 
   const loadData = async (showRefreshIndicator = false) => {
     if (showRefreshIndicator) {
@@ -281,6 +286,224 @@ export default function Equipamentos() {
       return new Intl.DateTimeFormat('pt-BR').format(d);
     } catch {
       return dateStr;
+    }
+  };
+
+  // Exportar Excel (CSV com BOM UTF-8 totalmente compatível com Excel + Cabeçalho de Filtros)
+  const handleExportExcel = () => {
+    if (filteredAndSortedEquipamentos.length === 0) return;
+
+    // Detalhes dos Filtros Ativos para o Cabeçalho
+    const filtrosAplicados: string[] = [];
+    if (searchTerm) filtrosAplicados.push(`Busca: "${searchTerm}"`);
+    if (selectedPropriedade) filtrosAplicados.push(`Propriedade: ${selectedPropriedade}`);
+    if (selectedCategorias.length > 0) filtrosAplicados.push(`Categorias: ${selectedCategorias.join(', ')}`);
+    if (selectedFornecedores.length > 0) filtrosAplicados.push(`Fornecedores: ${selectedFornecedores.join(', ')}`);
+    if (selectedLocalizacoes.length > 0) filtrosAplicados.push(`Setores: ${selectedLocalizacoes.join(', ')}`);
+    if (selectedMonth !== null) filtrosAplicados.push(`Período: ${months[selectedMonth]} / ${selectedYear}`);
+
+    const dataEmissao = new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short' }).format(new Date());
+
+    const metaHeaderRows = [
+      `"SANTA CASA DE MISERICÓRDIA DE PELOTAS - HSC"`,
+      `"RELATÓRIO DE EQUIPAMENTOS DE T.I."`,
+      `"Gerado em: ${dataEmissao}"`,
+      `"Total de Registros: ${filteredAndSortedEquipamentos.length}"`,
+      `"Filtros Aplicados: ${filtrosAplicados.length > 0 ? filtrosAplicados.join(' | ') : 'Nenhum (Todos os registros)'}"`,
+      `""`
+    ];
+
+    const headers = [
+      'Seq',
+      'Equipamento',
+      'Patrimônio',
+      'Tipo',
+      'Categoria',
+      'Propriedade',
+      'Fornecedor',
+      'Início Contrato',
+      'Fim Contrato',
+      'Localização / Setor',
+      'IP',
+      'AnyDesk',
+      'Processador',
+      'Memória',
+      'Observação / Tensão'
+    ];
+
+    const rows = filteredAndSortedEquipamentos.map(e => {
+      const forn = e.FORNECEDOR || e.fornecedor || e['OBTER_NOME_PJ(A.CD_CGC_TERC)'] || e['OBTER_NOME_PJ(CD_CGC_TERC)'] || '';
+      return [
+        e.NR_SEQUENCIA || '',
+        e.DS_EQUIPAMENTO || '',
+        e.PATRIMONIO || '',
+        e.TIPO || '',
+        e.DS_CATEGORIA || '',
+        e.PROPRIEDADE || '',
+        forn,
+        e.INICIO_CONTRATO ? formatDate(e.INICIO_CONTRATO) : '',
+        e.FIM_CONTRATO ? formatDate(e.FIM_CONTRATO) : '',
+        e.LOCALIZACAO || '',
+        e.IP || '',
+        e.ANYDESK || '',
+        e.PROCESSADOR || '',
+        e.MEMORIA || '',
+        e.DS_OBSERVACAO_TENSAO || ''
+      ];
+    });
+
+    const csvContent = 
+      '\uFEFF' + 
+      [
+        ...metaHeaderRows,
+        headers.join(';'), 
+        ...rows.map(row => row.map(val => `"${String(val).replace(/"/g, '""')}"`).join(';'))
+      ].join('\n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    const today = new Date().toISOString().split('T')[0];
+    link.setAttribute('href', url);
+    link.setAttribute('download', `Relatorio_Equipamentos_TI_${today}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
+  // Exportar PDF
+  const handleExportPDF = async () => {
+    if (filteredAndSortedEquipamentos.length === 0) return;
+
+    setIsExportingPdf(true);
+    try {
+      const doc = new jsPDF('landscape', 'mm', 'a4');
+
+      // Tentar adicionar logo do HSC
+      try {
+        const imgObj = new Image();
+        imgObj.src = '/LOGO_HSC_PRIMARY.png';
+        await new Promise((resolve) => {
+          imgObj.onload = resolve;
+          imgObj.onerror = resolve;
+        });
+        doc.addImage(imgObj, 'PNG', 14, 10, 45, 12);
+      } catch (e) {
+        console.error('Erro ao carregar logo para o PDF:', e);
+      }
+
+      // Cabeçalho do Documento com cores do Hospital Santa Casa (#5A1010 / RGB: 90, 16, 16)
+      doc.setFontSize(16);
+      doc.setTextColor(90, 16, 16); // Vermelho Institucional HSC
+      doc.setFont('helvetica', 'bold');
+      doc.text('Relatório de Equipamentos de T.I.', 14, 28);
+
+      // Linha decorativa no tom vermelho do hospital
+      doc.setDrawColor(90, 16, 16);
+      doc.setLineWidth(0.6);
+      doc.line(14, 31, 283, 31);
+
+      // Data de emissão e estatísticas
+      doc.setFontSize(9);
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(100, 116, 139);
+      const dataEmissao = new Intl.DateTimeFormat('pt-BR', {
+        dateStyle: 'short',
+        timeStyle: 'short'
+      }).format(new Date());
+      doc.text(`Gerado em: ${dataEmissao}`, 283, 16, { align: 'right' });
+      doc.text(`Total de registros: ${filteredAndSortedEquipamentos.length}`, 283, 22, { align: 'right' });
+
+      // Detalhes dos Filtros Ativos
+      const filtrosAplicados: string[] = [];
+      if (searchTerm) filtrosAplicados.push(`Busca: "${searchTerm}"`);
+      if (selectedPropriedade) filtrosAplicados.push(`Propriedade: ${selectedPropriedade}`);
+      if (selectedCategorias.length > 0) filtrosAplicados.push(`Categorias: ${selectedCategorias.join(', ')}`);
+      if (selectedFornecedores.length > 0) filtrosAplicados.push(`Fornecedores: ${selectedFornecedores.join(', ')}`);
+      if (selectedLocalizacoes.length > 0) filtrosAplicados.push(`Setores: ${selectedLocalizacoes.join(', ')}`);
+      if (selectedMonth !== null) filtrosAplicados.push(`Período: ${months[selectedMonth]} / ${selectedYear}`);
+
+      let startY = 37;
+      if (filtrosAplicados.length > 0) {
+        doc.setFontSize(8.5);
+        doc.setTextColor(71, 85, 105);
+        const txtFiltros = `Filtros aplicados: ${filtrosAplicados.join(' | ')}`;
+        const splitFiltros = doc.splitTextToSize(txtFiltros, 269);
+        doc.text(splitFiltros, 14, startY);
+        startY += (splitFiltros.length * 4.5) + 2;
+      }
+
+      // Tabela com autoTable nas cores do hospital (#5A1010)
+      const tableHeaders = [
+        ['Seq', 'Equipamento', 'Patrimônio', 'Tipo', 'Categoria', 'Propriedade', 'Fornecedor', 'Local / Setor', 'IP', 'AnyDesk', 'Fim Contrato']
+      ];
+
+      const tableRows = filteredAndSortedEquipamentos.map(e => {
+        const forn = e.FORNECEDOR || e.fornecedor || e['OBTER_NOME_PJ(A.CD_CGC_TERC)'] || e['OBTER_NOME_PJ(CD_CGC_TERC)'] || '-';
+        return [
+          e.NR_SEQUENCIA ? String(e.NR_SEQUENCIA) : '-',
+          e.DS_EQUIPAMENTO || '-',
+          e.PATRIMONIO || '-',
+          e.TIPO || '-',
+          e.DS_CATEGORIA || '-',
+          e.PROPRIEDADE || '-',
+          forn,
+          e.LOCALIZACAO || '-',
+          e.IP || '-',
+          e.ANYDESK || '-',
+          e.FIM_CONTRATO ? formatDate(e.FIM_CONTRATO) : '-'
+        ];
+      });
+
+      autoTable(doc, {
+        head: tableHeaders,
+        body: tableRows,
+        startY: startY,
+        theme: 'striped',
+        headStyles: {
+          fillColor: [90, 16, 16], // Vermelho Institucional HSC #5A1010
+          textColor: [255, 255, 255],
+          fontSize: 8,
+          fontStyle: 'bold',
+          halign: 'left'
+        },
+        bodyStyles: {
+          fontSize: 7.5,
+          textColor: [51, 65, 85]
+        },
+        alternateRowStyles: {
+          fillColor: [253, 242, 242] // Tom suave avermelhado de fundo alternado
+        },
+        columnStyles: {
+          0: { cellWidth: 12, halign: 'center' },
+          1: { cellWidth: 38 },
+          2: { cellWidth: 20 },
+          3: { cellWidth: 18 },
+          4: { cellWidth: 26 },
+          5: { cellWidth: 20 },
+          6: { cellWidth: 38 },
+          7: { cellWidth: 35 },
+          8: { cellWidth: 22 },
+          9: { cellWidth: 20 },
+          10: { cellWidth: 20 }
+        },
+        margin: { top: 15, right: 14, bottom: 15, left: 14 },
+        didDrawPage: (data) => {
+          const str = `Página ${data.pageNumber} de ${doc.getNumberOfPages()}`;
+          doc.setFontSize(8);
+          doc.setTextColor(148, 163, 184);
+          doc.text(str, 283, 200, { align: 'right' });
+          doc.text('Santa Casa de Misericórdia de Pelotas - HSC', 14, 200);
+        }
+      });
+
+      const today = new Date().toISOString().split('T')[0];
+      doc.save(`Relatorio_Equipamentos_TI_${today}.pdf`);
+    } catch (err) {
+      console.error('Erro ao gerar PDF de equipamentos:', err);
+    } finally {
+      setIsExportingPdf(false);
     }
   };
 
@@ -576,6 +799,36 @@ export default function Equipamentos() {
             <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin' : ''}`} />
             {isRefreshing ? 'Atualizando...' : 'Atualizar'}
           </button>
+
+          {/* Separador */}
+          <div className="h-4 w-px bg-border/60 mx-0.5 hidden sm:block" />
+
+          {/* Botões de Exportação Relatório (Excel / PDF) */}
+          <div className="flex items-center gap-1.5">
+            <button
+              onClick={handleExportExcel}
+              disabled={isLoading || filteredAndSortedEquipamentos.length === 0}
+              title="Exportar relatório em Excel (CSV) com os dados filtrados"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-700 dark:text-emerald-400 border border-emerald-500/30 text-xs font-semibold transition-colors disabled:opacity-40 disabled:cursor-not-allowed h-[34px]"
+            >
+              <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+              <span>Excel</span>
+            </button>
+
+            <button
+              onClick={handleExportPDF}
+              disabled={isLoading || isExportingPdf || filteredAndSortedEquipamentos.length === 0}
+              title="Exportar relatório em PDF com os dados filtrados"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-700 dark:text-rose-400 border border-rose-500/30 text-xs font-semibold transition-colors disabled:opacity-40 disabled:cursor-not-allowed h-[34px]"
+            >
+              {isExportingPdf ? (
+                <RefreshCw className="w-3.5 h-3.5 animate-spin text-rose-600 dark:text-rose-400" />
+              ) : (
+                <FileText className="w-3.5 h-3.5 text-rose-600 dark:text-rose-400" />
+              )}
+              <span>{isExportingPdf ? 'Gerando...' : 'PDF'}</span>
+            </button>
+          </div>
         </div>
       </div>
 
@@ -759,9 +1012,37 @@ export default function Equipamentos() {
 
             {/* Rodapé e Paginação */}
             <div className="flex flex-col sm:flex-row items-center justify-between border-t border-border/50 px-6 py-4 gap-4 bg-muted/20">
-              <span className="text-xs text-muted-foreground font-medium">
-                Exibindo {paginatedEquipamentos.length} de {filteredAndSortedEquipamentos.length} equipamentos
-              </span>
+              <div className="flex flex-wrap items-center gap-3">
+                <span className="text-xs text-muted-foreground font-medium">
+                  Exibindo {paginatedEquipamentos.length} de {filteredAndSortedEquipamentos.length} equipamentos
+                </span>
+
+                <div className="flex items-center gap-1.5 border-l border-border/60 pl-3">
+                  <button
+                    onClick={handleExportExcel}
+                    disabled={isLoading || filteredAndSortedEquipamentos.length === 0}
+                    title="Exportar dados filtrados do grid para Excel (CSV)"
+                    className="flex items-center gap-1 px-2.5 py-1 rounded bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-700 dark:text-emerald-400 border border-emerald-500/30 text-2xs font-semibold transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    <FileSpreadsheet className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
+                    <span>Excel</span>
+                  </button>
+
+                  <button
+                    onClick={handleExportPDF}
+                    disabled={isLoading || isExportingPdf || filteredAndSortedEquipamentos.length === 0}
+                    title="Exportar relatório PDF com os dados filtrados do grid"
+                    className="flex items-center gap-1 px-2.5 py-1 rounded bg-rose-500/10 hover:bg-rose-500/20 text-rose-700 dark:text-rose-400 border border-rose-500/30 text-2xs font-semibold transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    {isExportingPdf ? (
+                      <RefreshCw className="w-3 h-3 animate-spin text-rose-600 dark:text-rose-400" />
+                    ) : (
+                      <FileText className="w-3 h-3 text-rose-600 dark:text-rose-400" />
+                    )}
+                    <span>{isExportingPdf ? 'Gerando...' : 'PDF'}</span>
+                  </button>
+                </div>
+              </div>
 
               <div className="flex items-center gap-1.5">
                 <button
