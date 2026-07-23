@@ -18,6 +18,7 @@ export interface TituloPagar {
   nr_titulo: number;
   VL_TITULO: number;
   VL_BAIXA?: number;
+  Adiantamento?: number;
   NR_DOCUMENTO: string | null;
   DT_EMISSAO: string;
   DT_LIQUIDACAO: string | null;
@@ -88,6 +89,12 @@ const getStatusLabel = (situacao: string) => {
 };
 
 const getValorExibido = (t: TituloPagar): number => {
+  if (t.VL_BAIXA !== undefined && t.VL_BAIXA !== null && t.VL_BAIXA > 0) {
+    return t.VL_BAIXA;
+  }
+  if (t.Adiantamento !== undefined && t.Adiantamento !== null && t.Adiantamento > 0) {
+    return t.Adiantamento;
+  }
   if (t.VL_BAIXA !== undefined && t.VL_BAIXA !== null) {
     return t.VL_BAIXA;
   }
@@ -172,10 +179,14 @@ const CustosTI: React.FC = () => {
       if (response && Array.isArray(response)) {
         // Map keys in case of casing differences (upper vs lower)
         const mappedList: TituloPagar[] = response.map((item: any) => {
+          const vlBaixa = item.VL_BAIXA !== undefined && item.VL_BAIXA !== null ? Number(item.VL_BAIXA) : (item.vl_baixa !== undefined && item.vl_baixa !== null ? Number(item.vl_baixa) : undefined);
+          const adiantamento = item.ADIANTAMENTO !== undefined && item.ADIANTAMENTO !== null ? Number(item.ADIANTAMENTO) : (item.adiantamento !== undefined && item.adiantamento !== null ? Number(item.adiantamento) : (item.Adiantamento !== undefined && item.Adiantamento !== null ? Number(item.Adiantamento) : undefined));
+
           return {
             nr_titulo: Number(item.NR_TITULO !== undefined ? item.NR_TITULO : (item.nr_titulo || 0)),
             VL_TITULO: Number(item.VL_TITULO !== undefined ? item.VL_TITULO : (item.vl_titulo || 0)),
-            VL_BAIXA: item.VL_BAIXA !== undefined && item.VL_BAIXA !== null ? Number(item.VL_BAIXA) : (item.vl_baixa !== undefined && item.vl_baixa !== null ? Number(item.vl_baixa) : undefined),
+            VL_BAIXA: vlBaixa,
+            Adiantamento: adiantamento,
             NR_DOCUMENTO: cleanString(item.NR_DOCUMENTO !== undefined ? item.NR_DOCUMENTO : item.nr_documento, null),
             DT_EMISSAO: String(item.DT_EMISSAO !== undefined ? item.DT_EMISSAO : (item.dt_emissao || '')),
             DT_LIQUIDACAO: item.DT_LIQUIDACAO ? String(item.DT_LIQUIDACAO) : (item.dt_liquidacao ? String(item.dt_liquidacao) : null),
@@ -511,7 +522,7 @@ const CustosTI: React.FC = () => {
 
   // Export CSV/Excel
   const handleExportCSV = () => {
-    const headers = ['Titulo', 'Documento', 'Fornecedor_PJ', 'Nome_PF', 'Centro_Custo', 'Dt_Emissao', 'Dt_Liquidacao', 'Valor', 'Valor_Baixa', 'Situacao', 'Observacao'];
+    const headers = ['Titulo', 'Documento', 'Fornecedor_PJ', 'Nome_PF', 'Centro_Custo', 'Dt_Emissao', 'Dt_Liquidacao', 'Valor_Exibido', 'Valor_Titulo', 'Valor_Baixa', 'Adiantamento', 'Situacao', 'Observacao'];
     const rows = titulosFiltrados.map(t => [
       t.nr_titulo,
       t.NR_DOCUMENTO || '',
@@ -521,7 +532,9 @@ const CustosTI: React.FC = () => {
       t.DT_EMISSAO.split('T')[0],
       t.DT_LIQUIDACAO ? t.DT_LIQUIDACAO.split('T')[0] : '',
       getValorExibido(t),
+      t.VL_TITULO,
       t.VL_BAIXA !== undefined && t.VL_BAIXA !== null ? t.VL_BAIXA : '',
+      t.Adiantamento !== undefined && t.Adiantamento !== null ? t.Adiantamento : '',
       getStatusLabel(t.IE_SITUACAO),
       t.DS_OBSERVACAO_TITULO || ''
     ]);
@@ -1054,12 +1067,20 @@ const CustosTI: React.FC = () => {
                     <td className="p-4 text-center font-sans text-xs text-muted-foreground">{formatDate(t.DT_LIQUIDACAO)}</td>
                     <td className="p-4 text-right font-sans font-bold text-foreground">
                       <div className="flex items-center justify-end gap-1.5 font-sans">
-                        {t.IE_SITUACAO === 'L' && t.VL_BAIXA !== undefined && t.VL_BAIXA !== t.VL_TITULO && (
+                        {t.IE_SITUACAO === 'L' && t.VL_BAIXA !== undefined && t.VL_BAIXA !== null && t.VL_BAIXA > 0 && t.VL_BAIXA !== t.VL_TITULO && (
                           <span 
                             className="text-[9px] bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 px-1 py-0.5 rounded font-medium cursor-help"
                             title={`Título original: ${formatCurrency(t.VL_TITULO)} (Liquidado por valor ${t.VL_BAIXA > t.VL_TITULO ? 'maior' : 'menor'})`}
                           >
                             Pago R$
+                          </span>
+                        )}
+                        {(t.VL_BAIXA === undefined || t.VL_BAIXA === null || t.VL_BAIXA === 0) && t.Adiantamento !== undefined && t.Adiantamento !== null && t.Adiantamento > 0 && (
+                          <span 
+                            className="text-[9px] bg-blue-500/10 text-blue-600 dark:text-blue-400 px-1 py-0.5 rounded font-medium cursor-help"
+                            title={`Valor derivado de Adiantamento: ${formatCurrency(t.Adiantamento)} (Título original: ${formatCurrency(t.VL_TITULO)})`}
+                          >
+                            Adiantamento
                           </span>
                         )}
                         <span>{formatCurrency(getValorExibido(t))}</span>
@@ -1232,6 +1253,15 @@ const CustosTI: React.FC = () => {
                         * Liquidado por valor maior
                       </div>
                     )}
+                  </div>
+                )}
+
+                {selectedTitulo.Adiantamento !== undefined && selectedTitulo.Adiantamento !== null && selectedTitulo.Adiantamento > 0 && (
+                  <div className="grid grid-cols-2 gap-4 pt-1">
+                    <div>
+                      <span className="text-xs font-semibold text-muted-foreground block font-sans">Valor de Adiantamento</span>
+                      <span className="font-sans font-bold text-blue-600 dark:text-blue-400 text-base block mt-0.5">{formatCurrency(selectedTitulo.Adiantamento)}</span>
+                    </div>
                   </div>
                 )}
 
