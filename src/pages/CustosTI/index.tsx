@@ -88,7 +88,7 @@ const getStatusLabel = (situacao: string) => {
 };
 
 const getValorExibido = (t: TituloPagar): number => {
-  if (t.IE_SITUACAO === 'L' && t.VL_BAIXA !== undefined && t.VL_BAIXA > t.VL_TITULO) {
+  if (t.VL_BAIXA !== undefined && t.VL_BAIXA !== null) {
     return t.VL_BAIXA;
   }
   return t.VL_TITULO;
@@ -1054,10 +1054,10 @@ const CustosTI: React.FC = () => {
                     <td className="p-4 text-center font-sans text-xs text-muted-foreground">{formatDate(t.DT_LIQUIDACAO)}</td>
                     <td className="p-4 text-right font-sans font-bold text-foreground">
                       <div className="flex items-center justify-end gap-1.5 font-sans">
-                        {t.IE_SITUACAO === 'L' && t.VL_BAIXA !== undefined && t.VL_BAIXA > t.VL_TITULO && (
+                        {t.IE_SITUACAO === 'L' && t.VL_BAIXA !== undefined && t.VL_BAIXA !== t.VL_TITULO && (
                           <span 
                             className="text-[9px] bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 px-1 py-0.5 rounded font-medium cursor-help"
-                            title={`Título original: ${formatCurrency(t.VL_TITULO)} (Liquidado por valor maior)`}
+                            title={`Título original: ${formatCurrency(t.VL_TITULO)} (Liquidado por valor ${t.VL_BAIXA > t.VL_TITULO ? 'maior' : 'menor'})`}
                           >
                             Pago R$
                           </span>
