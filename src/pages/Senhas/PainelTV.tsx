@@ -61,7 +61,7 @@ const PainelTV: React.FC = () => {
     if (!videoUrl) return '';
     const id = getYoutubeVideoId(videoUrl);
     if (!id) return '';
-    return `https://www.youtube.com/embed/${id}?autoplay=1&mute=${isMutedRef.current ? 1 : 0}&loop=1&playlist=${id}&controls=0&modestbranding=1&enablejsapi=1`;
+    return `https://www.youtube.com/embed/${id}?autoplay=1&mute=${isMutedRef.current ? 1 : 0}&loop=1&playlist=${id}&controls=1&enablejsapi=1&cc_load_policy=0&iv_load_policy=3`;
   }, [videoUrl]);
 
   const syncMuteState = () => {

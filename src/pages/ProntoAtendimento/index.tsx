@@ -19,11 +19,15 @@ import {
   User,
   HeartPulse,
   Hourglass,
-  LogOut
+  LogOut,
+  Tv,
+  ExternalLink,
+  Settings
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
+import { ConfigPATVModal } from '../../components/ProntoAtendimento/ConfigPATVModal';
 
 interface PacientePA {
   id: string;
@@ -97,6 +101,9 @@ export default function ProntoAtendimento() {
   // Controle de ordenação
   const [sortField, setSortField] = useState<'nm_paciente' | 'dt_entrada' | 'tempo_espera' | 'tempo_atendimento' | 'tempo_total'>('dt_entrada');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+
+  // Estados do Modal do Painel TV
+  const [isConfigPATVOpen, setIsConfigPATVOpen] = useState(false);
 
   // Estados de Sincronização
   const [isSyncing, setIsSyncing] = useState(false);
@@ -479,12 +486,34 @@ export default function ProntoAtendimento() {
               <img src="/LOGO_HSC_PRIMARY.png" alt="Santa Casa" className="h-10 w-auto dark:hidden object-contain" />
               <img src="/LOGO_HSC_WHITE.png" alt="Santa Casa" className="h-10 w-auto hidden dark:block object-contain" />
             </div>
-            <h1 className="text-3xl font-bold tracking-tight text-foreground flex items-center gap-3">
-              <div className="p-2 bg-primary/10 rounded-xl">
-                <Activity className="h-6 w-6 text-primary animate-pulse" />
+            <div className="flex items-center gap-3 flex-wrap">
+              <h1 className="text-3xl font-bold tracking-tight text-foreground flex items-center gap-3">
+                <div className="p-2 bg-primary/10 rounded-xl">
+                  <Activity className="h-6 w-6 text-primary animate-pulse" />
+                </div>
+                Pronto Atendimento
+              </h1>
+
+              <div className="flex items-center gap-2 ml-auto sm:ml-4">
+                <button
+                  onClick={() => setIsConfigPATVOpen(true)}
+                  className="flex items-center gap-2 px-3.5 py-2 bg-card hover:bg-muted text-foreground border border-border rounded-xl text-xs font-semibold shadow-sm transition-all"
+                  title="Configurar Link do Vídeo e Frase do Letreiro do Painel TV"
+                >
+                  <Settings className="h-4 w-4 text-primary" />
+                  Configurar Painel TV
+                </button>
+                <button
+                  onClick={() => window.open('/pronto-atendimento/tv', '_blank')}
+                  className="flex items-center gap-2 px-3.5 py-2 bg-primary text-primary-foreground hover:bg-primary/90 rounded-xl text-xs font-bold shadow-sm transition-all"
+                  title="Abrir Painel TV em Nova Aba"
+                >
+                  <Tv className="h-4 w-4" />
+                  Abrir Painel TV
+                  <ExternalLink className="h-3.5 w-3.5" />
+                </button>
               </div>
-              Pronto Atendimento
-            </h1>
+            </div>
           </div>
 
           <p className="text-muted-foreground">
@@ -1016,6 +1045,11 @@ export default function ProntoAtendimento() {
         </button>
       </div>
 
+      {/* Modal de Configuração do Painel TV PA */}
+      <ConfigPATVModal
+        isOpen={isConfigPATVOpen}
+        onClose={() => setIsConfigPATVOpen(false)}
+      />
     </div>
   );
 }
