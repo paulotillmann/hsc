@@ -4,9 +4,7 @@ import {
   Activity,
   Calendar,
   Clock,
-  UserCheck,
   ShieldAlert,
-  FileText,
   RefreshCw,
   AlertCircle,
   TrendingDown,
@@ -17,9 +15,6 @@ import {
 import Quedas from './indicadores/Quedas';
 import Reinternacoes from './indicadores/Reinternacoes';
 import Mortalidade from './indicadores/Mortalidade';
-import EsperaEntradaInicio from './indicadores/EsperaEntradaInicio';
-import EsperaEntradaTriagem from './indicadores/EsperaEntradaTriagem';
-import EsperaFimTriagemConsulta from './indicadores/EsperaFimTriagemConsulta';
 import MediaInternacao from './indicadores/MediaInternacao';
 import MediaPermanencia from './indicadores/MediaPermanencia';
 
@@ -61,33 +56,6 @@ const MENU_INDICADORES: IndicadorMenu[] = [
     meta: '< 3.0%',
     descricao: 'Percentual de óbitos ocorridos em relação ao total de saídas da internação.'
 
-  },
-  {
-    id: 'espera_entrada_inicio',
-    name: 'Espera (Entrada - Início Consulta)',
-    shortName: 'Espera Entrada/Consulta',
-    path: 'tempo-espera-entrada-consulta',
-    icon: Clock,
-    meta: '< 45 min',
-    descricao: 'Média de tempo decorrido da entrada na recepção até o início da consulta médica.'
-  },
-  {
-    id: 'entrada_triagem',
-    name: 'Espera (Entrada - Início Triagem)',
-    shortName: 'Espera Entrada/Triagem',
-    path: 'tempo-espera-entrada-triagem',
-    icon: UserCheck,
-    meta: '< 15 min',
-    descricao: 'Média de tempo decorrido da entrada na recepção até o acolhimento para triagem.'
-  },
-  {
-    id: 'fimTriagem_consulta',
-    name: 'Espera (Fim Triagem - Início Consulta)',
-    shortName: 'Espera Triagem/Consulta',
-    path: 'tempo-espera-triagem-consulta',
-    icon: FileText,
-    meta: '< 30 min',
-    descricao: 'Média de tempo decorrido da conclusão da triagem até o início da consulta.'
   },
   {
     id: 'media_internacao',
@@ -310,9 +278,6 @@ export default function Qualidade() {
             <Route path="queda" element={<Quedas dataInicio={dataInicio} dataFim={dataFim} onKpiChange={setKpiInfo} />} />
             <Route path="reinternacao" element={<Reinternacoes dataInicio={dataInicio} dataFim={dataFim} onKpiChange={setKpiInfo} />} />
             <Route path="taxa-mortalidade" element={<Mortalidade dataInicio={dataInicio} dataFim={dataFim} onKpiChange={setKpiInfo} />} />
-            <Route path="tempo-espera-entrada-consulta" element={<EsperaEntradaInicio dataInicio={dataInicio} dataFim={dataFim} onKpiChange={setKpiInfo} />} />
-            <Route path="tempo-espera-entrada-triagem" element={<EsperaEntradaTriagem dataInicio={dataInicio} dataFim={dataFim} onKpiChange={setKpiInfo} />} />
-            <Route path="tempo-espera-triagem-consulta" element={<EsperaFimTriagemConsulta dataInicio={dataInicio} dataFim={dataFim} onKpiChange={setKpiInfo} />} />
             <Route path="tempo-medio-internacao" element={<MediaInternacao dataInicio={dataInicio} dataFim={dataFim} onKpiChange={setKpiInfo} />} />
             <Route path="tempo-medio-permanencia-emergencia" element={<MediaPermanencia dataInicio={dataInicio} dataFim={dataFim} onKpiChange={setKpiInfo} />} />
 
