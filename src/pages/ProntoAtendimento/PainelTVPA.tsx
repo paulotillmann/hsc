@@ -324,10 +324,10 @@ export default function PainelTVPA() {
         </div>
       </header>
 
-      {/* ── CONTEÚDO PRINCIPAL (VÍDEO À ESQUERDA + INDICADORES À DIREITA) ── */}
-      <div className="flex-1 flex overflow-hidden">
-        {/* ÁREA CENTRAL DO VÍDEO (ESQUERDA) */}
-        <main className="flex-1 relative bg-black flex items-center justify-center overflow-hidden">
+      {/* ── CONTEÚDO PRINCIPAL (VÍDEO 80% + INDICADORES 20%) ── */}
+      <div className="flex-1 flex flex-col landscape:flex-row overflow-hidden">
+        {/* ÁREA DO VÍDEO (80%) */}
+        <main className="w-full h-[80%] landscape:w-[80%] landscape:h-full shrink-0 relative bg-black flex items-center justify-center overflow-hidden">
           {iframeSrc ? (
             <iframe
               ref={iframeRef}
@@ -346,70 +346,70 @@ export default function PainelTVPA() {
           )}
         </main>
 
-        {/* COLUNA LATERAL DE INDICADORES (DIREITA) */}
-        <aside className="w-[180px] bg-slate-200/80 border-l border-slate-300 p-3 flex flex-col justify-around shrink-0 z-10 shadow-sm backdrop-blur-md overflow-y-auto">
+        {/* COLUNA/LINHA DE INDICADORES (20%) */}
+        <aside className="w-full h-[20%] landscape:w-[20%] landscape:h-full bg-slate-200/80 border-t landscape:border-t-0 landscape:border-l border-slate-300 p-2 md:p-3 landscape:p-4 flex flex-row landscape:flex-col justify-between items-center landscape:items-stretch gap-2 md:gap-3 landscape:gap-4 shrink-0 z-10 shadow-sm backdrop-blur-md overflow-x-auto landscape:overflow-x-hidden landscape:overflow-y-auto">
           {/* Card 1: Pacientes no PA */}
-          <div className="bg-white border border-slate-200 rounded-xl py-[21px] px-3 flex items-center justify-between shadow-sm relative overflow-hidden group hover:border-blue-500/40 transition-all">
-            <div className="flex flex-col">
-              <span className="text-[11px] font-bold text-[#851c1c] uppercase tracking-wider">Pacientes no PA</span>
-              <span className="text-3xl lg:text-4xl font-black font-extrabold tracking-tight text-slate-900 mt-0.5">
+          <div className="flex-1 min-w-[130px] sm:min-w-[150px] max-w-[280px] landscape:max-w-none h-[85px] sm:h-[95px] landscape:h-auto bg-white border border-slate-200 border-l-4 border-l-blue-500 rounded-xl p-2.5 sm:p-3 landscape:py-6 landscape:px-5 flex items-center justify-between shadow-sm relative overflow-hidden group hover:border-blue-500/40 transition-all duration-300">
+            <div className="flex flex-col min-w-0">
+              <span className="text-[9px] sm:text-[10px] md:text-[11px] landscape:text-xs landscape:md:text-sm landscape:lg:text-base font-bold text-[#851c1c] uppercase tracking-wider truncate">Pacientes no PA</span>
+              <span className="text-lg sm:text-xl md:text-2xl landscape:text-3xl landscape:md:text-4xl landscape:lg:text-5xl landscape:xl:text-6xl font-black font-extrabold tracking-tight text-slate-900 mt-0.5 sm:mt-1">
                 {totalAtivos}
               </span>
             </div>
-            <div className="text-[#dfdfdf] shrink-0">
-              <Users className="h-[21px] w-[21px]" />
+            <div className="text-blue-500/25 group-hover:text-blue-500/45 transition-colors shrink-0 ml-2">
+              <Users className="h-5 w-5 sm:h-6 sm:w-6 landscape:h-8 landscape:w-8 landscape:md:h-10 landscape:md:w-10 landscape:lg:h-12 landscape:lg:w-12 landscape:xl:h-14 landscape:xl:w-14" />
             </div>
           </div>
 
           {/* Card 2: Aguardando Médico */}
-          <div className="bg-white border border-slate-200 rounded-xl py-[21px] px-3 flex items-center justify-between shadow-sm relative overflow-hidden group hover:border-amber-500/40 transition-all">
-            <div className="flex flex-col">
-              <span className="text-[11px] font-bold text-[#851c1c] uppercase tracking-wider">Aguardando Médico</span>
-              <span className="text-3xl lg:text-4xl font-black font-extrabold tracking-tight text-slate-900 mt-0.5">
+          <div className="flex-1 min-w-[130px] sm:min-w-[150px] max-w-[280px] landscape:max-w-none h-[85px] sm:h-[95px] landscape:h-auto bg-white border border-slate-200 border-l-4 border-l-amber-500 rounded-xl p-2.5 sm:p-3 landscape:py-6 landscape:px-5 flex items-center justify-between shadow-sm relative overflow-hidden group hover:border-amber-500/40 transition-all duration-300">
+            <div className="flex flex-col min-w-0">
+              <span className="text-[9px] sm:text-[10px] md:text-[11px] landscape:text-xs landscape:md:text-sm landscape:lg:text-base font-bold text-[#851c1c] uppercase tracking-wider truncate">Aguardando Médico</span>
+              <span className="text-lg sm:text-xl md:text-2xl landscape:text-3xl landscape:md:text-4xl landscape:lg:text-5xl landscape:xl:text-6xl font-black font-extrabold tracking-tight text-slate-900 mt-0.5 sm:mt-1">
                 {aguardandoAtendimento}
               </span>
             </div>
-            <div className="text-[#dfdfdf] shrink-0">
-              <Hourglass className="h-[21px] w-[21px] animate-spin-slow" />
+            <div className="text-amber-500/25 group-hover:text-amber-500/45 transition-colors shrink-0 ml-2">
+              <Hourglass className="h-5 w-5 sm:h-6 sm:w-6 landscape:h-8 landscape:w-8 landscape:md:h-10 landscape:md:w-10 landscape:lg:h-12 landscape:lg:w-12 landscape:xl:h-14 landscape:xl:w-14 animate-spin-slow" />
             </div>
           </div>
 
           {/* Card 3: Em Atendimento */}
-          <div className="bg-white border border-slate-200 rounded-xl py-[21px] px-3 flex items-center justify-between shadow-sm relative overflow-hidden group hover:border-emerald-500/40 transition-all">
-            <div className="flex flex-col">
-              <span className="text-[11px] font-bold text-[#851c1c] uppercase tracking-wider">Em Atendimento</span>
-              <span className="text-3xl lg:text-4xl font-black font-extrabold tracking-tight text-slate-900 mt-0.5">
+          <div className="flex-1 min-w-[130px] sm:min-w-[150px] max-w-[280px] landscape:max-w-none h-[85px] sm:h-[95px] landscape:h-auto bg-white border border-slate-200 border-l-4 border-l-emerald-500 rounded-xl p-2.5 sm:p-3 landscape:py-6 landscape:px-5 flex items-center justify-between shadow-sm relative overflow-hidden group hover:border-emerald-500/40 transition-all duration-300">
+            <div className="flex flex-col min-w-0">
+              <span className="text-[9px] sm:text-[10px] md:text-[11px] landscape:text-xs landscape:md:text-sm landscape:lg:text-base font-bold text-[#851c1c] uppercase tracking-wider truncate">Em Atendimento</span>
+              <span className="text-lg sm:text-xl md:text-2xl landscape:text-3xl landscape:md:text-4xl landscape:lg:text-5xl landscape:xl:text-6xl font-black font-extrabold tracking-tight text-slate-900 mt-0.5 sm:mt-1">
                 {emAtendimentoMedico}
               </span>
             </div>
-            <div className="text-[#dfdfdf] shrink-0">
-              <HeartPulse className="h-[21px] w-[21px]" />
+            <div className="text-emerald-500/25 group-hover:text-emerald-500/45 transition-colors shrink-0 ml-2">
+              <HeartPulse className="h-5 w-5 sm:h-6 sm:w-6 landscape:h-8 landscape:w-8 landscape:md:h-10 landscape:md:w-10 landscape:lg:h-12 landscape:lg:w-12 landscape:xl:h-14 landscape:xl:w-14" />
             </div>
           </div>
 
           {/* Card 4: Média de Espera */}
-          <div className="bg-white border border-slate-200 rounded-xl py-[21px] px-3 flex items-center justify-between shadow-sm relative overflow-hidden group hover:border-cyan-500/40 transition-all">
-            <div className="flex flex-col">
-              <span className="text-[11px] font-bold text-[#851c1c] uppercase tracking-wider">Média de Espera</span>
-              <span className="text-2xl lg:text-3xl font-black font-extrabold tracking-tight text-slate-900 mt-0.5">
+          <div className="flex-1 min-w-[130px] sm:min-w-[150px] max-w-[280px] landscape:max-w-none h-[85px] sm:h-[95px] landscape:h-auto bg-white border border-slate-200 border-l-4 border-l-cyan-500 rounded-xl p-2.5 sm:p-3 landscape:py-6 landscape:px-5 flex items-center justify-between shadow-sm relative overflow-hidden group hover:border-cyan-500/40 transition-all duration-300">
+            <div className="flex flex-col min-w-0">
+              <span className="text-[9px] sm:text-[10px] md:text-[11px] landscape:text-xs landscape:md:text-sm landscape:lg:text-base font-bold text-[#851c1c] uppercase tracking-wider truncate">Média de Espera</span>
+              <span className="text-lg sm:text-xl md:text-2xl landscape:text-3xl landscape:md:text-4xl landscape:lg:text-5xl landscape:xl:text-6xl font-black font-extrabold tracking-tight text-slate-900 mt-0.5 sm:mt-1">
                 {formatWaitTime(tempoMedioEsperaMinutos)}
               </span>
             </div>
-            <div className="text-[#dfdfdf] shrink-0">
-              <Clock className="h-[21px] w-[21px]" />
+            <div className="text-cyan-500/25 group-hover:text-cyan-500/45 transition-colors shrink-0 ml-2">
+              <Clock className="h-5 w-5 sm:h-6 sm:w-6 landscape:h-8 landscape:w-8 landscape:md:h-10 landscape:md:w-10 landscape:lg:h-12 landscape:lg:w-12 landscape:xl:h-14 landscape:xl:w-14" />
             </div>
           </div>
 
           {/* Card 5: Média Atendimento */}
-          <div className="bg-white border border-slate-200 rounded-xl py-[21px] px-3 flex items-center justify-between shadow-sm relative overflow-hidden group hover:border-violet-500/40 transition-all">
-            <div className="flex flex-col">
-              <span className="text-[11px] font-bold text-[#851c1c] uppercase tracking-wider">Média Atendimento</span>
-              <span className="text-2xl lg:text-3xl font-black font-extrabold tracking-tight text-slate-900 mt-0.5">
+          <div className="flex-1 min-w-[130px] sm:min-w-[150px] max-w-[280px] landscape:max-w-none h-[85px] sm:h-[95px] landscape:h-auto bg-white border border-slate-200 border-l-4 border-l-violet-500 rounded-xl p-2.5 sm:p-3 landscape:py-6 landscape:px-5 flex items-center justify-between shadow-sm relative overflow-hidden group hover:border-violet-500/40 transition-all duration-300">
+            <div className="flex flex-col min-w-0">
+              <span className="text-[9px] sm:text-[10px] md:text-[11px] landscape:text-xs landscape:md:text-sm landscape:lg:text-base font-bold text-[#851c1c] uppercase tracking-wider truncate">Média Atendimento</span>
+              <span className="text-lg sm:text-xl md:text-2xl landscape:text-3xl landscape:md:text-4xl landscape:lg:text-5xl landscape:xl:text-6xl font-black font-extrabold tracking-tight text-slate-900 mt-0.5 sm:mt-1">
                 {formatWaitTime(tempoMedioAtendimentoMinutos)}
               </span>
             </div>
-            <div className="text-[#dfdfdf] shrink-0">
-              <Activity className="h-[21px] w-[21px] animate-pulse" />
+            <div className="text-violet-500/25 group-hover:text-violet-500/45 transition-colors shrink-0 ml-2">
+              <Activity className="h-5 w-5 sm:h-6 sm:w-6 landscape:h-8 landscape:w-8 landscape:md:h-10 landscape:md:w-10 landscape:lg:h-12 landscape:lg:w-12 landscape:xl:h-14 landscape:xl:w-14 animate-pulse" />
             </div>
           </div>
         </aside>
