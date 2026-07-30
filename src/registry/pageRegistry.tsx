@@ -35,5 +35,6 @@ export const pageRegistry: Record<string, React.LazyExoticComponent<React.Compon
   'financeiro': lazy(() => import('../pages/Financeiro/index')),
   'qualidade': lazy(() => import('../pages/Qualidade/index')),
   'custos-ti': lazy(() => import('../pages/CustosTI/index')),
+  'gestao-novidades': lazy(() => import('../pages/GestaoNovidades/index')),
   // 'relatorios': lazy(() => import('../pages/Relatorios')),
 };

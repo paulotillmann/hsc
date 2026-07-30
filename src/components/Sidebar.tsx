@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { NavLink, useNavigate, useLocation } from 'react-router-dom';
-import { LogOut, Sun, Moon, ChevronLeft, ChevronRight, ChevronDown, HeartPulse, Cpu, Users, GraduationCap } from 'lucide-react';
+import { LogOut, Sun, Moon, ChevronLeft, ChevronRight, ChevronDown, HeartPulse, Cpu, Users, GraduationCap, Smartphone, Newspaper } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { usePermissions } from '../hooks/usePermissions';
 import DynamicIcon from './DynamicIcon';
@@ -15,6 +15,7 @@ const Sidebar: React.FC = () => {
 
   // Controle unificado de acordeão (apenas um aberto por vez)
   const [expandedMenu, setExpandedMenu] = useState<string | null>(() => {
+    if (window.location.pathname.startsWith('/gestao-novidades')) return 'conecta-saude';
     if (window.location.pathname.startsWith('/notificacoes')) return 'assistencial';
     if (window.location.pathname.startsWith('/recepcao')) return 'recepcao';
     if (window.location.pathname.startsWith('/taxa-ocupacao')) return 'assistencial';
@@ -67,6 +68,8 @@ const Sidebar: React.FC = () => {
       setExpandedMenu('recursos-humanos');
     } else if (location.pathname.startsWith('/internato-secretaria') || location.pathname.startsWith('/internato-notas') || location.pathname.startsWith('/internato-agenda')) {
       setExpandedMenu('internato');
+    } else if (location.pathname.startsWith('/gestao-novidades')) {
+      setExpandedMenu('conecta-saude');
     }
   }, [location.pathname, isCollapsed]);
 
@@ -634,8 +637,65 @@ const Sidebar: React.FC = () => {
           );
         })()}
 
+        {/* Categoria Conecta Saúde (Agrupador) */}
+        {(() => {
+          const hasNovidadesAccess = userModules.some(m => m.slug === 'gestao-novidades');
+          const showConectaSaude = hasNovidadesAccess;
+          const isConectaSaudeActive = location.pathname.startsWith('/gestao-novidades');
+
+          if (!showConectaSaude) return null;
+
+          return (
+            <div className="flex flex-col">
+              {isCollapsed ? (
+                <NavLink
+                  to="/gestao-novidades"
+                  title="Conecta Saúde"
+                  className={navLinkClass(isConectaSaudeActive)}
+                >
+                  <Smartphone className="h-5 w-5 flex-shrink-0" />
+                </NavLink>
+              ) : (
+                <button
+                  onClick={() => {
+                    setExpandedMenu(expandedMenu === 'conecta-saude' ? null : 'conecta-saude');
+                  }}
+                  className={`flex items-center rounded-md text-sm transition-all duration-200 justify-start gap-3 px-3 py-2 w-full ${isConectaSaudeActive
+                      ? 'bg-primary text-primary-foreground shadow-sm hover:shadow-md hover:shadow-primary/20 font-medium'
+                      : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
+                    }`}
+                >
+                  <Smartphone className="h-5 w-5 flex-shrink-0" />
+                  <div className="flex flex-1 items-center justify-between">
+                    <span className="truncate">Conecta Saúde</span>
+                    <ChevronRight className={`h-4 w-4 transition-transform ${expandedMenu === 'conecta-saude' ? 'rotate-90' : ''}`} />
+                  </div>
+                </button>
+              )}
+
+              {!isCollapsed && expandedMenu === 'conecta-saude' && (
+                <div className="flex flex-col ml-9 mt-1 gap-1 border-l-2 border-border pl-2 border-primary/20 animate-in fade-in duration-300">
+                  {hasNovidadesAccess && (
+                    <NavLink
+                      to="/gestao-novidades"
+                      className={({ isActive }) =>
+                        `text-sm px-3 py-2 rounded-md transition-colors ${isActive
+                          ? 'bg-primary/10 text-primary font-medium'
+                          : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                        }`
+                      }
+                    >
+                      Novidades
+                    </NavLink>
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })()}
+
         {userModules
-          .filter(m => m.slug !== 'configuracoes' && m.slug !== 'pacientes-internados' && m.slug !== 'centro-cirurgico' && m.slug !== 'pronto-atendimento' && m.slug !== 'plantao-ti' && m.slug !== 'ordem-servico' && m.slug !== 'dashboard' && m.slug !== 'holerites' && m.slug !== 'informes' && m.slug !== 'notificacoes' && m.slug !== 'taxa-ocupacao' && m.slug !== 'internato-secretaria' && m.slug !== 'internato-notas' && m.slug !== 'internato-agenda' && m.slug !== 'equipamentos' && m.slug !== 'custos-ti') // Configurações fica na área inferior, e assistenciais, TI, RH, notificações, taxas e internato ficam agrupados
+          .filter(m => m.slug !== 'configuracoes' && m.slug !== 'pacientes-internados' && m.slug !== 'centro-cirurgico' && m.slug !== 'pronto-atendimento' && m.slug !== 'plantao-ti' && m.slug !== 'ordem-servico' && m.slug !== 'dashboard' && m.slug !== 'holerites' && m.slug !== 'informes' && m.slug !== 'notificacoes' && m.slug !== 'taxa-ocupacao' && m.slug !== 'internato-secretaria' && m.slug !== 'internato-notas' && m.slug !== 'internato-agenda' && m.slug !== 'equipamentos' && m.slug !== 'custos-ti' && m.slug !== 'gestao-novidades') // Configurações fica na área inferior, e assistenciais, TI, RH, notificações, taxas, internato e conecta_saude ficam agrupados
           .map(module => {
 
             if (module.slug === 'recepcao') {
