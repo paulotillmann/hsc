@@ -159,12 +159,54 @@ export const webhookService = {
         throw new Error(`Error triggering webhook: ${response.statusText}`);
       }
 
-      const data = await response.json();
+      const text = await response.text();
+      if (!text || !text.trim()) {
+        return [];
+      }
+      const data = JSON.parse(text);
       return Array.isArray(data) ? data : (data.data && Array.isArray(data.data) ? data.data : []);
     } catch (error) {
       console.error('Error in webhook fetchCustosTi:', error);
       return [];
     }
+  },
+
+  /**
+   * Fetch Medical Duty (Plantão Médico) shifts from n8n webhook
+   */
+  async fetchPlantaoMedicoCustos(payload: any = {}): Promise<any[]> {
+    const webhookUrl = import.meta.env.VITE_N8N_WEBHOOK_PLANTAO_MEDICO || 'https://n8n-n8n.7woir1.easypanel.host/webhook/plantao';
+    
+    if (!webhookUrl) {
+      console.error('Webhook URL (VITE_N8N_WEBHOOK_PLANTAO_MEDICO) is not configured.');
+      return [];
+    }
+
+    try {
+      const response = await fetch(webhookUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Error triggering webhook: ${response.statusText}`);
+      }
+
+      const text = await response.text();
+      if (!text || !text.trim()) {
+        return [];
+      }
+      const data = JSON.parse(text);
+      return Array.isArray(data) ? data : (data.data && Array.isArray(data.data) ? data.data : []);
+    } catch (error) {
+      console.error('Error in webhook fetchPlantaoMedicoCustos:', error);
+      return [];
+    }
   }
 };
+
+
 

@@ -1,0 +1,1797 @@
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { 
+  Stethoscope, Filter, RefreshCw, FileText, Calendar, Search, 
+  ChevronLeft, ChevronRight, BarChart3, PieChart, ArrowUpRight, 
+  TrendingUp, Info, Check, ChevronDown, UserCheck, DollarSign, 
+  FileSpreadsheet, Award, Activity, X, Layers
+} from 'lucide-react';
+import { webhookService } from '../../services/webhookService';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
+import { 
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, 
+  ResponsiveContainer, PieChart as ReChartsPie, Pie, Cell
+} from 'recharts';
+
+export interface PlantaoMedicoItem {
+  id: string;
+  DT_CHAMADO: string;
+  MEDICO: string;
+  ESPECIALIDADE: string;
+  VALOR: number;
+  VALOR_RAW: string | number;
+  TIPO_PLANTAO: string;
+}
+
+export interface PlantaoMedicoSintetico {
+  id: string;
+  MEDICO: string;
+  ESPECIALIDADE: string;
+  TIPO_PLANTAO: string;
+  QTD_PLANTOES: number;
+  VALOR_TOTAL: number;
+  VALOR_MEDIO: number;
+  ITEMS: PlantaoMedicoItem[];
+}
+
+const parseValor = (val: any): number => {
+  if (typeof val === 'number') return val;
+  if (!val) return 0;
+  const str = String(val).trim();
+  const clean = str.replace(/[R$\s]/g, '').replace(/\./g, '').replace(',', '.');
+  const num = parseFloat(clean);
+  return isNaN(num) ? 0 : num;
+};
+
+const cleanString = (val: any, fallback: string = ''): string => {
+  if (val === undefined || val === null) return fallback;
+  const str = String(val).trim();
+  if (str.toLowerCase() === 'null' || str.toLowerCase() === 'undefined') return fallback;
+  return str;
+};
+
+const formatCurrency = (val: number) => {
+  return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
+};
+
+const formatCompactCurrency = (value: number) => {
+  return new Intl.NumberFormat('pt-BR', {
+    style: 'currency',
+    currency: 'BRL',
+    notation: 'compact',
+    compactDisplay: 'short'
+  }).format(value);
+};
+
+const parseTasyDate = (dateStr: string | null): Date | null => {
+  if (!dateStr) return null;
+  const str = String(dateStr).trim();
+  if (!str || str.toLowerCase() === 'null' || str.toLowerCase() === 'undefined') return null;
+
+  // Formato DD/MM/YYYY ou DD/MM/YYYY HH:mm:ss (Padrão Tasy)
+  if (/^\d{2}\/\d{2}\/\d{4}/.test(str)) {
+    const [datePart, timePart] = str.split(' ');
+    const [day, month, year] = datePart.split('/');
+    const timeStr = timePart || '00:00:00';
+    return new Date(`${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}T${timeStr}-03:00`);
+  }
+
+  // Formato YYYY-MM-DD
+  if (/^\d{4}-\d{2}-\d{2}$/.test(str)) {
+    return new Date(`${str}T00:00:00-03:00`);
+  }
+
+  // String ISO com ajuste estrito para UTC-3 (America/Sao_Paulo)
+  const normalizedStr = str.replace(/(Z|\+00:00|\+00)$/i, '-03:00');
+  const d = new Date(normalizedStr);
+  return isNaN(d.getTime()) ? null : d;
+};
+
+const formatDate = (dateStr: string | null) => {
+  if (!dateStr) return '-';
+  const d = parseTasyDate(dateStr);
+  if (!d) return dateStr;
+  
+  // Formatação garantida no Horário de Brasília (America/Sao_Paulo)
+  const brFormatter = new Intl.DateTimeFormat('pt-BR', {
+    timeZone: 'America/Sao_Paulo',
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false
+  });
+
+  const parts = brFormatter.formatToParts(d);
+  let day = '', month = '', year = '', hour = '', minute = '';
+  for (const part of parts) {
+    if (part.type === 'day') day = part.value;
+    if (part.type === 'month') month = part.value;
+    if (part.type === 'year') year = part.value;
+    if (part.type === 'hour') hour = part.value;
+    if (part.type === 'minute') minute = part.value;
+  }
+
+  if (hour === '00' && minute === '00') {
+    return `${day}/${month}/${year}`;
+  }
+  return `${day}/${month}/${year} ${hour}:${minute}`;
+};
+
+const COLORS = ['#8a1515', '#10b981', '#f59e0b', '#ec4899', '#8b5cf6', '#06b6d4', '#34d399', '#f87171'];
+
+const getDefaultDates = () => {
+  const now = new Date();
+  const brFormatter = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Sao_Paulo',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  });
+  const todayStr = brFormatter.format(now);
+  const [yearStr, monthStr] = todayStr.split('-');
+  let year = parseInt(yearStr, 10);
+  let month = parseInt(monthStr, 10);
+
+  // Primeiro e último dia do MÊS ANTERIOR ao atual
+  let prevMonth = month - 1;
+  let prevYear = year;
+  if (prevMonth <= 0) {
+    prevMonth = 12;
+    prevYear -= 1;
+  }
+
+  const prevMonthStr = String(prevMonth).padStart(2, '0');
+  const firstDay = `${prevYear}-${prevMonthStr}-01`;
+
+  const lastDayObj = new Date(prevYear, prevMonth, 0);
+  const lastDayNum = String(lastDayObj.getDate()).padStart(2, '0');
+  const lastDay = `${prevYear}-${prevMonthStr}-${lastDayNum}`;
+
+  return {
+    from: firstDay,
+    to: lastDay
+  };
+};
+
+const PlantaoMedico: React.FC = () => {
+  const [plantaos, setPlantaos] = useState<PlantaoMedicoItem[]>(() => {
+    try {
+      const cached = sessionStorage.getItem('hsc_plantao_medico_cache_data');
+      if (cached) return JSON.parse(cached);
+    } catch (e) {}
+    return [];
+  });
+  const [loading, setLoading] = useState<boolean>(() => {
+    const cached = sessionStorage.getItem('hsc_plantao_medico_cache_data');
+    return !cached;
+  });
+  const [syncStatus, setSyncStatus] = useState<'idle' | 'success' | 'error'>(() => {
+    return (sessionStorage.getItem('hsc_plantao_medico_cache_status') as any) || 'idle';
+  });
+  const [syncTime, setSyncTime] = useState<string | null>(() => {
+    return sessionStorage.getItem('hsc_plantao_medico_cache_time');
+  });
+
+  // Filtros
+  const [searchTerm, setSearchTerm] = useState<string>('');
+  const [periodFrom, setPeriodFrom] = useState<string>(() => getDefaultDates().from);
+  const [periodTo, setPeriodTo] = useState<string>(() => getDefaultDates().to);
+  
+  // Dropdown Filtro: Especialidades
+  const [selectedEspecialidades, setSelectedEspecialidades] = useState<string[]>([]);
+  const [isEspecialidadesOpen, setIsEspecialidadesOpen] = useState<boolean>(false);
+  const [especialidadeSearch, setEspecialidadeSearch] = useState<string>('');
+  const espDropdownRef = useRef<HTMLDivElement>(null);
+
+  // Dropdown Filtro: Médicos
+  const [selectedMedicos, setSelectedMedicos] = useState<string[]>([]);
+  const [isMedicosOpen, setIsMedicosOpen] = useState<boolean>(false);
+  const [medicoSearch, setMedicoSearch] = useState<string>('');
+  const medDropdownRef = useRef<HTMLDivElement>(null);
+
+  // Dropdown Filtro: Tipo de Plantão (Requisitado)
+  const [selectedTipos, setSelectedTipos] = useState<string[]>([]);
+  const [isTiposOpen, setIsTiposOpen] = useState<boolean>(false);
+  const [tipoSearch, setTipoSearch] = useState<string>('');
+  const tipoDropdownRef = useRef<HTMLDivElement>(null);
+
+  // Ordenação
+  const [sortField, setSortField] = useState<keyof PlantaoMedicoItem>('DT_CHAMADO');
+  const [sortAsc, setSortAsc] = useState<boolean>(false);
+
+  // Paginação
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const itemsPerPage = 10;
+
+  // Modo de exibição: Analítico (detalhado) ou Sintético (agrupado)
+  const [viewMode, setViewMode] = useState<'analitico' | 'sintetico'>('analitico');
+  const [sortFieldSintetico, setSortFieldSintetico] = useState<keyof PlantaoMedicoSintetico>('VALOR_TOTAL');
+  const [sortAscSintetico, setSortAscSintetico] = useState<boolean>(false);
+  const [selectedSinteticoItem, setSelectedSinteticoItem] = useState<PlantaoMedicoSintetico | null>(null);
+
+  // Item selecionado para modal
+  const [selectedItem, setSelectedItem] = useState<PlantaoMedicoItem | null>(null);
+
+  // Fechar dropdowns ao clicar fora
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (espDropdownRef.current && !espDropdownRef.current.contains(event.target as Node)) {
+        setIsEspecialidadesOpen(false);
+      }
+      if (medDropdownRef.current && !medDropdownRef.current.contains(event.target as Node)) {
+        setIsMedicosOpen(false);
+      }
+      if (tipoDropdownRef.current && !tipoDropdownRef.current.contains(event.target as Node)) {
+        setIsTiposOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const saveToCache = (
+    list: PlantaoMedicoItem[],
+    time: string | null,
+    status: 'idle' | 'success' | 'error',
+    from: string,
+    to: string
+  ) => {
+    try {
+      sessionStorage.setItem('hsc_plantao_medico_cache_data', JSON.stringify(list));
+      if (time) sessionStorage.setItem('hsc_plantao_medico_cache_time', time);
+      sessionStorage.setItem('hsc_plantao_medico_cache_status', status);
+      sessionStorage.setItem('hsc_plantao_medico_cache_from', from);
+      sessionStorage.setItem('hsc_plantao_medico_cache_to', to);
+    } catch (e) {
+      console.error('Erro ao salvar cache de plantão médico:', e);
+    }
+  };
+
+  // Busca dados do webhook n8n/plantao com suporte a cache local
+  const fetchPlantaos = useCallback(async (showLoading = true, forceRefresh = false) => {
+    if (!forceRefresh) {
+      try {
+        const cachedData = sessionStorage.getItem('hsc_plantao_medico_cache_data');
+        const cachedTime = sessionStorage.getItem('hsc_plantao_medico_cache_time');
+        const cachedStatus = sessionStorage.getItem('hsc_plantao_medico_cache_status');
+        const cachedFrom = sessionStorage.getItem('hsc_plantao_medico_cache_from');
+        const cachedTo = sessionStorage.getItem('hsc_plantao_medico_cache_to');
+
+        if (cachedData && cachedFrom === periodFrom && cachedTo === periodTo) {
+          const parsed = JSON.parse(cachedData);
+          setPlantaos(parsed);
+          setSyncTime(cachedTime);
+          setSyncStatus((cachedStatus as any) || 'success');
+          setLoading(false);
+          return;
+        }
+      } catch (e) {
+        console.error('Erro ao ler cache de plantão médico:', e);
+      }
+    }
+
+    if (showLoading) setLoading(true);
+    setSyncStatus('idle');
+
+    try {
+      const response = await webhookService.fetchPlantaoMedicoCustos({
+        dt_inicio: periodFrom || null,
+        dt_fim: periodTo || null
+      });
+
+      const nowTime = new Date().toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit' });
+
+      if (response && Array.isArray(response)) {
+        const mappedList: PlantaoMedicoItem[] = response
+          .filter((item: any) => {
+            if (!item) return false;
+            const rawDt = item.DT_CHAMADO !== undefined ? item.DT_CHAMADO : item.dt_chamado;
+            if (rawDt === null || rawDt === undefined) return false;
+            const strDt = String(rawDt).trim().toLowerCase();
+            return strDt !== '' && strDt !== 'null' && strDt !== 'undefined';
+          })
+          .map((item: any, idx: number) => {
+            const valNum = parseValor(item.VALOR !== undefined ? item.VALOR : item.valor);
+            return {
+              id: `plantao-${idx}-${item.DT_CHAMADO || ''}-${item.MEDICO || ''}`,
+              DT_CHAMADO: String(item.DT_CHAMADO !== undefined ? item.DT_CHAMADO : (item.dt_chamado || '')),
+              MEDICO: cleanString(item.MEDICO !== undefined ? item.MEDICO : item.medico, 'Médico Não Informado'),
+              ESPECIALIDADE: cleanString(item.ESPECIALIDADE !== undefined ? item.ESPECIALIDADE : item.especialidade, 'Geral'),
+              VALOR: valNum,
+              VALOR_RAW: item.VALOR !== undefined ? item.VALOR : (item.valor || '0,00'),
+              TIPO_PLANTAO: cleanString(item.TIPO_PLANTAO !== undefined ? item.TIPO_PLANTAO : item.tipo_plantao, 'Plantão')
+            };
+          });
+
+        setPlantaos(mappedList);
+        setSyncTime(nowTime);
+        setSyncStatus('success');
+        saveToCache(mappedList, nowTime, 'success', periodFrom, periodTo);
+      } else {
+        setSyncStatus('error');
+      }
+    } catch (e) {
+      console.error('Erro ao carregar dados de plantão médico:', e);
+      setSyncStatus('error');
+    } finally {
+      setLoading(false);
+    }
+  }, [periodFrom, periodTo]);
+
+  const hasMountedRef = useRef(false);
+
+  // Carga inicial - Executada APENAS se não houver dados em cache para as datas selecionadas
+  useEffect(() => {
+    const cachedFrom = sessionStorage.getItem('hsc_plantao_medico_cache_from');
+    const cachedTo = sessionStorage.getItem('hsc_plantao_medico_cache_to');
+    const cachedData = sessionStorage.getItem('hsc_plantao_medico_cache_data');
+
+    if (cachedData && cachedFrom === periodFrom && cachedTo === periodTo) {
+      setLoading(false);
+      return;
+    }
+
+    if (!hasMountedRef.current) {
+      hasMountedRef.current = true;
+      fetchPlantaos(true, false);
+    }
+  }, [fetchPlantaos, periodFrom, periodTo]);
+
+  // Reset de página ao alterar filtros ou modo de visão
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, selectedEspecialidades, selectedMedicos, selectedTipos, periodFrom, periodTo, viewMode]);
+
+  // Listas únicas para os seletores
+  const especialidadesDisponiveis = useMemo(() => {
+    const list = Array.from(new Set(plantaos.map(p => p.ESPECIALIDADE).filter(Boolean)));
+    return list.sort((a, b) => a.localeCompare(b));
+  }, [plantaos]);
+
+  const especialidadesFiltradas = useMemo(() => {
+    return especialidadesDisponiveis.filter(e =>
+      e.toLowerCase().includes(especialidadeSearch.toLowerCase())
+    );
+  }, [especialidadesDisponiveis, especialidadeSearch]);
+
+  const medicosDisponiveis = useMemo(() => {
+    const list = Array.from(new Set(plantaos.map(p => p.MEDICO).filter(Boolean)));
+    return list.sort((a, b) => a.localeCompare(b));
+  }, [plantaos]);
+
+  const medicosFiltrados = useMemo(() => {
+    return medicosDisponiveis.filter(m =>
+      m.toLowerCase().includes(medicoSearch.toLowerCase())
+    );
+  }, [medicosDisponiveis, medicoSearch]);
+
+  const tiposDisponiveis = useMemo(() => {
+    const list = Array.from(new Set(plantaos.map(p => p.TIPO_PLANTAO).filter(Boolean)));
+    return list.sort((a, b) => a.localeCompare(b));
+  }, [plantaos]);
+
+  const tiposFiltrados = useMemo(() => {
+    return tiposDisponiveis.filter(t =>
+      t.toLowerCase().includes(tipoSearch.toLowerCase())
+    );
+  }, [tiposDisponiveis, tipoSearch]);
+
+  // Ordenação por colunas
+  const handleSort = (field: keyof PlantaoMedicoItem) => {
+    if (sortField === field) {
+      setSortAsc(!sortAsc);
+    } else {
+      setSortField(field);
+      setSortAsc(true);
+    }
+  };
+
+  // Filtragem local inteligente
+  const plantaosFiltrados = useMemo(() => {
+    let result = plantaos.filter(item => {
+      // 0. Garante que DT_CHAMADO não é nulo/vazio
+      if (!item.DT_CHAMADO) return false;
+      const cleanDtStr = String(item.DT_CHAMADO).trim().toLowerCase();
+      if (cleanDtStr === '' || cleanDtStr === 'null' || cleanDtStr === 'undefined') return false;
+
+      // 1. Filtro de Data do Chamado
+      if (periodFrom || periodTo) {
+        const itemDate = parseTasyDate(item.DT_CHAMADO);
+        if (itemDate && !isNaN(itemDate.getTime())) {
+          if (periodFrom) {
+            const fromDate = parseTasyDate(periodFrom);
+            if (fromDate && itemDate < fromDate) return false;
+          }
+          if (periodTo) {
+            const toDate = parseTasyDate(periodTo);
+            if (toDate) {
+              const endOfDay = new Date(toDate);
+              endOfDay.setHours(23, 59, 59, 999);
+              if (itemDate > endOfDay) return false;
+            }
+          }
+        }
+      }
+
+      // 2. Filtro de Busca Livre
+      if (searchTerm) {
+        const term = searchTerm.toLowerCase();
+        const matches = 
+          item.MEDICO.toLowerCase().includes(term) || 
+          item.ESPECIALIDADE.toLowerCase().includes(term) || 
+          item.TIPO_PLANTAO.toLowerCase().includes(term) ||
+          String(item.VALOR).includes(term);
+        
+        if (!matches) return false;
+      }
+
+      // 3. Filtro de Especialidades
+      if (selectedEspecialidades.length > 0) {
+        if (!selectedEspecialidades.includes(item.ESPECIALIDADE)) return false;
+      }
+
+      // 4. Filtro de Médicos
+      if (selectedMedicos.length > 0) {
+        if (!selectedMedicos.includes(item.MEDICO)) return false;
+      }
+
+      // 5. Filtro de Tipo de Plantão
+      if (selectedTipos.length > 0) {
+        if (!selectedTipos.includes(item.TIPO_PLANTAO)) return false;
+      }
+
+      return true;
+    });
+
+    // Ordenação
+    result.sort((a, b) => {
+      let valA = a[sortField];
+      let valB = b[sortField];
+
+      if (valA === null || valA === undefined) return sortAsc ? -1 : 1;
+      if (valB === null || valB === undefined) return sortAsc ? 1 : -1;
+
+      if (typeof valA === 'number' && typeof valB === 'number') {
+        return sortAsc ? valA - valB : valB - valA;
+      }
+
+      const strA = String(valA).toLowerCase();
+      const strB = String(valB).toLowerCase();
+
+      if (strA < strB) return sortAsc ? -1 : 1;
+      if (strA > strB) return sortAsc ? 1 : -1;
+      return 0;
+    });
+
+    return result;
+  }, [plantaos, searchTerm, selectedEspecialidades, selectedMedicos, selectedTipos, periodFrom, periodTo, sortField, sortAsc]);
+
+  // KPIs
+  const kpis = useMemo(() => {
+    let totalValor = 0;
+    const medicosUnicos = new Set<string>();
+
+    plantaosFiltrados.forEach(p => {
+      totalValor += p.VALOR;
+      if (p.MEDICO) medicosUnicos.add(p.MEDICO);
+    });
+
+    const count = plantaosFiltrados.length;
+    const mediaPorPlantao = count > 0 ? totalValor / count : 0;
+
+    return {
+      totalValor,
+      count,
+      mediaPorPlantao,
+      medicosAtivos: medicosUnicos.size
+    };
+  }, [plantaosFiltrados]);
+
+  // Gráficos
+  const { monthlyChartData, especialidadeChartData } = useMemo(() => {
+    const monthMap: Record<string, number> = {};
+    const espMap: Record<string, number> = {};
+
+    plantaosFiltrados.forEach(p => {
+      if (p.DT_CHAMADO) {
+        const date = parseTasyDate(p.DT_CHAMADO);
+        if (date && !isNaN(date.getTime())) {
+          const year = date.getFullYear();
+          const month = String(date.getMonth() + 1).padStart(2, '0');
+          const key = `${year}-${month}`;
+          monthMap[key] = (monthMap[key] || 0) + p.VALOR;
+        }
+      }
+
+      const esp = p.ESPECIALIDADE || 'Outras';
+      espMap[esp] = (espMap[esp] || 0) + p.VALOR;
+    });
+
+    const sortedMonthKeys = Object.keys(monthMap).sort();
+    const monthsAbbr = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+    
+    const monthlyData = sortedMonthKeys.map(key => {
+      const [year, monthStr] = key.split('-');
+      const monthIdx = parseInt(monthStr, 10) - 1;
+      const yearShort = year.substring(2);
+      return {
+        name: `${monthsAbbr[monthIdx]}/${yearShort}`,
+        value: monthMap[key]
+      };
+    });
+
+    const espData = Object.entries(espMap)
+      .map(([name, value]) => ({ name, value }))
+      .sort((a, b) => b.value - a.value)
+      .slice(0, 6);
+
+    return {
+      monthlyChartData: monthlyData,
+      especialidadeChartData: espData
+    };
+  }, [plantaosFiltrados]);
+
+  // Ordenação por colunas da visão sintética
+  const handleSortSintetico = (field: keyof PlantaoMedicoSintetico) => {
+    if (sortFieldSintetico === field) {
+      setSortAscSintetico(!sortAscSintetico);
+    } else {
+      setSortFieldSintetico(field);
+      setSortAscSintetico(true);
+    }
+  };
+
+  // Agrupamento Sintético dos Plantões Filtrados (Médico + Especialidade + Tipo)
+  const plantaosSinteticos = useMemo(() => {
+    const map = new Map<string, {
+      medico: string;
+      especialidade: string;
+      tipoPlantao: string;
+      qtd: number;
+      valorTotal: number;
+      items: PlantaoMedicoItem[];
+    }>();
+
+    plantaosFiltrados.forEach(item => {
+      const key = `${item.MEDICO.toLowerCase().trim()}|||${item.ESPECIALIDADE.toLowerCase().trim()}|||${item.TIPO_PLANTAO.toLowerCase().trim()}`;
+      
+      const existing = map.get(key);
+      if (existing) {
+        existing.qtd += 1;
+        existing.valorTotal += item.VALOR;
+        existing.items.push(item);
+      } else {
+        map.set(key, {
+          medico: item.MEDICO,
+          especialidade: item.ESPECIALIDADE,
+          tipoPlantao: item.TIPO_PLANTAO,
+          qtd: 1,
+          valorTotal: item.VALOR,
+          items: [item]
+        });
+      }
+    });
+
+    const result: PlantaoMedicoSintetico[] = Array.from(map.entries()).map(([key, data], idx) => ({
+      id: `sintetico-${idx}-${key}`,
+      MEDICO: data.medico,
+      ESPECIALIDADE: data.especialidade,
+      TIPO_PLANTAO: data.tipoPlantao,
+      QTD_PLANTOES: data.qtd,
+      VALOR_TOTAL: data.valorTotal,
+      VALOR_MEDIO: data.qtd > 0 ? data.valorTotal / data.qtd : 0,
+      ITEMS: data.items
+    }));
+
+    result.sort((a, b) => {
+      let valA = a[sortFieldSintetico];
+      let valB = b[sortFieldSintetico];
+
+      if (valA === null || valA === undefined) return sortAscSintetico ? -1 : 1;
+      if (valB === null || valB === undefined) return sortAscSintetico ? 1 : -1;
+
+      if (typeof valA === 'number' && typeof valB === 'number') {
+        return sortAscSintetico ? valA - valB : valB - valA;
+      }
+
+      const strA = String(valA).toLowerCase();
+      const strB = String(valB).toLowerCase();
+
+      if (strA < strB) return sortAscSintetico ? -1 : 1;
+      if (strA > strB) return sortAscSintetico ? 1 : -1;
+      return 0;
+    });
+
+    return result;
+  }, [plantaosFiltrados, sortFieldSintetico, sortAscSintetico]);
+
+  // Paginação
+  const paginatedPlantaos = useMemo(() => {
+    const start = (currentPage - 1) * itemsPerPage;
+    return plantaosFiltrados.slice(start, start + itemsPerPage);
+  }, [plantaosFiltrados, currentPage]);
+
+  const paginatedSinteticos = useMemo(() => {
+    const start = (currentPage - 1) * itemsPerPage;
+    return plantaosSinteticos.slice(start, start + itemsPerPage);
+  }, [plantaosSinteticos, currentPage]);
+
+  const totalPages = viewMode === 'sintetico'
+    ? Math.ceil(plantaosSinteticos.length / itemsPerPage)
+    : Math.ceil(plantaosFiltrados.length / itemsPerPage);
+
+  // Exportar PDF Executivo (Sintético ou Analítico)
+  const handleExportPDF = async () => {
+    const doc = new jsPDF();
+    
+    try {
+      const img = new Image();
+      img.src = '/LOGO_HSC_PRIMARY.png';
+      await new Promise((resolve) => {
+        img.onload = resolve;
+        img.onerror = resolve;
+      });
+      doc.addImage(img, 'PNG', 14, 10, 45, 12);
+    } catch (e) {
+      console.error('Erro logo PDF:', e);
+    }
+
+    const titleText = viewMode === 'sintetico'
+      ? 'Relatório Sintético de Plantão Médico (Agrupado)'
+      : 'Relatório Executivo de Plantão Médico';
+
+    doc.setFontSize(16);
+    doc.setFont('helvetica', 'bold');
+    doc.text(titleText, 14, 32);
+
+    doc.setFontSize(9);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(100);
+    doc.text(`Data de Emissão: ${new Date().toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })} às ${new Date().toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit' })}`, 14, 38);
+    
+    const activeFilters = [];
+    if (periodFrom || periodTo) {
+      const format = (p: string) => p.split('-').reverse().join('/');
+      activeFilters.push(`Período: ${format(periodFrom)} a ${format(periodTo)}`);
+    }
+    if (selectedTipos.length > 0) activeFilters.push(`Tipos: ${selectedTipos.join(', ')}`);
+    if (selectedEspecialidades.length > 0) activeFilters.push(`Especialidades: ${selectedEspecialidades.join(', ')}`);
+
+    if (activeFilters.length > 0) {
+      doc.text(`Filtros: ${activeFilters.join(' | ')}`, 14, 43);
+    }
+
+    doc.setFontSize(11);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(0);
+    doc.text('Resumo Financeiro de Plantões', 14, 52);
+
+    autoTable(doc, {
+      startY: 56,
+      head: [['Total de Plantões', 'Valor Total', 'Valor Médio por Plantão', 'Médicos Ativos']],
+      body: [[
+        kpis.count.toString(),
+        formatCurrency(kpis.totalValor),
+        formatCurrency(kpis.mediaPorPlantao),
+        kpis.medicosAtivos.toString()
+      ]],
+      theme: 'grid',
+      headStyles: { fillColor: [138, 21, 21], halign: 'center' },
+      columnStyles: {
+        0: { halign: 'center', fontStyle: 'bold' },
+        1: { halign: 'center' },
+        2: { halign: 'center' },
+        3: { halign: 'center', fontStyle: 'bold' }
+      }
+    });
+
+    const nextY = (doc as any).lastAutoTable.finalY + 12;
+
+    if (viewMode === 'sintetico') {
+      doc.text('Consolidado Sintético por Médico e Setor', 14, nextY);
+
+      const tableBody = plantaosSinteticos.map(s => [
+        s.MEDICO,
+        s.ESPECIALIDADE,
+        s.TIPO_PLANTAO,
+        s.QTD_PLANTOES.toString(),
+        formatCurrency(s.VALOR_MEDIO),
+        formatCurrency(s.VALOR_TOTAL)
+      ]);
+
+      autoTable(doc, {
+        startY: nextY + 4,
+        head: [['Médico / Plantonista', 'Especialidade', 'Tipo Plantão', 'Qtd. Plantões', 'Valor Médio (R$)', 'Valor Total (R$)']],
+        body: tableBody,
+        theme: 'striped',
+        headStyles: { fillColor: [138, 21, 21] },
+        columnStyles: {
+          0: { halign: 'left', fontStyle: 'bold' },
+          1: { halign: 'left' },
+          2: { halign: 'left' },
+          3: { halign: 'center', fontStyle: 'bold' },
+          4: { halign: 'right' },
+          5: { halign: 'right', fontStyle: 'bold' }
+        }
+      });
+
+      doc.save(`HSC_Relatorio_Sintetico_Plantao_Medico_${new Date().toISOString().split('T')[0]}.pdf`);
+    } else {
+      doc.text('Detalhamento de Escalas e Honorários', 14, nextY);
+
+      const tableBody = plantaosFiltrados.map(p => [
+        formatDate(p.DT_CHAMADO),
+        p.MEDICO,
+        p.ESPECIALIDADE,
+        p.TIPO_PLANTAO,
+        formatCurrency(p.VALOR)
+      ]);
+
+      autoTable(doc, {
+        startY: nextY + 4,
+        head: [['Data/Hora Chamado', 'Médico / Plantonista', 'Especialidade', 'Tipo Plantão', 'Valor (R$)']],
+        body: tableBody,
+        theme: 'striped',
+        headStyles: { fillColor: [138, 21, 21] },
+        columnStyles: {
+          0: { halign: 'center' },
+          1: { halign: 'left' },
+          2: { halign: 'left' },
+          3: { halign: 'left' },
+          4: { halign: 'right', fontStyle: 'bold' }
+        }
+      });
+
+      doc.save(`HSC_Relatorio_Plantao_Medico_${new Date().toISOString().split('T')[0]}.pdf`);
+    }
+  };
+
+  // Exportar CSV
+  const handleExportCSV = () => {
+    if (viewMode === 'sintetico') {
+      const headers = ['Medico', 'Especialidade', 'Tipo_Plantao', 'Qtd_Plantoes', 'Valor_Medio_Reais', 'Valor_Total_Reais'];
+      const rows = plantaosSinteticos.map(s => [
+        s.MEDICO,
+        s.ESPECIALIDADE,
+        s.TIPO_PLANTAO,
+        s.QTD_PLANTOES,
+        s.VALOR_MEDIO,
+        s.VALOR_TOTAL
+      ]);
+
+      const csvContent = 
+        'data:text/csv;charset=utf-8,\uFEFF' + 
+        [headers.join(';'), ...rows.map(e => e.map(val => `"${String(val).replace(/"/g, '""')}"`).join(';'))].join('\n');
+
+      const encodedUri = encodeURI(csvContent);
+      const link = document.createElement('a');
+      link.setAttribute('href', encodedUri);
+      link.setAttribute('download', `HSC_Relatorio_Sintetico_Plantao_Medico_${new Date().toISOString().split('T')[0]}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } else {
+      const headers = ['Data_Chamado', 'Medico', 'Especialidade', 'Tipo_Plantao', 'Valor_Reais'];
+      const rows = plantaosFiltrados.map(p => [
+        p.DT_CHAMADO,
+        p.MEDICO,
+        p.ESPECIALIDADE,
+        p.TIPO_PLANTAO,
+        p.VALOR
+      ]);
+
+      const csvContent = 
+        'data:text/csv;charset=utf-8,\uFEFF' + 
+        [headers.join(';'), ...rows.map(e => e.map(val => `"${String(val).replace(/"/g, '""')}"`).join(';'))].join('\n');
+
+      const encodedUri = encodeURI(csvContent);
+      const link = document.createElement('a');
+      link.setAttribute('href', encodedUri);
+      link.setAttribute('download', `HSC_Plantao_Medico_${new Date().toISOString().split('T')[0]}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+  };
+
+  return (
+    <div className="space-y-6 w-full px-[40px] max-w-none pb-12 animate-in fade-in duration-500 bg-background text-foreground font-sans">
+      
+      {/* ── HEADER (EXATAMENTE NO MESMO PADRÃO DA TESOURARIA) ── */}
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-border/60 pb-6">
+        <div>
+          <div className="flex items-center gap-3">
+            <div className="h-10 w-10 rounded-lg bg-[#8a1515]/10 flex items-center justify-center border border-[#8a1515]/20 text-[#8a1515] dark:text-[#f43f5e]">
+              <Stethoscope className="h-6 w-6" />
+            </div>
+            <div>
+              <h1 className="text-2xl font-bold tracking-tight text-foreground font-sans">Plantão Médico</h1>
+              <p className="text-sm text-muted-foreground mt-0.5 font-sans">Gestão e controle financeiro de escalas, repasses e honorários médicos</p>
+            </div>
+          </div>
+        </div>
+
+        {/* Status de Sincronismo do Webhook & Botões do Topo (Mesmo padrão da Tesouraria) */}
+        <div className="flex flex-wrap items-center gap-3 w-full md:w-auto justify-end">
+          {syncTime && syncStatus === 'success' && (
+            <div className="flex items-center gap-1.5 bg-emerald-100 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 px-3 py-1.5 rounded-full text-xs font-semibold border border-emerald-200 dark:border-emerald-900/50 shadow-sm">
+              <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+              Sincronizado {syncTime}
+            </div>
+          )}
+
+          {syncStatus === 'error' && (
+            <div className="flex items-center gap-1.5 bg-red-100 dark:bg-red-950/40 text-red-700 dark:text-red-400 px-3 py-1.5 rounded-full text-xs font-semibold border border-red-200 dark:border-red-900/50 shadow-sm">
+              <div className="w-1.5 h-1.5 rounded-full bg-red-500" />
+              Conexão Webhook Falhou
+            </div>
+          )}
+
+          <button
+            onClick={() => fetchPlantaos(true, true)}
+            disabled={loading}
+            className="flex items-center justify-center rounded-md text-sm font-semibold bg-card border border-border text-foreground hover:bg-muted h-10 w-10 transition-all shadow-sm cursor-pointer"
+            title="Recarregar do n8n"
+          >
+            <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+          </button>
+
+
+        </div>
+      </div>
+
+      {/* ── FILTROS ── */}
+      <div className="bg-card dark:bg-slate-950 border border-border/80 rounded-xl p-5 shadow-sm space-y-4">
+        <div className="flex items-center justify-between border-b border-border/40 pb-3">
+          <div className="flex items-center gap-2 text-foreground font-semibold text-sm">
+            <Filter className="h-4 w-4 text-[#8a1515] dark:text-[#f43f5e]" />
+            <span className="font-sans">Filtros de Pesquisa</span>
+          </div>
+          {(searchTerm || selectedEspecialidades.length > 0 || selectedMedicos.length > 0 || selectedTipos.length > 0 || periodFrom !== getDefaultDates().from || periodTo !== getDefaultDates().to) && (
+            <button
+              onClick={() => {
+                setSearchTerm('');
+                setSelectedEspecialidades([]);
+                setSelectedMedicos([]);
+                setSelectedTipos([]);
+                const defaults = getDefaultDates();
+                setPeriodFrom(defaults.from);
+                setPeriodTo(defaults.to);
+              }}
+              className="text-xs text-[#8a1515] dark:text-[#f43f5e] hover:underline flex items-center gap-1 font-medium font-sans"
+            >
+              <X className="h-3 w-3" />
+              Limpar Filtros
+            </button>
+          )}
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-4">
+          {/* Data Início */}
+          <div className="flex flex-col gap-1.5">
+            <label className="text-xs font-semibold text-muted-foreground flex items-center gap-1 font-sans">
+              <Calendar className="h-3.5 w-3.5" />
+              Data Chamado (Início)
+            </label>
+            <input
+              type="date"
+              value={periodFrom}
+              onChange={(e) => setPeriodFrom(e.target.value)}
+              className="w-full bg-background border border-border hover:border-muted-foreground/40 focus:border-[#8a1515] focus:ring-1 focus:ring-[#8a1515] rounded-lg px-3 py-2 text-sm text-foreground outline-none transition-colors"
+            />
+          </div>
+
+          {/* Data Fim */}
+          <div className="flex flex-col gap-1.5">
+            <label className="text-xs font-semibold text-muted-foreground flex items-center gap-1 font-sans">
+              <Calendar className="h-3.5 w-3.5" />
+              Data Chamado (Fim)
+            </label>
+            <input
+              type="date"
+              value={periodTo}
+              onChange={(e) => setPeriodTo(e.target.value)}
+              className="w-full bg-background border border-border hover:border-muted-foreground/40 focus:border-[#8a1515] focus:ring-1 focus:ring-[#8a1515] rounded-lg px-3 py-2 text-sm text-foreground outline-none transition-colors"
+            />
+          </div>
+
+          {/* Filtro: Tipo de Plantão (Novo Requisitado) */}
+          <div className="flex flex-col gap-1.5" ref={tipoDropdownRef}>
+            <label className="text-xs font-semibold text-muted-foreground flex items-center gap-1 font-sans">
+              <Layers className="h-3.5 w-3.5" />
+              Tipo de Plantão
+            </label>
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setIsTiposOpen(!isTiposOpen)}
+                className="w-full flex items-center justify-between bg-background border border-border hover:border-muted-foreground/40 rounded-lg px-3 py-2 text-sm text-foreground outline-none transition-colors text-left font-sans"
+              >
+                <span className="truncate">
+                  {selectedTipos.length === 0
+                    ? 'Todos os tipos'
+                    : selectedTipos.length === 1
+                    ? selectedTipos[0]
+                    : `${selectedTipos.length} selecionados`}
+                </span>
+                <ChevronDown className="h-4 w-4 text-muted-foreground/60 flex-shrink-0 ml-1" />
+              </button>
+
+              <AnimatePresence>
+                {isTiposOpen && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -4 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -4 }}
+                    transition={{ duration: 0.15 }}
+                    className="absolute right-0 sm:left-0 z-50 mt-1 w-[280px] bg-card dark:bg-slate-900 border border-border rounded-lg shadow-xl p-3 space-y-2 focus:outline-none"
+                  >
+                    <div className="relative">
+                      <input
+                        type="text"
+                        placeholder="Buscar tipo de plantão..."
+                        value={tipoSearch}
+                        onChange={(e) => setTipoSearch(e.target.value)}
+                        className="w-full bg-background border border-border rounded-md pl-8 pr-3 py-1.5 text-xs text-foreground outline-none focus:border-[#8a1515]"
+                      />
+                      <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground/60" />
+                    </div>
+
+                    <div className="flex justify-between text-[10px] border-b border-border/40 pb-1.5 px-1">
+                      <button
+                        type="button"
+                        onClick={() => setSelectedTipos(tiposDisponiveis)}
+                        className="text-[#8a1515] dark:text-[#f43f5e] hover:underline font-semibold font-sans"
+                      >
+                        Selecionar Todos
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedTipos([])}
+                        className="text-muted-foreground hover:underline font-semibold font-sans"
+                      >
+                        Limpar
+                      </button>
+                    </div>
+
+                    <div className="max-h-[180px] overflow-y-auto space-y-0.5 pr-1 custom-scrollbar">
+                      {tiposFiltrados.length === 0 ? (
+                        <div className="text-center py-4 text-xs text-muted-foreground font-sans">
+                          Nenhum tipo encontrado
+                        </div>
+                      ) : (
+                        tiposFiltrados.map((tipo) => {
+                          const isSelected = selectedTipos.includes(tipo);
+                          return (
+                            <button
+                              key={tipo}
+                              type="button"
+                              onClick={() => {
+                                if (isSelected) {
+                                  setSelectedTipos(selectedTipos.filter((item) => item !== tipo));
+                                } else {
+                                  setSelectedTipos([...selectedTipos, tipo]);
+                                }
+                              }}
+                              className="w-full flex items-center gap-2 rounded px-2 py-1.5 text-xs text-left hover:bg-muted dark:hover:bg-slate-800 transition-colors text-foreground font-sans"
+                            >
+                              <div className={`h-3.5 w-3.5 rounded border border-border flex items-center justify-center flex-shrink-0 transition-colors ${
+                                isSelected ? 'bg-[#8a1515] border-[#8a1515] text-white' : 'bg-background'
+                              }`}>
+                                {isSelected && <Check className="h-2.5 w-2.5 stroke-[3]" />}
+                              </div>
+                              <span className="truncate" title={tipo}>{tipo}</span>
+                            </button>
+                          );
+                        })
+                      )}
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+          </div>
+
+          {/* Especialidades Dropdown */}
+          <div className="flex flex-col gap-1.5" ref={espDropdownRef}>
+            <label className="text-xs font-semibold text-muted-foreground flex items-center gap-1 font-sans">
+              <Award className="h-3.5 w-3.5" />
+              Especialidades
+            </label>
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setIsEspecialidadesOpen(!isEspecialidadesOpen)}
+                className="w-full flex items-center justify-between bg-background border border-border hover:border-muted-foreground/40 rounded-lg px-3 py-2 text-sm text-foreground outline-none transition-colors text-left font-sans"
+              >
+                <span className="truncate">
+                  {selectedEspecialidades.length === 0
+                    ? 'Todas as especialidades'
+                    : selectedEspecialidades.length === 1
+                    ? selectedEspecialidades[0]
+                    : `${selectedEspecialidades.length} selecionadas`}
+                </span>
+                <ChevronDown className="h-4 w-4 text-muted-foreground/60 flex-shrink-0 ml-1" />
+              </button>
+
+              <AnimatePresence>
+                {isEspecialidadesOpen && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -4 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -4 }}
+                    transition={{ duration: 0.15 }}
+                    className="absolute right-0 sm:left-0 z-50 mt-1 w-[280px] bg-card dark:bg-slate-900 border border-border rounded-lg shadow-xl p-3 space-y-2 focus:outline-none"
+                  >
+                    <div className="relative">
+                      <input
+                        type="text"
+                        placeholder="Buscar especialidade..."
+                        value={especialidadeSearch}
+                        onChange={(e) => setEspecialidadeSearch(e.target.value)}
+                        className="w-full bg-background border border-border rounded-md pl-8 pr-3 py-1.5 text-xs text-foreground outline-none focus:border-[#8a1515]"
+                      />
+                      <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground/60" />
+                    </div>
+
+                    <div className="flex justify-between text-[10px] border-b border-border/40 pb-1.5 px-1">
+                      <button
+                        type="button"
+                        onClick={() => setSelectedEspecialidades(especialidadesDisponiveis)}
+                        className="text-[#8a1515] dark:text-[#f43f5e] hover:underline font-semibold font-sans"
+                      >
+                        Selecionar Todas
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedEspecialidades([])}
+                        className="text-muted-foreground hover:underline font-semibold font-sans"
+                      >
+                        Limpar
+                      </button>
+                    </div>
+
+                    <div className="max-h-[180px] overflow-y-auto space-y-0.5 pr-1 custom-scrollbar">
+                      {especialidadesFiltradas.length === 0 ? (
+                        <div className="text-center py-4 text-xs text-muted-foreground font-sans">
+                          Nenhuma especialidade encontrada
+                        </div>
+                      ) : (
+                        especialidadesFiltradas.map((esp) => {
+                          const isSelected = selectedEspecialidades.includes(esp);
+                          return (
+                            <button
+                              key={esp}
+                              type="button"
+                              onClick={() => {
+                                if (isSelected) {
+                                  setSelectedEspecialidades(selectedEspecialidades.filter((item) => item !== esp));
+                                } else {
+                                  setSelectedEspecialidades([...selectedEspecialidades, esp]);
+                                }
+                              }}
+                              className="w-full flex items-center gap-2 rounded px-2 py-1.5 text-xs text-left hover:bg-muted dark:hover:bg-slate-800 transition-colors text-foreground font-sans"
+                            >
+                              <div className={`h-3.5 w-3.5 rounded border border-border flex items-center justify-center flex-shrink-0 transition-colors ${
+                                isSelected ? 'bg-[#8a1515] border-[#8a1515] text-white' : 'bg-background'
+                              }`}>
+                                {isSelected && <Check className="h-2.5 w-2.5 stroke-[3]" />}
+                              </div>
+                              <span className="truncate" title={esp}>{esp}</span>
+                            </button>
+                          );
+                        })
+                      )}
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+          </div>
+
+          {/* Médicos Dropdown */}
+          <div className="flex flex-col gap-1.5" ref={medDropdownRef}>
+            <label className="text-xs font-semibold text-muted-foreground flex items-center gap-1 font-sans">
+              <UserCheck className="h-3.5 w-3.5" />
+              Médicos / Plantonistas
+            </label>
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setIsMedicosOpen(!isMedicosOpen)}
+                className="w-full flex items-center justify-between bg-background border border-border hover:border-muted-foreground/40 rounded-lg px-3 py-2 text-sm text-foreground outline-none transition-colors text-left font-sans"
+              >
+                <span className="truncate">
+                  {selectedMedicos.length === 0
+                    ? 'Todos os médicos'
+                    : selectedMedicos.length === 1
+                    ? selectedMedicos[0]
+                    : `${selectedMedicos.length} selecionados`}
+                </span>
+                <ChevronDown className="h-4 w-4 text-muted-foreground/60 flex-shrink-0 ml-1" />
+              </button>
+
+              <AnimatePresence>
+                {isMedicosOpen && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -4 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -4 }}
+                    transition={{ duration: 0.15 }}
+                    className="absolute right-0 sm:left-0 z-50 mt-1 w-[280px] bg-card dark:bg-slate-900 border border-border rounded-lg shadow-xl p-3 space-y-2 focus:outline-none"
+                  >
+                    <div className="relative">
+                      <input
+                        type="text"
+                        placeholder="Buscar médico..."
+                        value={medicoSearch}
+                        onChange={(e) => setMedicoSearch(e.target.value)}
+                        className="w-full bg-background border border-border rounded-md pl-8 pr-3 py-1.5 text-xs text-foreground outline-none focus:border-[#8a1515]"
+                      />
+                      <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground/60" />
+                    </div>
+
+                    <div className="flex justify-between text-[10px] border-b border-border/40 pb-1.5 px-1">
+                      <button
+                        type="button"
+                        onClick={() => setSelectedMedicos(medicosDisponiveis)}
+                        className="text-[#8a1515] dark:text-[#f43f5e] hover:underline font-semibold font-sans"
+                      >
+                        Selecionar Todos
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedMedicos([])}
+                        className="text-muted-foreground hover:underline font-semibold font-sans"
+                      >
+                        Limpar
+                      </button>
+                    </div>
+
+                    <div className="max-h-[180px] overflow-y-auto space-y-0.5 pr-1 custom-scrollbar">
+                      {medicosFiltrados.length === 0 ? (
+                        <div className="text-center py-4 text-xs text-muted-foreground font-sans">
+                          Nenhum médico encontrado
+                        </div>
+                      ) : (
+                        medicosFiltrados.map((med) => {
+                          const isSelected = selectedMedicos.includes(med);
+                          return (
+                            <button
+                              key={med}
+                              type="button"
+                              onClick={() => {
+                                if (isSelected) {
+                                  setSelectedMedicos(selectedMedicos.filter((item) => item !== med));
+                                } else {
+                                  setSelectedMedicos([...selectedMedicos, med]);
+                                }
+                              }}
+                              className="w-full flex items-center gap-2 rounded px-2 py-1.5 text-xs text-left hover:bg-muted dark:hover:bg-slate-800 transition-colors text-foreground font-sans"
+                            >
+                              <div className={`h-3.5 w-3.5 rounded border border-border flex items-center justify-center flex-shrink-0 transition-colors ${
+                                isSelected ? 'bg-[#8a1515] border-[#8a1515] text-white' : 'bg-background'
+                              }`}>
+                                {isSelected && <Check className="h-2.5 w-2.5 stroke-[3]" />}
+                              </div>
+                              <span className="truncate" title={med}>{med}</span>
+                            </button>
+                          );
+                        })
+                      )}
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+          </div>
+        </div>
+
+
+      </div>
+
+      {/* ── KPI CARDS ── */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* Total Valor */}
+        <div className="bg-card border border-border rounded-xl p-5 shadow-sm hover:shadow-md transition-all flex flex-col justify-between">
+          <div className="flex justify-between items-start">
+            <div className="space-y-1">
+              <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider font-sans">Valor Total Plantões</span>
+              <h3 className="text-2xl font-bold tracking-tight text-foreground font-sans">{formatCurrency(kpis.totalValor)}</h3>
+            </div>
+            <div className="p-2.5 bg-[#8a1515]/10 text-[#8a1515] dark:text-[#f43f5e] rounded-lg border border-[#8a1515]/20">
+              <DollarSign className="h-5 w-5" />
+            </div>
+          </div>
+          <p className="text-[10px] text-muted-foreground mt-3 font-sans">
+            Soma dos honorários no período filtrado
+          </p>
+        </div>
+
+        {/* Total Plantões */}
+        <div className="bg-card border border-border rounded-xl p-5 shadow-sm hover:shadow-md transition-all flex flex-col justify-between">
+          <div className="flex justify-between items-start">
+            <div className="space-y-1">
+              <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider font-sans">Total de Escalas</span>
+              <h3 className="text-2xl font-bold tracking-tight text-emerald-600 dark:text-emerald-400 font-sans">{kpis.count}</h3>
+            </div>
+            <div className="p-2.5 bg-emerald-500/10 text-emerald-500 rounded-lg border border-emerald-500/20">
+              <Activity className="h-5 w-5" />
+            </div>
+          </div>
+          <p className="text-[10px] text-muted-foreground mt-3 font-sans">
+            Número total de chamados/escalas
+          </p>
+        </div>
+
+        {/* Valor Médio */}
+        <div className="bg-card border border-border rounded-xl p-5 shadow-sm hover:shadow-md transition-all flex flex-col justify-between">
+          <div className="flex justify-between items-start">
+            <div className="space-y-1">
+              <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider font-sans">Média por Plantão</span>
+              <h3 className="text-2xl font-bold tracking-tight text-amber-600 dark:text-amber-400 font-sans">{formatCurrency(kpis.mediaPorPlantao)}</h3>
+            </div>
+            <div className="p-2.5 bg-amber-500/10 text-amber-500 rounded-lg border border-amber-500/20">
+              <TrendingUp className="h-5 w-5" />
+            </div>
+          </div>
+          <p className="text-[10px] text-muted-foreground mt-3 font-sans">
+            Valor médio por chamado efetuado
+          </p>
+        </div>
+
+        {/* Médicos Ativos */}
+        <div className="bg-card border border-border rounded-xl p-5 shadow-sm hover:shadow-md transition-all flex flex-col justify-between">
+          <div className="flex justify-between items-start">
+            <div className="space-y-1">
+              <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider font-sans">Médicos Ativos</span>
+              <h3 className="text-2xl font-bold tracking-tight text-foreground font-sans">{kpis.medicosAtivos}</h3>
+            </div>
+            <div className="p-2.5 bg-indigo-500/10 text-indigo-500 rounded-lg border border-indigo-500/20">
+              <UserCheck className="h-5 w-5" />
+            </div>
+          </div>
+          <p className="text-[10px] text-muted-foreground mt-3 font-sans">
+            Plantonistas distintos no período
+          </p>
+        </div>
+      </div>
+
+      {/* ── GRÁFICOS ── */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Gráfico Mensal */}
+        <div className="lg:col-span-2 bg-card border border-border rounded-xl p-5 shadow-sm space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <BarChart3 className="h-5 w-5 text-[#8a1515] dark:text-[#f43f5e]" />
+              <h2 className="text-base font-bold text-foreground font-sans">Evolução Mensal de Plantões</h2>
+            </div>
+            <span className="text-xs text-muted-foreground font-sans">Valores acumulados por mês</span>
+          </div>
+
+          <div className="h-[280px] w-full pt-4">
+            {monthlyChartData.length === 0 ? (
+              <div className="h-full flex items-center justify-center text-sm text-muted-foreground font-sans">
+                Nenhum dado no período selecionado
+              </div>
+            ) : (
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={monthlyChartData} margin={{ top: 10, right: 10, left: 10, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" opacity={0.15} vertical={false} />
+                  <XAxis dataKey="name" tick={{ fontSize: 11, fill: '#888888' }} axisLine={false} tickLine={false} />
+                  <YAxis 
+                    tickFormatter={(v) => formatCompactCurrency(v)} 
+                    tick={{ fontSize: 11, fill: '#888888' }} 
+                    axisLine={false} 
+                    tickLine={false} 
+                  />
+                  <Tooltip 
+                    formatter={(value: number) => [formatCurrency(value), 'Valor Total']}
+                    contentStyle={{ backgroundColor: 'rgba(15, 23, 42, 0.95)', borderColor: '#334155', borderRadius: '8px', color: '#f8fafc', fontSize: '12px' }}
+                  />
+                  <Bar dataKey="value" fill="#8a1515" radius={[6, 6, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            )}
+          </div>
+        </div>
+
+        {/* Gráfico de Especialidades */}
+        <div className="bg-card border border-border rounded-xl p-5 shadow-sm space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <PieChart className="h-5 w-5 text-[#8a1515] dark:text-[#f43f5e]" />
+              <h2 className="text-base font-bold text-foreground font-sans">Top Especialidades</h2>
+            </div>
+          </div>
+
+          <div className="h-[280px] w-full pt-2 flex flex-col justify-between">
+            {especialidadeChartData.length === 0 ? (
+              <div className="h-full flex items-center justify-center text-sm text-muted-foreground font-sans">
+                Nenhuma especialidade encontrada
+              </div>
+            ) : (
+              <>
+                <div className="h-[180px] w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <ReChartsPie>
+                      <Pie
+                        data={especialidadeChartData}
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={45}
+                        outerRadius={75}
+                        paddingAngle={4}
+                        dataKey="value"
+                      >
+                        {especialidadeChartData.map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                        ))}
+                      </Pie>
+                      <Tooltip 
+                        formatter={(value: number) => [formatCurrency(value), 'Total']}
+                        contentStyle={{ backgroundColor: 'rgba(15, 23, 42, 0.95)', borderColor: '#334155', borderRadius: '8px', color: '#f8fafc', fontSize: '12px' }}
+                      />
+                    </ReChartsPie>
+                  </ResponsiveContainer>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 text-[11px] pt-2 border-t border-border/40">
+                  {especialidadeChartData.slice(0, 4).map((entry, idx) => (
+                    <div key={entry.name} className="flex items-center gap-1.5 truncate">
+                      <span className="h-2.5 w-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: COLORS[idx % COLORS.length] }} />
+                      <span className="truncate text-muted-foreground font-sans" title={entry.name}>{entry.name}</span>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* ── TABELA DE DADOS ── */}
+      <div className="bg-card border border-border rounded-xl shadow-sm overflow-hidden">
+        <div className="p-4 border-b border-border/60 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-muted/20">
+          <div>
+            <div className="flex items-center gap-2">
+              <h3 className="text-base font-bold text-foreground font-sans">
+                {viewMode === 'sintetico' ? 'Relatório Sintético de Plantões' : 'Escalas e Chamados Médicos'}
+              </h3>
+              {viewMode === 'sintetico' ? (
+                <span className="text-[11px] font-semibold bg-[#8a1515]/10 text-[#8a1515] dark:text-[#f43f5e] px-2.5 py-0.5 rounded-full border border-[#8a1515]/20 font-sans flex items-center gap-1">
+                  <Layers className="h-3 w-3" />
+                  Sintético (Agrupado)
+                </span>
+              ) : (
+                <span className="text-[11px] font-semibold bg-blue-500/10 text-blue-600 dark:text-blue-400 px-2.5 py-0.5 rounded-full border border-blue-500/20 font-sans flex items-center gap-1">
+                  <FileText className="h-3 w-3" />
+                  Analítico (Detalhado)
+                </span>
+              )}
+            </div>
+            <p className="text-xs text-muted-foreground font-sans mt-0.5">
+              {viewMode === 'sintetico'
+                ? `Exibindo ${paginatedSinteticos.length} de ${plantaosSinteticos.length} grupos consolidados (somando ${plantaosFiltrados.length} lançamentos)`
+                : `Exibindo ${paginatedPlantaos.length} de ${plantaosFiltrados.length} lançamentos encontrados`}
+            </p>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-3 w-full md:w-auto justify-between md:justify-end">
+            {/* Seletor de Visão (Segmented Control) */}
+            <div className="flex items-center bg-background border border-border rounded-lg p-1 shadow-sm">
+              <button
+                type="button"
+                onClick={() => setViewMode('analitico')}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs transition-all cursor-pointer ${
+                  viewMode === 'analitico'
+                    ? 'bg-[#8a1515] text-white font-bold shadow-sm'
+                    : 'text-muted-foreground hover:text-foreground font-medium'
+                }`}
+              >
+                <FileText className="h-3.5 w-3.5" />
+                <span>Visão Analítica</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMode('sintetico')}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs transition-all cursor-pointer ${
+                  viewMode === 'sintetico'
+                    ? 'bg-[#8a1515] text-white font-bold shadow-sm'
+                    : 'text-muted-foreground hover:text-foreground font-medium'
+                }`}
+              >
+                <Layers className="h-3.5 w-3.5" />
+                <span>Relatório Sintético</span>
+              </button>
+            </div>
+
+            {/* Exportações */}
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleExportCSV}
+                disabled={plantaosFiltrados.length === 0}
+                className="flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-medium text-xs px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50 font-sans cursor-pointer"
+                title={`Exportar CSV (${viewMode === 'sintetico' ? 'Sintético' : 'Analítico'})`}
+              >
+                <FileSpreadsheet className="h-3.5 w-3.5" />
+                <span>CSV</span>
+              </button>
+
+              <button
+                onClick={handleExportPDF}
+                disabled={plantaosFiltrados.length === 0}
+                className="flex items-center gap-1.5 bg-[#8a1515] hover:bg-[#6b1010] text-white font-medium text-xs px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50 font-sans cursor-pointer"
+                title={`Exportar PDF (${viewMode === 'sintetico' ? 'Sintético' : 'Analítico'})`}
+              >
+                <FileText className="h-3.5 w-3.5" />
+                <span>PDF</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div className="overflow-x-auto">
+          {viewMode === 'sintetico' ? (
+            /* TABELA SINTÉTICA (AGRUPADA) */
+            <table className="w-full text-left text-sm font-sans border-collapse">
+              <thead>
+                <tr className="border-b border-border bg-muted/40 text-muted-foreground text-xs uppercase font-semibold">
+                  <th className="py-3 px-4 cursor-pointer hover:text-foreground" onClick={() => handleSortSintetico('MEDICO')}>
+                    Médico / Plantonista
+                  </th>
+                  <th className="py-3 px-4 cursor-pointer hover:text-foreground" onClick={() => handleSortSintetico('ESPECIALIDADE')}>
+                    Especialidade
+                  </th>
+                  <th className="py-3 px-4 cursor-pointer hover:text-foreground" onClick={() => handleSortSintetico('TIPO_PLANTAO')}>
+                    TIPO PLANTÃO
+                  </th>
+                  <th className="py-3 px-4 text-center cursor-pointer hover:text-foreground" onClick={() => handleSortSintetico('QTD_PLANTOES')}>
+                    Qtd. Plantões
+                  </th>
+                  <th className="py-3 px-4 text-right cursor-pointer hover:text-foreground" onClick={() => handleSortSintetico('VALOR_MEDIO')}>
+                    Valor Médio (R$)
+                  </th>
+                  <th className="py-3 px-4 text-right cursor-pointer hover:text-foreground" onClick={() => handleSortSintetico('VALOR_TOTAL')}>
+                    Valor Total (R$)
+                  </th>
+                  <th className="py-3 px-4 text-center">Ações</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border/60">
+                {loading ? (
+                  <tr>
+                    <td colSpan={7} className="py-12 text-center text-muted-foreground">
+                      <div className="flex flex-col items-center gap-2">
+                        <RefreshCw className="h-6 w-6 animate-spin text-[#8a1515]" />
+                        <span>Carregando dados de plantão médico...</span>
+                      </div>
+                    </td>
+                  </tr>
+                ) : paginatedSinteticos.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="py-12 text-center text-muted-foreground">
+                      Nenhum registro agrupado encontrado com os filtros aplicados.
+                    </td>
+                  </tr>
+                ) : (
+                  paginatedSinteticos.map((item) => (
+                    <tr key={item.id} className="hover:bg-muted/30 transition-colors">
+                      <td className="py-3 px-4 font-semibold text-foreground max-w-[240px] truncate" title={item.MEDICO}>
+                        {item.MEDICO}
+                      </td>
+                      <td className="py-3 px-4 text-muted-foreground text-xs font-medium whitespace-nowrap">
+                        <span className="bg-[#8a1515]/10 text-[#8a1515] dark:text-[#f43f5e] px-2 py-0.5 rounded-full border border-[#8a1515]/20">
+                          {item.ESPECIALIDADE}
+                        </span>
+                      </td>
+                      <td className="py-3 px-4 text-muted-foreground text-xs whitespace-nowrap">
+                        {item.TIPO_PLANTAO || '-'}
+                      </td>
+                      <td className="py-3 px-4 text-center font-bold text-foreground whitespace-nowrap">
+                        <span className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 px-2.5 py-1 rounded-md border border-emerald-500/20 font-mono">
+                          {item.QTD_PLANTOES} {item.QTD_PLANTOES === 1 ? 'plantão' : 'plantões'}
+                        </span>
+                      </td>
+                      <td className="py-3 px-4 text-right text-muted-foreground text-xs font-medium whitespace-nowrap">
+                        {formatCurrency(item.VALOR_MEDIO)}
+                      </td>
+                      <td className="py-3 px-4 text-right font-bold text-foreground text-base whitespace-nowrap">
+                        {formatCurrency(item.VALOR_TOTAL)}
+                      </td>
+                      <td className="py-3 px-4 text-center">
+                        <button
+                          onClick={() => setSelectedSinteticoItem(item)}
+                          className="p-1.5 text-muted-foreground hover:text-[#8a1515] hover:bg-[#8a1515]/10 rounded-md transition-colors cursor-pointer"
+                          title="Ver Chamados Agrupados"
+                        >
+                          <Info className="h-4 w-4" />
+                        </button>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          ) : (
+            /* TABELA ANALÍTICA (DETALHADA) */
+            <table className="w-full text-left text-sm font-sans border-collapse">
+              <thead>
+                <tr className="border-b border-border bg-muted/40 text-muted-foreground text-xs uppercase font-semibold">
+                  <th className="py-3 px-4 cursor-pointer hover:text-foreground" onClick={() => handleSort('DT_CHAMADO')}>
+                    Data/Hora Chamado
+                  </th>
+                  <th className="py-3 px-4 cursor-pointer hover:text-foreground" onClick={() => handleSort('MEDICO')}>
+                    Médico / Plantonista
+                  </th>
+                  <th className="py-3 px-4 cursor-pointer hover:text-foreground" onClick={() => handleSort('ESPECIALIDADE')}>
+                    Especialidade
+                  </th>
+                  <th className="py-3 px-4 cursor-pointer hover:text-foreground" onClick={() => handleSort('TIPO_PLANTAO')}>
+                    TIPO PLANTÃO
+                  </th>
+                  <th className="py-3 px-4 text-right cursor-pointer hover:text-foreground" onClick={() => handleSort('VALOR')}>
+                    Valor (R$)
+                  </th>
+                  <th className="py-3 px-4 text-center">Ações</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border/60">
+                {loading ? (
+                  <tr>
+                    <td colSpan={6} className="py-12 text-center text-muted-foreground">
+                      <div className="flex flex-col items-center gap-2">
+                        <RefreshCw className="h-6 w-6 animate-spin text-[#8a1515]" />
+                        <span>Carregando dados de plantão médico...</span>
+                      </div>
+                    </td>
+                  </tr>
+                ) : paginatedPlantaos.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="py-12 text-center text-muted-foreground">
+                      Nenhum plantão encontrado com os filtros aplicados.
+                    </td>
+                  </tr>
+                ) : (
+                  paginatedPlantaos.map((item) => (
+                    <tr key={item.id} className="hover:bg-muted/30 transition-colors">
+                      <td className="py-3 px-4 font-mono text-xs text-foreground whitespace-nowrap">
+                        {formatDate(item.DT_CHAMADO)}
+                      </td>
+                      <td className="py-3 px-4 font-semibold text-foreground max-w-[260px] truncate" title={item.MEDICO}>
+                        {item.MEDICO}
+                      </td>
+                      <td className="py-3 px-4 text-muted-foreground text-xs font-medium whitespace-nowrap">
+                        <span className="bg-[#8a1515]/10 text-[#8a1515] dark:text-[#f43f5e] px-2 py-0.5 rounded-full border border-[#8a1515]/20">
+                          {item.ESPECIALIDADE}
+                        </span>
+                      </td>
+                      <td className="py-3 px-4 text-muted-foreground text-xs whitespace-nowrap">
+                        {item.TIPO_PLANTAO || '-'}
+                      </td>
+                      <td className="py-3 px-4 text-right font-bold text-foreground whitespace-nowrap">
+                        {formatCurrency(item.VALOR)}
+                      </td>
+                      <td className="py-3 px-4 text-center">
+                        <button
+                          onClick={() => setSelectedItem(item)}
+                          className="p-1.5 text-muted-foreground hover:text-[#8a1515] hover:bg-[#8a1515]/10 rounded-md transition-colors cursor-pointer"
+                          title="Ver Detalhes"
+                        >
+                          <Info className="h-4 w-4" />
+                        </button>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          )}
+        </div>
+
+        {totalPages > 1 && (
+          <div className="p-4 border-t border-border flex flex-col sm:flex-row justify-between items-center gap-3 bg-muted/20">
+            <span className="text-xs text-muted-foreground font-sans">
+              Página {currentPage} de {totalPages}
+            </span>
+
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                disabled={currentPage === 1}
+                className="p-1.5 rounded-lg border border-border bg-background hover:bg-muted disabled:opacity-40 transition-colors cursor-pointer"
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </button>
+              <span className="px-3 text-xs font-semibold text-foreground font-mono">
+                {currentPage}
+              </span>
+              <button
+                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                disabled={currentPage === totalPages}
+                className="p-1.5 rounded-lg border border-border bg-background hover:bg-muted disabled:opacity-40 transition-colors cursor-pointer"
+              >
+                <ChevronRight className="h-4 w-4" />
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* ── MODAL DETALHES SINTÉTICOS ── */}
+      <AnimatePresence>
+        {selectedSinteticoItem && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-card dark:bg-slate-900 border border-border rounded-xl shadow-2xl max-w-2xl w-full p-6 space-y-5"
+            >
+              <div className="flex justify-between items-center border-b border-border pb-3">
+                <div className="flex items-center gap-2">
+                  <Layers className="h-5 w-5 text-[#8a1515] dark:text-[#f43f5e]" />
+                  <div>
+                    <h3 className="text-lg font-bold text-foreground font-sans">
+                      Resumo Sintético do Médico
+                    </h3>
+                    <p className="text-xs text-muted-foreground font-sans">
+                      Detalhamento dos plantões acumulados para este médico e setor
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setSelectedSinteticoItem(null)}
+                  className="p-1 rounded-lg hover:bg-muted text-muted-foreground transition-colors cursor-pointer"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+
+              {/* Informações Principais */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-muted/30 p-3.5 rounded-lg border border-border/40 font-sans text-xs">
+                <div>
+                  <span className="text-muted-foreground block font-medium">Médico / Plantonista</span>
+                  <span className="font-bold text-foreground text-sm">{selectedSinteticoItem.MEDICO}</span>
+                </div>
+                <div>
+                  <span className="text-muted-foreground block font-medium">Especialidade</span>
+                  <span className="font-semibold text-foreground">{selectedSinteticoItem.ESPECIALIDADE}</span>
+                </div>
+                <div>
+                  <span className="text-muted-foreground block font-medium">Tipo Plantão</span>
+                  <span className="font-semibold text-foreground">{selectedSinteticoItem.TIPO_PLANTAO}</span>
+                </div>
+              </div>
+
+              {/* Totais Agregados */}
+              <div className="grid grid-cols-3 gap-3">
+                <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-lg text-center font-sans">
+                  <span className="text-[10px] text-muted-foreground font-medium uppercase block">Total Plantões</span>
+                  <span className="text-lg font-bold text-emerald-600 dark:text-emerald-400">
+                    {selectedSinteticoItem.QTD_PLANTOES}
+                  </span>
+                </div>
+                <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg text-center font-sans">
+                  <span className="text-[10px] text-muted-foreground font-medium uppercase block">Valor Médio</span>
+                  <span className="text-lg font-bold text-amber-600 dark:text-amber-400">
+                    {formatCurrency(selectedSinteticoItem.VALOR_MEDIO)}
+                  </span>
+                </div>
+                <div className="p-3 bg-[#8a1515]/10 border border-[#8a1515]/20 rounded-lg text-center font-sans">
+                  <span className="text-[10px] text-muted-foreground font-medium uppercase block">Valor Total Sumarizado</span>
+                  <span className="text-lg font-bold text-[#8a1515] dark:text-[#f43f5e]">
+                    {formatCurrency(selectedSinteticoItem.VALOR_TOTAL)}
+                  </span>
+                </div>
+              </div>
+
+              {/* Lista dos Lançamentos Integrantes */}
+              <div className="space-y-2">
+                <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground font-sans">
+                  Lançamentos Individuais Integrantes ({selectedSinteticoItem.ITEMS.length})
+                </h4>
+                <div className="max-h-[220px] overflow-y-auto border border-border rounded-lg divide-y divide-border/60 custom-scrollbar">
+                  {selectedSinteticoItem.ITEMS.map((item, idx) => (
+                    <div key={item.id || idx} className="flex justify-between items-center px-4 py-2.5 text-xs hover:bg-muted/30 font-sans">
+                      <div className="flex items-center gap-3">
+                        <span className="font-mono text-muted-foreground">{formatDate(item.DT_CHAMADO)}</span>
+                        <span className="text-foreground font-medium">{item.TIPO_PLANTAO}</span>
+                      </div>
+                      <span className="font-bold text-foreground">{formatCurrency(item.VALOR)}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="flex justify-end pt-2">
+                <button
+                  onClick={() => setSelectedSinteticoItem(null)}
+                  className="bg-primary text-primary-foreground hover:bg-primary/95 px-4 py-2 rounded-lg text-xs font-semibold font-sans transition-colors cursor-pointer"
+                >
+                  Fechar
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* ── MODAL DETALHES ── */}
+      <AnimatePresence>
+        {selectedItem && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-card dark:bg-slate-900 border border-border rounded-xl shadow-2xl max-w-lg w-full p-6 space-y-5"
+            >
+              <div className="flex justify-between items-center border-b border-border pb-3">
+                <div className="flex items-center gap-2">
+                  <Stethoscope className="h-5 w-5 text-[#8a1515] dark:text-[#f43f5e]" />
+                  <h3 className="text-lg font-bold text-foreground font-sans">
+                    Detalhes da Escala Médica
+                  </h3>
+                </div>
+                <button
+                  onClick={() => setSelectedItem(null)}
+                  className="p-1 rounded-lg hover:bg-muted text-muted-foreground transition-colors cursor-pointer"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+
+              <div className="space-y-3 text-sm font-sans">
+                <div className="grid grid-cols-2 gap-3 bg-muted/30 p-3.5 rounded-lg border border-border/40">
+                  <div className="col-span-2">
+                    <span className="text-xs text-muted-foreground block">Médico / Plantonista</span>
+                    <span className="font-bold text-foreground text-base">{selectedItem.MEDICO}</span>
+                  </div>
+                  <div>
+                    <span className="text-xs text-muted-foreground block">Especialidade</span>
+                    <span className="font-medium text-foreground">{selectedItem.ESPECIALIDADE}</span>
+                  </div>
+                  <div>
+                    <span className="text-xs text-muted-foreground block">Tipo Plantão</span>
+                    <span className="font-medium text-foreground">{selectedItem.TIPO_PLANTAO || '-'}</span>
+                  </div>
+                  <div className="col-span-2">
+                    <span className="text-xs text-muted-foreground block">Data e Hora do Chamado</span>
+                    <span className="font-mono text-foreground">{formatDate(selectedItem.DT_CHAMADO)}</span>
+                  </div>
+                </div>
+
+                <div className="p-4 bg-[#8a1515]/10 rounded-lg border border-[#8a1515]/20 flex justify-between items-center">
+                  <div>
+                    <span className="text-xs text-muted-foreground block">Valor do Plantão</span>
+                    <span className="text-2xl font-bold text-[#8a1515] dark:text-[#f43f5e]">
+                      {formatCurrency(selectedItem.VALOR)}
+                    </span>
+                  </div>
+                  <span className="text-xs font-semibold px-3 py-1 rounded-full bg-[#8a1515]/20 text-[#8a1515] dark:text-[#f43f5e]">
+                    {selectedItem.ESPECIALIDADE}
+                  </span>
+                </div>
+              </div>
+
+              <div className="flex justify-end pt-2">
+                <button
+                  onClick={() => setSelectedItem(null)}
+                  className="bg-primary text-primary-foreground hover:bg-primary/95 px-4 py-2 rounded-lg text-xs font-semibold font-sans transition-colors cursor-pointer"
+                >
+                  Fechar
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+};
+
+export default PlantaoMedico;
