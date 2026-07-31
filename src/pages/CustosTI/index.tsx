@@ -89,16 +89,13 @@ const getStatusLabel = (situacao: string) => {
 };
 
 const getValorExibido = (t: TituloPagar): number => {
-  if (t.VL_BAIXA !== undefined && t.VL_BAIXA !== null && t.VL_BAIXA > 0) {
+  if (t.IE_SITUACAO === 'L' && t.VL_BAIXA !== undefined && t.VL_BAIXA !== null && t.VL_BAIXA > 0) {
     return t.VL_BAIXA;
   }
   if (t.Adiantamento !== undefined && t.Adiantamento !== null && t.Adiantamento > 0) {
     return t.Adiantamento;
   }
-  if (t.VL_BAIXA !== undefined && t.VL_BAIXA !== null) {
-    return t.VL_BAIXA;
-  }
-  return t.VL_TITULO;
+  return t.VL_TITULO || 0;
 };
 
 const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ec4899', '#8b5cf6', '#06b6d4', '#34d399', '#f87171'];
@@ -272,8 +269,8 @@ const CustosTI: React.FC = () => {
 
     // Sorting logic
     result.sort((a, b) => {
-      let valA = sortField === 'VL_TITULO' ? getValorExibido(a) : a[sortField];
-      let valB = sortField === 'VL_TITULO' ? getValorExibido(b) : b[sortField];
+      let valA = sortField === 'VL_TITULO' ? (a.VL_TITULO || 0) : sortField === 'VL_BAIXA' ? (a.VL_BAIXA || 0) : a[sortField];
+      let valB = sortField === 'VL_TITULO' ? (b.VL_TITULO || 0) : sortField === 'VL_BAIXA' ? (b.VL_BAIXA || 0) : b[sortField];
 
       if (valA === null || valA === undefined) return sortAsc ? -1 : 1;
       if (valB === null || valB === undefined) return sortAsc ? 1 : -1;
@@ -300,12 +297,14 @@ const CustosTI: React.FC = () => {
     let totalAberto = 0;
 
     titulosFiltrados.forEach(t => {
-      const valor = getValorExibido(t);
-      totalValor += valor;
+      const valorExibido = getValorExibido(t);
       if (t.IE_SITUACAO === 'L') {
-        totalLiquidado += valor;
+        totalLiquidado += valorExibido;
+        totalValor += valorExibido;
       } else {
-        totalAberto += valor;
+        const valAberto = t.VL_TITULO > 0 ? t.VL_TITULO : valorExibido;
+        totalAberto += valAberto;
+        totalValor += valAberto;
       }
     });
 
@@ -497,13 +496,14 @@ const CustosTI: React.FC = () => {
       t.ds_centro_custo,
       formatDate(t.DT_EMISSAO),
       formatDate(t.DT_LIQUIDACAO),
-      formatCurrency(getValorExibido(t)),
+      formatCurrency(t.VL_TITULO),
+      t.VL_BAIXA && t.VL_BAIXA > 0 ? formatCurrency(t.VL_BAIXA) : '-',
       getStatusLabel(t.IE_SITUACAO)
     ]);
 
     autoTable(doc, {
       startY: nextY + 4,
-      head: [['Título', 'Doc.', 'Fornecedor / Favorecido', 'Centro de Custo', 'Emissão', 'Liquidação', 'Valor', 'Status']],
+      head: [['Título', 'Doc.', 'Fornecedor / Favorecido', 'Centro de Custo', 'Emissão', 'Liquidação', 'Valor Título', 'Valor Baixa', 'Status']],
       body: tableBody,
       theme: 'striped',
       headStyles: { fillColor: [90, 16, 16] },
@@ -513,7 +513,8 @@ const CustosTI: React.FC = () => {
         4: { halign: 'center' },
         5: { halign: 'center' },
         6: { halign: 'right', fontStyle: 'bold' },
-        7: { halign: 'center' }
+        7: { halign: 'right' },
+        8: { halign: 'center' }
       }
     });
 
@@ -1028,7 +1029,10 @@ const CustosTI: React.FC = () => {
                     Liquidação {sortField === 'DT_LIQUIDACAO' && (sortAsc ? '↑' : '↓')}
                   </th>
                   <th className="p-4 text-right cursor-pointer select-none font-sans hover:text-foreground" onClick={() => handleSort('VL_TITULO')}>
-                    Valor {sortField === 'VL_TITULO' && (sortAsc ? '↑' : '↓')}
+                    Valor Título {sortField === 'VL_TITULO' && (sortAsc ? '↑' : '↓')}
+                  </th>
+                  <th className="p-4 text-right cursor-pointer select-none font-sans hover:text-foreground" onClick={() => handleSort('VL_BAIXA')}>
+                    Valor Baixa {sortField === 'VL_BAIXA' && (sortAsc ? '↑' : '↓')}
                   </th>
                   <th className="p-4 text-center cursor-pointer select-none font-sans hover:text-foreground" onClick={() => handleSort('IE_SITUACAO')}>
                     Situação {sortField === 'IE_SITUACAO' && (sortAsc ? '↑' : '↓')}
@@ -1067,24 +1071,35 @@ const CustosTI: React.FC = () => {
                     <td className="p-4 text-center font-sans text-xs text-muted-foreground">{formatDate(t.DT_LIQUIDACAO)}</td>
                     <td className="p-4 text-right font-sans font-bold text-foreground">
                       <div className="flex items-center justify-end gap-1.5 font-sans">
-                        {t.IE_SITUACAO === 'L' && t.VL_BAIXA !== undefined && t.VL_BAIXA !== null && t.VL_BAIXA > 0 && t.VL_BAIXA !== t.VL_TITULO && (
-                          <span 
-                            className="text-[9px] bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 px-1 py-0.5 rounded font-medium cursor-help"
-                            title={`Título original: ${formatCurrency(t.VL_TITULO)} (Liquidado por valor ${t.VL_BAIXA > t.VL_TITULO ? 'maior' : 'menor'})`}
-                          >
-                            Pago R$
-                          </span>
-                        )}
                         {(t.VL_BAIXA === undefined || t.VL_BAIXA === null || t.VL_BAIXA === 0) && t.Adiantamento !== undefined && t.Adiantamento !== null && t.Adiantamento > 0 && (
                           <span 
                             className="text-[9px] bg-blue-500/10 text-blue-600 dark:text-blue-400 px-1 py-0.5 rounded font-medium cursor-help"
-                            title={`Valor derivado de Adiantamento: ${formatCurrency(t.Adiantamento)} (Título original: ${formatCurrency(t.VL_TITULO)})`}
+                            title={`Valor derivado de Adiantamento: ${formatCurrency(t.Adiantamento)}`}
                           >
                             Adiantamento
                           </span>
                         )}
-                        <span>{formatCurrency(getValorExibido(t))}</span>
+                        <span>{formatCurrency(t.VL_TITULO || 0)}</span>
                       </div>
+                    </td>
+                    <td className="p-4 text-right font-sans">
+                      {t.VL_BAIXA !== undefined && t.VL_BAIXA !== null && t.VL_BAIXA > 0 ? (
+                        <div className="flex items-center justify-end gap-1.5 font-sans">
+                          {t.VL_BAIXA !== t.VL_TITULO && (
+                            <span 
+                              className="text-[9px] bg-amber-500/10 text-amber-600 dark:text-amber-400 px-1 py-0.5 rounded font-medium cursor-help"
+                              title={`Valor de baixa (${formatCurrency(t.VL_BAIXA)}) difere do valor do título (${formatCurrency(t.VL_TITULO)})`}
+                            >
+                              Divergente
+                            </span>
+                          )}
+                          <span className="font-bold text-emerald-600 dark:text-emerald-400">
+                            {formatCurrency(t.VL_BAIXA)}
+                          </span>
+                        </div>
+                      ) : (
+                        <span className="text-muted-foreground text-xs font-normal">-</span>
+                      )}
                     </td>
                     <td className="p-4 text-center">
                       <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium font-sans ${
