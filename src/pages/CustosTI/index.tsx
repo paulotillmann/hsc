@@ -1,15 +1,15 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { 
-  Coins, Filter, RefreshCw, FileText, CheckCircle2, Clock, 
+import {
+  Coins, Filter, RefreshCw, FileText, CheckCircle2, Clock,
   AlertCircle, X, Search, ChevronLeft, ChevronRight, BarChart3, PieChart,
   Calendar, Building, ArrowUpRight, TrendingUp, Info, Check, ChevronDown
 } from 'lucide-react';
 import { webhookService } from '../../services/webhookService';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { 
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, 
+import {
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, Legend, Cell, PieChart as ReChartsPie, Pie,
   ReferenceLine
 } from 'recharts';
@@ -71,7 +71,7 @@ const formatDate = (dateStr: string | null) => {
   if (!dateStr) return '-';
   const cleanStr = String(dateStr).trim().toLowerCase();
   if (cleanStr === 'null' || cleanStr === 'undefined' || cleanStr === '') return '-';
-  
+
   // Format YYYY-MM-DD to DD/MM/YYYY
   const cleanDate = dateStr.split('T')[0];
   const parts = cleanDate.split('-');
@@ -103,17 +103,17 @@ const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ec4899', '#8b5cf6', '#06b6d4'
 // Default dates: first day of previous month to last day of current month
 const getDefaultDates = () => {
   const today = new Date();
-  
+
   const firstDayPrevMonth = new Date(today.getFullYear(), today.getMonth() - 1, 1);
   const fromYear = firstDayPrevMonth.getFullYear();
   const fromMonth = String(firstDayPrevMonth.getMonth() + 1).padStart(2, '0');
   const fromDay = '01';
-  
+
   const lastDayCurrentMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0);
   const toYear = lastDayCurrentMonth.getFullYear();
   const toMonth = String(lastDayCurrentMonth.getMonth() + 1).padStart(2, '0');
   const toDay = String(lastDayCurrentMonth.getDate()).padStart(2, '0');
-  
+
   return {
     from: `${fromYear}-${fromMonth}-${fromDay}`,
     to: `${toYear}-${toMonth}-${toDay}`
@@ -248,14 +248,14 @@ const CustosTI: React.FC = () => {
       // Free text search
       if (searchTerm) {
         const term = searchTerm.toLowerCase();
-        const matches = 
-          t.Empresa.toLowerCase().includes(term) || 
-          t.ds_centro_custo.toLowerCase().includes(term) || 
-          String(t.nr_titulo).includes(term) || 
+        const matches =
+          t.Empresa.toLowerCase().includes(term) ||
+          t.ds_centro_custo.toLowerCase().includes(term) ||
+          String(t.nr_titulo).includes(term) ||
           (t.NR_DOCUMENTO && t.NR_DOCUMENTO.toLowerCase().includes(term)) ||
           (t.DS_OBSERVACAO_TITULO && t.DS_OBSERVACAO_TITULO.toLowerCase().includes(term)) ||
           (t.Nome && t.Nome.toLowerCase().includes(term));
-        
+
         if (!matches) return false;
       }
 
@@ -269,15 +269,15 @@ const CustosTI: React.FC = () => {
 
     // Sorting logic
     result.sort((a, b) => {
-      let valA = sortField === 'VL_TITULO' 
-        ? (a.VL_TITULO || 0) 
-        : sortField === 'VL_BAIXA' 
-          ? (a.VL_BAIXA && a.VL_BAIXA > 0 ? a.VL_BAIXA : (a.Adiantamento || 0)) 
+      let valA = sortField === 'VL_TITULO'
+        ? (a.VL_TITULO || 0)
+        : sortField === 'VL_BAIXA'
+          ? (a.VL_BAIXA && a.VL_BAIXA > 0 ? a.VL_BAIXA : (a.Adiantamento || 0))
           : a[sortField];
-      let valB = sortField === 'VL_TITULO' 
-        ? (b.VL_TITULO || 0) 
-        : sortField === 'VL_BAIXA' 
-          ? (b.VL_BAIXA && b.VL_BAIXA > 0 ? b.VL_BAIXA : (b.Adiantamento || 0)) 
+      let valB = sortField === 'VL_TITULO'
+        ? (b.VL_TITULO || 0)
+        : sortField === 'VL_BAIXA'
+          ? (b.VL_BAIXA && b.VL_BAIXA > 0 ? b.VL_BAIXA : (b.Adiantamento || 0))
           : b[sortField];
 
       if (valA === null || valA === undefined) return sortAsc ? -1 : 1;
@@ -327,7 +327,7 @@ const CustosTI: React.FC = () => {
   // Chart data: Monthly costs and average calculation
   const { monthlyChartData, averageMonthlyCost } = useMemo(() => {
     const dataMap: Record<string, number> = {};
-    
+
     // Calculate total months in the filtered period using parseTasyDate
     const fromDate = parseTasyDate(periodFrom) || new Date();
     const toDate = parseTasyDate(periodTo) || new Date();
@@ -344,11 +344,11 @@ const CustosTI: React.FC = () => {
       if (!t.DT_EMISSAO) return;
       const date = parseTasyDate(t.DT_EMISSAO);
       if (!date || isNaN(date.getTime())) return;
-      
+
       const year = date.getFullYear();
       const month = String(date.getMonth() + 1).padStart(2, '0');
       const key = `${year}-${month}`;
-      
+
       dataMap[key] = (dataMap[key] || 0) + getValorExibido(t);
     });
 
@@ -372,7 +372,7 @@ const CustosTI: React.FC = () => {
     // Convert to sorted list
     const sortedKeys = Object.keys(dataMap).sort();
     const monthsAbbr = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
-    
+
     const chartData = sortedKeys.map(key => {
       const [year, monthStr] = key.split('-');
       const monthIdx = parseInt(monthStr, 10) - 1;
@@ -398,9 +398,9 @@ const CustosTI: React.FC = () => {
     if (monthlyChartData.length < 2) return { percentage: null, valueDiff: 0, label: '' };
     const lastMonth = monthlyChartData[monthlyChartData.length - 1];
     const prevMonth = monthlyChartData[monthlyChartData.length - 2];
-    
+
     if (!prevMonth || prevMonth.value === 0) return { percentage: null, valueDiff: 0, label: '' };
-    
+
     const diff = lastMonth.value - prevMonth.value;
     const pct = (diff / prevMonth.value) * 100;
     return {
@@ -435,7 +435,7 @@ const CustosTI: React.FC = () => {
   // Export PDF Report
   const handleExportPDF = async () => {
     const doc = new jsPDF();
-    
+
     try {
       const img = new Image();
       img.src = '/LOGO_HSC_PRIMARY.png';
@@ -456,7 +456,7 @@ const CustosTI: React.FC = () => {
     doc.setFont('helvetica', 'normal');
     doc.setTextColor(100);
     doc.text(`Emitido em: ${new Date().toLocaleDateString('pt-BR')} às ${new Date().toLocaleTimeString('pt-BR')}`, 14, 38);
-    
+
     const activeFilters = [];
     if (situacaoFilter !== 'Todos') activeFilters.push(`Situação: ${getStatusLabel(situacaoFilter)}`);
     if (periodFrom || periodTo) {
@@ -498,15 +498,15 @@ const CustosTI: React.FC = () => {
     const tableBody = titulosFiltrados.map(t => [
       t.nr_titulo,
       t.NR_DOCUMENTO || '-',
-      isValidEmpresa(t.Empresa) 
-        ? (t.Nome ? `${t.Empresa.toUpperCase()} / ${t.Nome.toUpperCase()}` : t.Empresa.toUpperCase()) 
+      isValidEmpresa(t.Empresa)
+        ? (t.Nome ? `${t.Empresa.toUpperCase()} / ${t.Nome.toUpperCase()}` : t.Empresa.toUpperCase())
         : (t.Nome ? t.Nome.toUpperCase() : 'SEM EMPRESA'),
       t.ds_centro_custo,
       formatDate(t.DT_EMISSAO),
       formatDate(t.DT_LIQUIDACAO),
       formatCurrency(t.VL_TITULO),
-      t.VL_BAIXA && t.VL_BAIXA > 0 
-        ? formatCurrency(t.VL_BAIXA) 
+      t.VL_BAIXA && t.VL_BAIXA > 0
+        ? formatCurrency(t.VL_BAIXA)
         : (t.Adiantamento && t.Adiantamento > 0 ? `${formatCurrency(t.Adiantamento)} (Adt.)` : '-'),
       getStatusLabel(t.IE_SITUACAO)
     ]);
@@ -550,8 +550,8 @@ const CustosTI: React.FC = () => {
       t.DS_OBSERVACAO_TITULO || ''
     ]);
 
-    const csvContent = 
-      'data:text/csv;charset=utf-8,\uFEFF' + 
+    const csvContent =
+      'data:text/csv;charset=utf-8,\uFEFF' +
       [headers.join(';'), ...rows.map(e => e.map(val => `"${String(val).replace(/"/g, '""')}"`).join(';'))].join('\n');
 
     const encodedUri = encodeURI(csvContent);
@@ -565,7 +565,7 @@ const CustosTI: React.FC = () => {
 
   return (
     <div className="space-y-6 w-full px-[40px] max-w-none pb-12 animate-in fade-in duration-500 bg-background text-foreground">
-      
+
       {/* ── HEADER ── */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-border/60 pb-6">
         <div>
@@ -584,12 +584,10 @@ const CustosTI: React.FC = () => {
         <div className="flex flex-wrap items-center gap-3 w-full md:w-auto justify-end">
           <div className="flex items-center gap-2 bg-muted/60 dark:bg-slate-900 border border-border px-3 py-1.5 rounded-lg text-xs">
             <span className="flex h-2 w-2 relative">
-              <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${
-                syncStatus === 'success' ? 'bg-emerald-400' : syncStatus === 'error' ? 'bg-rose-400' : 'bg-amber-400'
-              }`} />
-              <span className={`relative inline-flex rounded-full h-2 w-2 ${
-                syncStatus === 'success' ? 'bg-emerald-500' : syncStatus === 'error' ? 'bg-rose-500' : 'bg-amber-500'
-              }`} />
+              <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${syncStatus === 'success' ? 'bg-emerald-400' : syncStatus === 'error' ? 'bg-rose-400' : 'bg-amber-400'
+                }`} />
+              <span className={`relative inline-flex rounded-full h-2 w-2 ${syncStatus === 'success' ? 'bg-emerald-500' : syncStatus === 'error' ? 'bg-rose-500' : 'bg-amber-500'
+                }`} />
             </span>
             <span className="font-medium text-muted-foreground font-sans">
               {syncStatus === 'success' ? `Atualizado às ${syncTime}` : syncStatus === 'error' ? 'Erro de Sincronismo' : 'Buscando dados...'}
@@ -694,8 +692,8 @@ const CustosTI: React.FC = () => {
                   {selectedFornecedores.length === 0
                     ? 'Todos os fornecedores'
                     : selectedFornecedores.length === 1
-                    ? selectedFornecedores[0]
-                    : `${selectedFornecedores.length} selecionados`}
+                      ? selectedFornecedores[0]
+                      : `${selectedFornecedores.length} selecionados`}
                 </span>
                 <ChevronDown className="h-4 w-4 text-muted-foreground/60 flex-shrink-0 ml-1" />
               </button>
@@ -758,9 +756,8 @@ const CustosTI: React.FC = () => {
                               }}
                               className="w-full flex items-center gap-2 rounded px-2 py-1.5 text-xs text-left hover:bg-muted dark:hover:bg-slate-800 transition-colors text-foreground font-sans"
                             >
-                              <div className={`h-3.5 w-3.5 rounded border border-border flex items-center justify-center flex-shrink-0 transition-colors ${
-                                isSelected ? 'bg-primary border-primary text-primary-foreground' : 'bg-background'
-                              }`}>
+                              <div className={`h-3.5 w-3.5 rounded border border-border flex items-center justify-center flex-shrink-0 transition-colors ${isSelected ? 'bg-primary border-primary text-primary-foreground' : 'bg-background'
+                                }`}>
                                 {isSelected && <Check className="h-2.5 w-2.5 stroke-[3]" />}
                               </div>
                               <span className="truncate" title={forn}>{forn}</span>
@@ -805,11 +802,10 @@ const CustosTI: React.FC = () => {
               <div className="flex items-center gap-2 flex-wrap">
                 <h3 className="text-2xl font-bold tracking-tight text-foreground font-sans">{formatCurrency(kpis.totalValor)}</h3>
                 {momMetrics.percentage !== null && (
-                  <span className={`inline-flex items-center gap-0.5 text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                    momMetrics.percentage > 0 
-                      ? 'bg-rose-500/10 text-rose-600 dark:text-rose-400' 
+                  <span className={`inline-flex items-center gap-0.5 text-[10px] font-bold px-2 py-0.5 rounded-full ${momMetrics.percentage > 0
+                      ? 'bg-rose-500/10 text-rose-600 dark:text-rose-400'
                       : 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
-                  }`} title={`Variação do último mês (${momMetrics.label})`}>
+                    }`} title={`Variação do último mês (${momMetrics.label})`}>
                     {momMetrics.percentage > 0 ? '▲' : '▼'} {Math.abs(momMetrics.percentage).toFixed(1)}% MoM
                   </span>
                 )}
@@ -896,35 +892,35 @@ const CustosTI: React.FC = () => {
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={monthlyChartData} margin={{ top: 20, right: 15, left: 10, bottom: 20 }}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(128,128,128,0.1)" />
-                  <XAxis 
-                    dataKey="name" 
-                    tick={{ fontSize: 10 }} 
+                  <XAxis
+                    dataKey="name"
+                    tick={{ fontSize: 10 }}
                     stroke="rgba(128,128,128,0.5)"
                   />
-                  <YAxis 
+                  <YAxis
                     tickFormatter={(value) => formatCompactCurrency(value)}
                     tick={{ fontSize: 10 }}
                     stroke="rgba(128,128,128,0.5)"
                   />
-                  <Tooltip 
+                  <Tooltip
                     formatter={(value: any) => [formatCurrency(Number(value)), 'Gasto Total']}
                     labelStyle={{ fontSize: 11, fontWeight: 'bold' }}
                     contentStyle={{ borderRadius: '8px', padding: '10px' }}
                   />
                   <Bar dataKey="value" fill="var(--primary)" radius={[4, 4, 0, 0]} />
                   {averageMonthlyCost > 0 && (
-                    <ReferenceLine 
-                      y={averageMonthlyCost} 
-                      stroke="#ef4444" 
-                      strokeDasharray="5 5" 
+                    <ReferenceLine
+                      y={averageMonthlyCost}
+                      stroke="#ef4444"
+                      strokeDasharray="5 5"
                       strokeWidth={2}
-                      label={{ 
-                        value: `Média: ${formatCompactCurrency(averageMonthlyCost)}`, 
-                        position: 'top', 
+                      label={{
+                        value: `Média: ${formatCompactCurrency(averageMonthlyCost)}`,
+                        position: 'top',
                         fill: '#ef4444',
                         fontSize: 10,
                         fontWeight: 'bold'
-                      }} 
+                      }}
                     />
                   )}
                 </BarChart>
@@ -956,9 +952,9 @@ const CustosTI: React.FC = () => {
                     ))}
                   </Pie>
                   <Tooltip formatter={(value: any, name: any) => [formatCurrency(Number(value)), name]} />
-                  <Legend 
-                    layout="vertical" 
-                    verticalAlign="middle" 
+                  <Legend
+                    layout="vertical"
+                    verticalAlign="middle"
                     align="right"
                     wrapperStyle={{ fontSize: '10px', paddingLeft: '10px' }}
                     formatter={(value) => value.length > 20 ? `${value.substring(0, 18)}...` : value}
@@ -1052,21 +1048,21 @@ const CustosTI: React.FC = () => {
               </thead>
               <tbody className="divide-y divide-border/60 text-sm">
                 {paginatedTitulos.map((t) => (
-                  <tr 
-                    key={t.nr_titulo} 
+                  <tr
+                    key={t.nr_titulo}
                     className="hover:bg-muted/20 dark:hover:bg-slate-900/20 transition-colors"
                   >
                     <td className="p-4 text-center font-mono text-xs font-semibold text-foreground">{t.nr_titulo}</td>
                     <td className="p-4 text-center font-sans text-xs text-muted-foreground">{t.NR_DOCUMENTO || '-'}</td>
                     <td className="p-4 font-sans font-medium text-foreground max-w-[200px] truncate" title={
-                      isValidEmpresa(t.Empresa) 
-                        ? (t.Nome ? `${t.Empresa.toUpperCase()} (${t.Nome.toUpperCase()})` : t.Empresa.toUpperCase()) 
+                      isValidEmpresa(t.Empresa)
+                        ? (t.Nome ? `${t.Empresa.toUpperCase()} (${t.Nome.toUpperCase()})` : t.Empresa.toUpperCase())
                         : (t.Nome ? t.Nome.toUpperCase() : 'SEM EMPRESA')
                     }>
                       <div className="flex flex-col">
                         <span className="truncate font-semibold text-foreground text-xs tracking-wide">
-                          {isValidEmpresa(t.Empresa) 
-                            ? t.Empresa.toUpperCase() 
+                          {isValidEmpresa(t.Empresa)
+                            ? t.Empresa.toUpperCase()
                             : (t.Nome ? t.Nome.toUpperCase() : 'SEM EMPRESA')}
                         </span>
                         {t.Nome && isValidEmpresa(t.Empresa) && (
@@ -1086,7 +1082,7 @@ const CustosTI: React.FC = () => {
                       {t.VL_BAIXA !== undefined && t.VL_BAIXA !== null && t.VL_BAIXA > 0 ? (
                         <div className="flex items-center justify-end gap-1.5 font-sans">
                           {t.VL_BAIXA !== t.VL_TITULO && (
-                            <span 
+                            <span
                               className="text-[9px] bg-amber-500/10 text-amber-600 dark:text-amber-400 px-1 py-0.5 rounded font-medium cursor-help"
                               title={`Valor de baixa (${formatCurrency(t.VL_BAIXA)}) difere do valor do título (${formatCurrency(t.VL_TITULO)})`}
                             >
@@ -1099,7 +1095,7 @@ const CustosTI: React.FC = () => {
                         </div>
                       ) : t.Adiantamento !== undefined && t.Adiantamento !== null && t.Adiantamento > 0 ? (
                         <div className="flex items-center justify-end gap-1.5 font-sans">
-                          <span 
+                          <span
                             className="text-[9px] bg-blue-500/10 text-blue-600 dark:text-blue-400 px-1 py-0.5 rounded font-medium cursor-help"
                             title={`Valor pago via Adiantamento: ${formatCurrency(t.Adiantamento)}`}
                           >
@@ -1114,11 +1110,10 @@ const CustosTI: React.FC = () => {
                       )}
                     </td>
                     <td className="p-4 text-center">
-                      <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium font-sans ${
-                        t.IE_SITUACAO === 'L' 
-                          ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' 
+                      <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium font-sans ${t.IE_SITUACAO === 'L'
+                          ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
                           : 'bg-amber-500/10 text-amber-600 dark:text-amber-400'
-                      }`}>
+                        }`}>
                         {t.IE_SITUACAO === 'L' ? (
                           <CheckCircle2 className="h-3 w-3" />
                         ) : (
@@ -1186,7 +1181,7 @@ const CustosTI: React.FC = () => {
       <AnimatePresence>
         {selectedTitulo && (
           <div className="fixed inset-0 bg-black/65 flex items-center justify-center p-4 z-50 animate-in fade-in duration-300">
-            <motion.div 
+            <motion.div
               initial={{ scale: 0.95, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.95, opacity: 0 }}
@@ -1198,7 +1193,7 @@ const CustosTI: React.FC = () => {
                   <Coins className="h-5 w-5 text-primary" />
                   <h3 className="text-base font-bold text-foreground font-sans">Detalhamento do Título</h3>
                 </div>
-                <button 
+                <button
                   onClick={() => setSelectedTitulo(null)}
                   className="p-1 rounded-lg hover:bg-muted text-muted-foreground transition-colors"
                 >
@@ -1258,11 +1253,10 @@ const CustosTI: React.FC = () => {
                   </div>
                   <div>
                     <span className="text-xs font-semibold text-muted-foreground block font-sans">Situação</span>
-                    <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium font-sans mt-1.5 ${
-                      selectedTitulo.IE_SITUACAO === 'L' 
-                        ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' 
+                    <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium font-sans mt-1.5 ${selectedTitulo.IE_SITUACAO === 'L'
+                        ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
                         : 'bg-amber-500/10 text-amber-600 dark:text-amber-400'
-                    }`}>
+                      }`}>
                       {selectedTitulo.IE_SITUACAO === 'L' ? <CheckCircle2 className="h-3 w-3" /> : <Clock className="h-3 w-3" />}
                       {getStatusLabel(selectedTitulo.IE_SITUACAO)}
                     </span>
