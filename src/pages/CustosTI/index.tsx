@@ -269,8 +269,16 @@ const CustosTI: React.FC = () => {
 
     // Sorting logic
     result.sort((a, b) => {
-      let valA = sortField === 'VL_TITULO' ? (a.VL_TITULO || 0) : sortField === 'VL_BAIXA' ? (a.VL_BAIXA || 0) : a[sortField];
-      let valB = sortField === 'VL_TITULO' ? (b.VL_TITULO || 0) : sortField === 'VL_BAIXA' ? (b.VL_BAIXA || 0) : b[sortField];
+      let valA = sortField === 'VL_TITULO' 
+        ? (a.VL_TITULO || 0) 
+        : sortField === 'VL_BAIXA' 
+          ? (a.VL_BAIXA && a.VL_BAIXA > 0 ? a.VL_BAIXA : (a.Adiantamento || 0)) 
+          : a[sortField];
+      let valB = sortField === 'VL_TITULO' 
+        ? (b.VL_TITULO || 0) 
+        : sortField === 'VL_BAIXA' 
+          ? (b.VL_BAIXA && b.VL_BAIXA > 0 ? b.VL_BAIXA : (b.Adiantamento || 0)) 
+          : b[sortField];
 
       if (valA === null || valA === undefined) return sortAsc ? -1 : 1;
       if (valB === null || valB === undefined) return sortAsc ? 1 : -1;
@@ -497,7 +505,9 @@ const CustosTI: React.FC = () => {
       formatDate(t.DT_EMISSAO),
       formatDate(t.DT_LIQUIDACAO),
       formatCurrency(t.VL_TITULO),
-      t.VL_BAIXA && t.VL_BAIXA > 0 ? formatCurrency(t.VL_BAIXA) : '-',
+      t.VL_BAIXA && t.VL_BAIXA > 0 
+        ? formatCurrency(t.VL_BAIXA) 
+        : (t.Adiantamento && t.Adiantamento > 0 ? `${formatCurrency(t.Adiantamento)} (Adt.)` : '-'),
       getStatusLabel(t.IE_SITUACAO)
     ]);
 
@@ -1070,17 +1080,7 @@ const CustosTI: React.FC = () => {
                     <td className="p-4 text-center font-sans text-xs">{formatDate(t.DT_EMISSAO)}</td>
                     <td className="p-4 text-center font-sans text-xs text-muted-foreground">{formatDate(t.DT_LIQUIDACAO)}</td>
                     <td className="p-4 text-right font-sans font-bold text-foreground">
-                      <div className="flex items-center justify-end gap-1.5 font-sans">
-                        {(t.VL_BAIXA === undefined || t.VL_BAIXA === null || t.VL_BAIXA === 0) && t.Adiantamento !== undefined && t.Adiantamento !== null && t.Adiantamento > 0 && (
-                          <span 
-                            className="text-[9px] bg-blue-500/10 text-blue-600 dark:text-blue-400 px-1 py-0.5 rounded font-medium cursor-help"
-                            title={`Valor derivado de Adiantamento: ${formatCurrency(t.Adiantamento)}`}
-                          >
-                            Adiantamento
-                          </span>
-                        )}
-                        <span>{formatCurrency(t.VL_TITULO || 0)}</span>
-                      </div>
+                      <span>{formatCurrency(t.VL_TITULO || 0)}</span>
                     </td>
                     <td className="p-4 text-right font-sans">
                       {t.VL_BAIXA !== undefined && t.VL_BAIXA !== null && t.VL_BAIXA > 0 ? (
@@ -1095,6 +1095,18 @@ const CustosTI: React.FC = () => {
                           )}
                           <span className="font-bold text-emerald-600 dark:text-emerald-400">
                             {formatCurrency(t.VL_BAIXA)}
+                          </span>
+                        </div>
+                      ) : t.Adiantamento !== undefined && t.Adiantamento !== null && t.Adiantamento > 0 ? (
+                        <div className="flex items-center justify-end gap-1.5 font-sans">
+                          <span 
+                            className="text-[9px] bg-blue-500/10 text-blue-600 dark:text-blue-400 px-1 py-0.5 rounded font-medium cursor-help"
+                            title={`Valor pago via Adiantamento: ${formatCurrency(t.Adiantamento)}`}
+                          >
+                            Adiantamento
+                          </span>
+                          <span className="font-bold text-emerald-600 dark:text-emerald-400">
+                            {formatCurrency(t.Adiantamento)}
                           </span>
                         </div>
                       ) : (
