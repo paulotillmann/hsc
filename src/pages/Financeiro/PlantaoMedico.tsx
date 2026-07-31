@@ -4,7 +4,8 @@ import {
   Stethoscope, Filter, RefreshCw, FileText, Calendar, Search, 
   ChevronLeft, ChevronRight, BarChart3, PieChart, ArrowUpRight, 
   TrendingUp, Info, Check, ChevronDown, UserCheck, DollarSign, 
-  FileSpreadsheet, Award, Activity, X, Layers
+  FileSpreadsheet, Award, Activity, X, Layers, Edit3, Save, Baby,
+  ClipboardList, CheckCircle2, Plus, Trash2
 } from 'lucide-react';
 import { webhookService } from '../../services/webhookService';
 import jsPDF from 'jspdf';
@@ -22,6 +23,14 @@ export interface PlantaoMedicoItem {
   VALOR: number;
   VALOR_RAW: string | number;
   TIPO_PLANTAO: string;
+  tipoProducao?: 'Procedimento' | 'Consulta' | 'Parto' | string;
+  valorProducao?: number;
+}
+
+export interface ProducaoItem {
+  id: string;
+  tipoProducao: 'Procedimento' | 'Consulta' | 'Parto' | string;
+  valorProducao: number;
 }
 
 export interface PlantaoMedicoSintetico {
@@ -32,6 +41,8 @@ export interface PlantaoMedicoSintetico {
   QTD_PLANTOES: number;
   VALOR_TOTAL: number;
   VALOR_MEDIO: number;
+  producoes?: ProducaoItem[];
+  valorProducaoTotal?: number;
   ITEMS: PlantaoMedicoItem[];
 }
 
@@ -156,29 +167,65 @@ const getDefaultDates = () => {
   };
 };
 
+// Helpers de Armazenamento Local / Sessão
+const getStorageItem = (key: string): string | null => {
+  try {
+    return localStorage.getItem(key) || sessionStorage.getItem(key);
+  } catch (e) {
+    return null;
+  }
+};
+
+const setStorageItem = (key: string, value: string) => {
+  try {
+    localStorage.setItem(key, value);
+    sessionStorage.setItem(key, value);
+  } catch (e) {
+    console.error('Erro ao salvar no storage:', e);
+  }
+};
+
 const PlantaoMedico: React.FC = () => {
+  // Filtros de Data Inicializados do Cache se existirem
+  const [periodFrom, setPeriodFrom] = useState<string>(() => {
+    return getStorageItem('hsc_plantao_medico_cache_from') || getDefaultDates().from;
+  });
+  const [periodTo, setPeriodTo] = useState<string>(() => {
+    return getStorageItem('hsc_plantao_medico_cache_to') || getDefaultDates().to;
+  });
+
   const [plantaos, setPlantaos] = useState<PlantaoMedicoItem[]>(() => {
     try {
-      const cached = sessionStorage.getItem('hsc_plantao_medico_cache_data');
+      const from = getStorageItem('hsc_plantao_medico_cache_from') || getDefaultDates().from;
+      const to = getStorageItem('hsc_plantao_medico_cache_to') || getDefaultDates().to;
+      const keyed = getStorageItem(`hsc_plantao_medico_cache_${from}_${to}`);
+      if (keyed) {
+        const parsed = JSON.parse(keyed);
+        return parsed.list || parsed;
+      }
+      const cached = getStorageItem('hsc_plantao_medico_cache_data');
       if (cached) return JSON.parse(cached);
     } catch (e) {}
     return [];
   });
+
   const [loading, setLoading] = useState<boolean>(() => {
-    const cached = sessionStorage.getItem('hsc_plantao_medico_cache_data');
-    return !cached;
+    const from = getStorageItem('hsc_plantao_medico_cache_from') || getDefaultDates().from;
+    const to = getStorageItem('hsc_plantao_medico_cache_to') || getDefaultDates().to;
+    const keyed = getStorageItem(`hsc_plantao_medico_cache_${from}_${to}`);
+    const cached = getStorageItem('hsc_plantao_medico_cache_data');
+    return !keyed && !cached;
   });
+
   const [syncStatus, setSyncStatus] = useState<'idle' | 'success' | 'error'>(() => {
-    return (sessionStorage.getItem('hsc_plantao_medico_cache_status') as any) || 'idle';
+    return (getStorageItem('hsc_plantao_medico_cache_status') as any) || 'idle';
   });
   const [syncTime, setSyncTime] = useState<string | null>(() => {
-    return sessionStorage.getItem('hsc_plantao_medico_cache_time');
+    return getStorageItem('hsc_plantao_medico_cache_time');
   });
 
   // Filtros
   const [searchTerm, setSearchTerm] = useState<string>('');
-  const [periodFrom, setPeriodFrom] = useState<string>(() => getDefaultDates().from);
-  const [periodTo, setPeriodTo] = useState<string>(() => getDefaultDates().to);
   
   // Dropdown Filtro: Especialidades
   const [selectedEspecialidades, setSelectedEspecialidades] = useState<string[]>([]);
@@ -210,10 +257,90 @@ const PlantaoMedico: React.FC = () => {
   const [viewMode, setViewMode] = useState<'analitico' | 'sintetico'>('analitico');
   const [sortFieldSintetico, setSortFieldSintetico] = useState<keyof PlantaoMedicoSintetico>('VALOR_TOTAL');
   const [sortAscSintetico, setSortAscSintetico] = useState<boolean>(false);
-  const [selectedSinteticoItem, setSelectedSinteticoItem] = useState<PlantaoMedicoSintetico | null>(null);
+  // Armazenamento de edições de produção para a visão Sintética (suporta múltiplos tipos por grupo)
+  const [syntheticEdits, setSyntheticEdits] = useState<Record<string, { producoes?: ProducaoItem[] }>>(() => {
+    try {
+      const cached = getStorageItem('hsc_plantao_medico_synthetic_edits');
+      if (cached) return JSON.parse(cached);
+    } catch (e) {}
+    return {};
+  });
 
-  // Item selecionado para modal
+  const [selectedSinteticoItem, setSelectedSinteticoItem] = useState<PlantaoMedicoSintetico | null>(null);
   const [selectedItem, setSelectedItem] = useState<PlantaoMedicoItem | null>(null);
+
+  // Form state para Múltiplas Produções Médicas (Sintético)
+  const [editProducoesList, setEditProducoesList] = useState<{ id: string; tipoProducao: string; valorProducao: string }[]>([]);
+  const [saveSuccessMessage, setSaveSuccessMessage] = useState<boolean>(false);
+
+  const handleOpenSinteticoModal = (item: PlantaoMedicoSintetico) => {
+    setSelectedSinteticoItem(item);
+    if (item.producoes && item.producoes.length > 0) {
+      setEditProducoesList(
+        item.producoes.map((p, i) => ({
+          id: p.id || `prod-${i}`,
+          tipoProducao: p.tipoProducao || 'Procedimento',
+          valorProducao: String(p.valorProducao || 0)
+        }))
+      );
+    } else {
+      // Iniciar com 1 item padrão
+      setEditProducoesList([
+        { id: `prod-${Date.now()}-0`, tipoProducao: 'Procedimento', valorProducao: '0' }
+      ]);
+    }
+    setSaveSuccessMessage(false);
+  };
+
+  const handleAddProducaoRow = () => {
+    setEditProducoesList(prev => [
+      ...prev,
+      { id: `prod-${Date.now()}-${prev.length}`, tipoProducao: 'Consulta', valorProducao: '0' }
+    ]);
+  };
+
+  const handleRemoveProducaoRow = (id: string) => {
+    setEditProducoesList(prev => prev.filter(p => p.id !== id));
+  };
+
+  const handleUpdateProducaoRow = (id: string, field: 'tipoProducao' | 'valorProducao', value: string) => {
+    setEditProducoesList(prev => prev.map(p => {
+      if (p.id === id) {
+        return { ...p, [field]: value };
+      }
+      return p;
+    }));
+  };
+
+  const handleSaveSinteticoProducao = () => {
+    if (!selectedSinteticoItem) return;
+
+    const validProducoes: ProducaoItem[] = editProducoesList.map(p => {
+      const cleanStr = String(p.valorProducao).replace(/[R$\s]/g, '').replace(/\./g, '').replace(',', '.');
+      const numVal = parseFloat(cleanStr);
+      return {
+        id: p.id,
+        tipoProducao: p.tipoProducao,
+        valorProducao: isNaN(numVal) ? 0 : Math.max(0, numVal)
+      };
+    });
+
+    const updatedEdits = {
+      ...syntheticEdits,
+      [selectedSinteticoItem.id]: {
+        producoes: validProducoes
+      }
+    };
+
+    setSyntheticEdits(updatedEdits);
+    setStorageItem('hsc_plantao_medico_synthetic_edits', JSON.stringify(updatedEdits));
+
+    setSaveSuccessMessage(true);
+    setTimeout(() => {
+      setSaveSuccessMessage(false);
+      setSelectedSinteticoItem(null);
+    }, 600);
+  };
 
   // Fechar dropdowns ao clicar fora
   useEffect(() => {
@@ -240,11 +367,16 @@ const PlantaoMedico: React.FC = () => {
     to: string
   ) => {
     try {
-      sessionStorage.setItem('hsc_plantao_medico_cache_data', JSON.stringify(list));
-      if (time) sessionStorage.setItem('hsc_plantao_medico_cache_time', time);
-      sessionStorage.setItem('hsc_plantao_medico_cache_status', status);
-      sessionStorage.setItem('hsc_plantao_medico_cache_from', from);
-      sessionStorage.setItem('hsc_plantao_medico_cache_to', to);
+      const dataStr = JSON.stringify(list);
+      setStorageItem('hsc_plantao_medico_cache_data', dataStr);
+      if (time) setStorageItem('hsc_plantao_medico_cache_time', time);
+      setStorageItem('hsc_plantao_medico_cache_status', status);
+      setStorageItem('hsc_plantao_medico_cache_from', from);
+      setStorageItem('hsc_plantao_medico_cache_to', to);
+
+      // Cache chaveado por período
+      const keyedPayload = JSON.stringify({ list, time, status });
+      setStorageItem(`hsc_plantao_medico_cache_${from}_${to}`, keyedPayload);
     } catch (e) {
       console.error('Erro ao salvar cache de plantão médico:', e);
     }
@@ -254,11 +386,21 @@ const PlantaoMedico: React.FC = () => {
   const fetchPlantaos = useCallback(async (showLoading = true, forceRefresh = false) => {
     if (!forceRefresh) {
       try {
-        const cachedData = sessionStorage.getItem('hsc_plantao_medico_cache_data');
-        const cachedTime = sessionStorage.getItem('hsc_plantao_medico_cache_time');
-        const cachedStatus = sessionStorage.getItem('hsc_plantao_medico_cache_status');
-        const cachedFrom = sessionStorage.getItem('hsc_plantao_medico_cache_from');
-        const cachedTo = sessionStorage.getItem('hsc_plantao_medico_cache_to');
+        const keyed = getStorageItem(`hsc_plantao_medico_cache_${periodFrom}_${periodTo}`);
+        if (keyed) {
+          const parsed = JSON.parse(keyed);
+          setPlantaos(parsed.list || parsed);
+          if (parsed.time) setSyncTime(parsed.time);
+          setSyncStatus(parsed.status || 'success');
+          setLoading(false);
+          return;
+        }
+
+        const cachedData = getStorageItem('hsc_plantao_medico_cache_data');
+        const cachedTime = getStorageItem('hsc_plantao_medico_cache_time');
+        const cachedStatus = getStorageItem('hsc_plantao_medico_cache_status');
+        const cachedFrom = getStorageItem('hsc_plantao_medico_cache_from');
+        const cachedTo = getStorageItem('hsc_plantao_medico_cache_to');
 
         if (cachedData && cachedFrom === periodFrom && cachedTo === periodTo) {
           const parsed = JSON.parse(cachedData);
@@ -275,6 +417,23 @@ const PlantaoMedico: React.FC = () => {
 
     if (showLoading) setLoading(true);
     setSyncStatus('idle');
+
+    // Mapear edições existentes para preservar
+    const existingEditsMap = new Map<string, { tipoProducao?: string; valorProducao?: number }>();
+    try {
+      const currentCached = getStorageItem('hsc_plantao_medico_cache_data');
+      if (currentCached) {
+        const parsed: PlantaoMedicoItem[] = JSON.parse(currentCached);
+        parsed.forEach(p => {
+          if (p.id && (p.tipoProducao || p.valorProducao !== undefined)) {
+            existingEditsMap.set(p.id, {
+              tipoProducao: p.tipoProducao,
+              valorProducao: p.valorProducao
+            });
+          }
+        });
+      }
+    } catch (e) {}
 
     try {
       const response = await webhookService.fetchPlantaoMedicoCustos({
@@ -294,15 +453,20 @@ const PlantaoMedico: React.FC = () => {
             return strDt !== '' && strDt !== 'null' && strDt !== 'undefined';
           })
           .map((item: any, idx: number) => {
+            const itemId = `plantao-${idx}-${item.DT_CHAMADO || ''}-${item.MEDICO || ''}`;
+            const existingEdit = existingEditsMap.get(itemId);
             const valNum = parseValor(item.VALOR !== undefined ? item.VALOR : item.valor);
+
             return {
-              id: `plantao-${idx}-${item.DT_CHAMADO || ''}-${item.MEDICO || ''}`,
+              id: itemId,
               DT_CHAMADO: String(item.DT_CHAMADO !== undefined ? item.DT_CHAMADO : (item.dt_chamado || '')),
               MEDICO: cleanString(item.MEDICO !== undefined ? item.MEDICO : item.medico, 'Médico Não Informado'),
               ESPECIALIDADE: cleanString(item.ESPECIALIDADE !== undefined ? item.ESPECIALIDADE : item.especialidade, 'Geral'),
               VALOR: valNum,
               VALOR_RAW: item.VALOR !== undefined ? item.VALOR : (item.valor || '0,00'),
-              TIPO_PLANTAO: cleanString(item.TIPO_PLANTAO !== undefined ? item.TIPO_PLANTAO : item.tipo_plantao, 'Plantão')
+              TIPO_PLANTAO: cleanString(item.TIPO_PLANTAO !== undefined ? item.TIPO_PLANTAO : item.tipo_plantao, 'Plantão'),
+              tipoProducao: existingEdit?.tipoProducao || item.tipoProducao || item.tipo_producao,
+              valorProducao: existingEdit?.valorProducao !== undefined ? existingEdit.valorProducao : (item.valorProducao !== undefined ? item.valorProducao : item.valor_producao)
             };
           });
 
@@ -321,23 +485,49 @@ const PlantaoMedico: React.FC = () => {
     }
   }, [periodFrom, periodTo]);
 
-  const hasMountedRef = useRef(false);
+  const activeParamsRef = useRef<string>('');
 
-  // Carga inicial - Executada APENAS se não houver dados em cache para as datas selecionadas
+  // Efeito inteligente de busca/recuperação de cache baseado nos parâmetros selecionados
   useEffect(() => {
-    const cachedFrom = sessionStorage.getItem('hsc_plantao_medico_cache_from');
-    const cachedTo = sessionStorage.getItem('hsc_plantao_medico_cache_to');
-    const cachedData = sessionStorage.getItem('hsc_plantao_medico_cache_data');
+    const paramKey = `${periodFrom}_${periodTo}`;
+    
+    // Tenta carregar do cache para as datas selecionadas
+    const keyed = getStorageItem(`hsc_plantao_medico_cache_${periodFrom}_${periodTo}`);
+    const cachedFrom = getStorageItem('hsc_plantao_medico_cache_from');
+    const cachedTo = getStorageItem('hsc_plantao_medico_cache_to');
+    const cachedData = getStorageItem('hsc_plantao_medico_cache_data');
+
+    if (keyed) {
+      try {
+        const parsed = JSON.parse(keyed);
+        setPlantaos(parsed.list || parsed);
+        if (parsed.time) setSyncTime(parsed.time);
+        setSyncStatus(parsed.status || 'success');
+        setLoading(false);
+        activeParamsRef.current = paramKey;
+        return;
+      } catch (e) {}
+    }
 
     if (cachedData && cachedFrom === periodFrom && cachedTo === periodTo) {
-      setLoading(false);
-      return;
+      try {
+        const parsed = JSON.parse(cachedData);
+        setPlantaos(parsed);
+        setSyncTime(getStorageItem('hsc_plantao_medico_cache_time'));
+        setSyncStatus((getStorageItem('hsc_plantao_medico_cache_status') as any) || 'success');
+        setLoading(false);
+        activeParamsRef.current = paramKey;
+        return;
+      } catch (e) {}
     }
 
-    if (!hasMountedRef.current) {
-      hasMountedRef.current = true;
-      fetchPlantaos(true, false);
+    // Se já buscamos este exato parâmetro na execução atual da API, evita requisição duplicada
+    if (activeParamsRef.current === paramKey) {
+      return;
     }
+    activeParamsRef.current = paramKey;
+
+    fetchPlantaos(true, false);
   }, [fetchPlantaos, periodFrom, periodTo]);
 
   // Reset de página ao alterar filtros ou modo de visão
@@ -469,15 +659,97 @@ const PlantaoMedico: React.FC = () => {
     return result;
   }, [plantaos, searchTerm, selectedEspecialidades, selectedMedicos, selectedTipos, periodFrom, periodTo, sortField, sortAsc]);
 
+  // Agrupamento Sintético dos Plantões Filtrados (Médico + Especialidade + Tipo)
+  const plantaosSinteticos = useMemo(() => {
+    const map = new Map<string, {
+      medico: string;
+      especialidade: string;
+      tipoPlantao: string;
+      qtd: number;
+      valorTotal: number;
+      items: PlantaoMedicoItem[];
+    }>();
+
+    plantaosFiltrados.forEach(item => {
+      const key = `${item.MEDICO.toLowerCase().trim()}|||${item.ESPECIALIDADE.toLowerCase().trim()}|||${item.TIPO_PLANTAO.toLowerCase().trim()}`;
+      
+      const existing = map.get(key);
+      if (existing) {
+        existing.qtd += 1;
+        existing.valorTotal += item.VALOR;
+        existing.items.push(item);
+      } else {
+        map.set(key, {
+          medico: item.MEDICO,
+          especialidade: item.ESPECIALIDADE,
+          tipoPlantao: item.TIPO_PLANTAO,
+          qtd: 1,
+          valorTotal: item.VALOR,
+          items: [item]
+        });
+      }
+    });
+
+    const result: PlantaoMedicoSintetico[] = Array.from(map.entries()).map(([key, data], idx) => {
+      const syntheticId = `sintetico-${idx}-${key}`;
+      const edit = syntheticEdits[syntheticId] || syntheticEdits[key];
+      const producoesList: ProducaoItem[] = edit?.producoes || [];
+      const valProducaoTotal = producoesList.reduce((acc, p) => acc + (p.valorProducao || 0), 0);
+      const valPlantaoBase = data.valorTotal;
+      const finalValorTotal = valPlantaoBase + valProducaoTotal;
+
+      return {
+        id: syntheticId,
+        MEDICO: data.medico,
+        ESPECIALIDADE: data.especialidade,
+        TIPO_PLANTAO: data.tipoPlantao,
+        QTD_PLANTOES: data.qtd,
+        VALOR_TOTAL: finalValorTotal,
+        VALOR_MEDIO: data.qtd > 0 ? finalValorTotal / data.qtd : 0,
+        producoes: producoesList,
+        valorProducaoTotal: valProducaoTotal,
+        ITEMS: data.items
+      };
+    });
+
+    result.sort((a, b) => {
+      let valA = a[sortFieldSintetico];
+      let valB = b[sortFieldSintetico];
+
+      if (valA === null || valA === undefined) return sortAscSintetico ? -1 : 1;
+      if (valB === null || valB === undefined) return sortAscSintetico ? 1 : -1;
+
+      if (typeof valA === 'number' && typeof valB === 'number') {
+        return sortAscSintetico ? valA - valB : valB - valA;
+      }
+
+      const strA = String(valA).toLowerCase();
+      const strB = String(valB).toLowerCase();
+
+      if (strA < strB) return sortAscSintetico ? -1 : 1;
+      if (strA > strB) return sortAscSintetico ? 1 : -1;
+      return 0;
+    });
+
+    return result;
+  }, [plantaosFiltrados, sortFieldSintetico, sortAscSintetico, syntheticEdits]);
+
   // KPIs
   const kpis = useMemo(() => {
     let totalValor = 0;
     const medicosUnicos = new Set<string>();
 
-    plantaosFiltrados.forEach(p => {
-      totalValor += p.VALOR;
-      if (p.MEDICO) medicosUnicos.add(p.MEDICO);
-    });
+    if (viewMode === 'sintetico') {
+      plantaosSinteticos.forEach(s => {
+        totalValor += s.VALOR_TOTAL;
+        if (s.MEDICO) medicosUnicos.add(s.MEDICO);
+      });
+    } else {
+      plantaosFiltrados.forEach(p => {
+        totalValor += p.VALOR;
+        if (p.MEDICO) medicosUnicos.add(p.MEDICO);
+      });
+    }
 
     const count = plantaosFiltrados.length;
     const mediaPorPlantao = count > 0 ? totalValor / count : 0;
@@ -488,7 +760,7 @@ const PlantaoMedico: React.FC = () => {
       mediaPorPlantao,
       medicosAtivos: medicosUnicos.size
     };
-  }, [plantaosFiltrados]);
+  }, [plantaosFiltrados, plantaosSinteticos, viewMode]);
 
   // Gráficos
   const { monthlyChartData, especialidadeChartData } = useMemo(() => {
@@ -496,18 +768,19 @@ const PlantaoMedico: React.FC = () => {
     const espMap: Record<string, number> = {};
 
     plantaosFiltrados.forEach(p => {
+      const val = p.VALOR;
       if (p.DT_CHAMADO) {
         const date = parseTasyDate(p.DT_CHAMADO);
         if (date && !isNaN(date.getTime())) {
           const year = date.getFullYear();
           const month = String(date.getMonth() + 1).padStart(2, '0');
           const key = `${year}-${month}`;
-          monthMap[key] = (monthMap[key] || 0) + p.VALOR;
+          monthMap[key] = (monthMap[key] || 0) + val;
         }
       }
 
       const esp = p.ESPECIALIDADE || 'Outras';
-      espMap[esp] = (espMap[esp] || 0) + p.VALOR;
+      espMap[esp] = (espMap[esp] || 0) + val;
     });
 
     const sortedMonthKeys = Object.keys(monthMap).sort();
@@ -544,70 +817,6 @@ const PlantaoMedico: React.FC = () => {
     }
   };
 
-  // Agrupamento Sintético dos Plantões Filtrados (Médico + Especialidade + Tipo)
-  const plantaosSinteticos = useMemo(() => {
-    const map = new Map<string, {
-      medico: string;
-      especialidade: string;
-      tipoPlantao: string;
-      qtd: number;
-      valorTotal: number;
-      items: PlantaoMedicoItem[];
-    }>();
-
-    plantaosFiltrados.forEach(item => {
-      const key = `${item.MEDICO.toLowerCase().trim()}|||${item.ESPECIALIDADE.toLowerCase().trim()}|||${item.TIPO_PLANTAO.toLowerCase().trim()}`;
-      
-      const existing = map.get(key);
-      if (existing) {
-        existing.qtd += 1;
-        existing.valorTotal += item.VALOR;
-        existing.items.push(item);
-      } else {
-        map.set(key, {
-          medico: item.MEDICO,
-          especialidade: item.ESPECIALIDADE,
-          tipoPlantao: item.TIPO_PLANTAO,
-          qtd: 1,
-          valorTotal: item.VALOR,
-          items: [item]
-        });
-      }
-    });
-
-    const result: PlantaoMedicoSintetico[] = Array.from(map.entries()).map(([key, data], idx) => ({
-      id: `sintetico-${idx}-${key}`,
-      MEDICO: data.medico,
-      ESPECIALIDADE: data.especialidade,
-      TIPO_PLANTAO: data.tipoPlantao,
-      QTD_PLANTOES: data.qtd,
-      VALOR_TOTAL: data.valorTotal,
-      VALOR_MEDIO: data.qtd > 0 ? data.valorTotal / data.qtd : 0,
-      ITEMS: data.items
-    }));
-
-    result.sort((a, b) => {
-      let valA = a[sortFieldSintetico];
-      let valB = b[sortFieldSintetico];
-
-      if (valA === null || valA === undefined) return sortAscSintetico ? -1 : 1;
-      if (valB === null || valB === undefined) return sortAscSintetico ? 1 : -1;
-
-      if (typeof valA === 'number' && typeof valB === 'number') {
-        return sortAscSintetico ? valA - valB : valB - valA;
-      }
-
-      const strA = String(valA).toLowerCase();
-      const strB = String(valB).toLowerCase();
-
-      if (strA < strB) return sortAscSintetico ? -1 : 1;
-      if (strA > strB) return sortAscSintetico ? 1 : -1;
-      return 0;
-    });
-
-    return result;
-  }, [plantaosFiltrados, sortFieldSintetico, sortAscSintetico]);
-
   // Paginação
   const paginatedPlantaos = useMemo(() => {
     const start = (currentPage - 1) * itemsPerPage;
@@ -640,7 +849,7 @@ const PlantaoMedico: React.FC = () => {
     }
 
     const titleText = viewMode === 'sintetico'
-      ? 'Relatório Sintético de Plantão Médico (Agrupado)'
+      ? 'Relatório Sintético de Plantão e Produção Médica (Agrupado)'
       : 'Relatório Executivo de Plantão Médico';
 
     doc.setFontSize(16);
@@ -691,20 +900,26 @@ const PlantaoMedico: React.FC = () => {
     const nextY = (doc as any).lastAutoTable.finalY + 12;
 
     if (viewMode === 'sintetico') {
-      doc.text('Consolidado Sintético por Médico e Setor', 14, nextY);
+      doc.text('Consolidado Sintético por Médico, Setor e Produção Médica', 14, nextY);
 
-      const tableBody = plantaosSinteticos.map(s => [
-        s.MEDICO,
-        s.ESPECIALIDADE,
-        s.TIPO_PLANTAO,
-        s.QTD_PLANTOES.toString(),
-        formatCurrency(s.VALOR_MEDIO),
-        formatCurrency(s.VALOR_TOTAL)
-      ]);
+      const tableBody = plantaosSinteticos.map(s => {
+        const tiposStr = s.producoes && s.producoes.length > 0
+          ? s.producoes.map(p => p.tipoProducao).join(', ')
+          : 'Não informado';
+        return [
+          s.MEDICO,
+          s.ESPECIALIDADE,
+          s.TIPO_PLANTAO,
+          tiposStr,
+          s.QTD_PLANTOES.toString(),
+          formatCurrency(s.valorProducaoTotal || 0),
+          formatCurrency(s.VALOR_TOTAL)
+        ];
+      });
 
       autoTable(doc, {
         startY: nextY + 4,
-        head: [['Médico / Plantonista', 'Especialidade', 'Tipo Plantão', 'Qtd. Plantões', 'Valor Médio (R$)', 'Valor Total (R$)']],
+        head: [['Médico / Plantonista', 'Especialidade', 'Tipo Plantão', 'Tipos Produção', 'Qtd. Plantões', 'Valor Produção (R$)', 'Valor Total (R$)']],
         body: tableBody,
         theme: 'striped',
         headStyles: { fillColor: [138, 21, 21] },
@@ -713,8 +928,9 @@ const PlantaoMedico: React.FC = () => {
           1: { halign: 'left' },
           2: { halign: 'left' },
           3: { halign: 'center', fontStyle: 'bold' },
-          4: { halign: 'right' },
-          5: { halign: 'right', fontStyle: 'bold' }
+          4: { halign: 'center', fontStyle: 'bold' },
+          5: { halign: 'right' },
+          6: { halign: 'right', fontStyle: 'bold' }
         }
       });
 
@@ -752,15 +968,21 @@ const PlantaoMedico: React.FC = () => {
   // Exportar CSV
   const handleExportCSV = () => {
     if (viewMode === 'sintetico') {
-      const headers = ['Medico', 'Especialidade', 'Tipo_Plantao', 'Qtd_Plantoes', 'Valor_Medio_Reais', 'Valor_Total_Reais'];
-      const rows = plantaosSinteticos.map(s => [
-        s.MEDICO,
-        s.ESPECIALIDADE,
-        s.TIPO_PLANTAO,
-        s.QTD_PLANTOES,
-        s.VALOR_MEDIO,
-        s.VALOR_TOTAL
-      ]);
+      const headers = ['Medico', 'Especialidade', 'Tipo_Plantao', 'Tipos_Producao', 'Qtd_Plantoes', 'Valor_Producao_Total_Reais', 'Valor_Total_Reais'];
+      const rows = plantaosSinteticos.map(s => {
+        const tiposStr = s.producoes && s.producoes.length > 0
+          ? s.producoes.map(p => p.tipoProducao).join(', ')
+          : '';
+        return [
+          s.MEDICO,
+          s.ESPECIALIDADE,
+          s.TIPO_PLANTAO,
+          tiposStr,
+          s.QTD_PLANTOES,
+          s.valorProducaoTotal || 0,
+          s.VALOR_TOTAL
+        ];
+      });
 
       const csvContent = 
         'data:text/csv;charset=utf-8,\uFEFF' + 
@@ -1436,7 +1658,7 @@ const PlantaoMedico: React.FC = () => {
 
         <div className="overflow-x-auto">
           {viewMode === 'sintetico' ? (
-            /* TABELA SINTÉTICA (AGRUPADA) */
+            /* TABELA SINTÉTICA (AGRUPADA E COM PRODUÇÃO) */
             <table className="w-full text-left text-sm font-sans border-collapse">
               <thead>
                 <tr className="border-b border-border bg-muted/40 text-muted-foreground text-xs uppercase font-semibold">
@@ -1449,11 +1671,14 @@ const PlantaoMedico: React.FC = () => {
                   <th className="py-3 px-4 cursor-pointer hover:text-foreground" onClick={() => handleSortSintetico('TIPO_PLANTAO')}>
                     TIPO PLANTÃO
                   </th>
+                  <th className="py-3 px-4 text-center cursor-pointer hover:text-foreground" onClick={() => handleSortSintetico('tipoProducao' as any)}>
+                    Tipo Produção
+                  </th>
                   <th className="py-3 px-4 text-center cursor-pointer hover:text-foreground" onClick={() => handleSortSintetico('QTD_PLANTOES')}>
                     Qtd. Plantões
                   </th>
-                  <th className="py-3 px-4 text-right cursor-pointer hover:text-foreground" onClick={() => handleSortSintetico('VALOR_MEDIO')}>
-                    Valor Médio (R$)
+                  <th className="py-3 px-4 text-right cursor-pointer hover:text-foreground" onClick={() => handleSortSintetico('valorProducao' as any)}>
+                    Valor Produção (R$)
                   </th>
                   <th className="py-3 px-4 text-right cursor-pointer hover:text-foreground" onClick={() => handleSortSintetico('VALOR_TOTAL')}>
                     Valor Total (R$)
@@ -1464,7 +1689,7 @@ const PlantaoMedico: React.FC = () => {
               <tbody className="divide-y divide-border/60">
                 {loading ? (
                   <tr>
-                    <td colSpan={7} className="py-12 text-center text-muted-foreground">
+                    <td colSpan={8} className="py-12 text-center text-muted-foreground">
                       <div className="flex flex-col items-center gap-2">
                         <RefreshCw className="h-6 w-6 animate-spin text-[#8a1515]" />
                         <span>Carregando dados de plantão médico...</span>
@@ -1473,7 +1698,7 @@ const PlantaoMedico: React.FC = () => {
                   </tr>
                 ) : paginatedSinteticos.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="py-12 text-center text-muted-foreground">
+                    <td colSpan={8} className="py-12 text-center text-muted-foreground">
                       Nenhum registro agrupado encontrado com os filtros aplicados.
                     </td>
                   </tr>
@@ -1491,24 +1716,49 @@ const PlantaoMedico: React.FC = () => {
                       <td className="py-3 px-4 text-muted-foreground text-xs whitespace-nowrap">
                         {item.TIPO_PLANTAO || '-'}
                       </td>
+                      <td className="py-3 px-4 text-center whitespace-nowrap">
+                        {item.producoes && item.producoes.length > 0 ? (
+                          <div className="flex flex-wrap justify-center gap-1">
+                            {item.producoes.map((p, pIdx) => (
+                              <span key={p.id || pIdx} className={`inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full border ${
+                                p.tipoProducao === 'Procedimento'
+                                  ? 'bg-blue-500/10 text-blue-600 border-blue-500/20 dark:text-blue-400'
+                                  : p.tipoProducao === 'Consulta'
+                                  ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20 dark:text-emerald-400'
+                                  : p.tipoProducao === 'Parto'
+                                  ? 'bg-purple-500/10 text-purple-600 border-purple-500/20 dark:text-purple-400'
+                                  : 'bg-amber-500/10 text-amber-600 border-amber-500/20 dark:text-amber-400'
+                              }`}>
+                                {p.tipoProducao === 'Procedimento' && <ClipboardList className="h-3 w-3" />}
+                                {p.tipoProducao === 'Consulta' && <Stethoscope className="h-3 w-3" />}
+                                {p.tipoProducao === 'Parto' && <Baby className="h-3 w-3" />}
+                                {p.tipoProducao}
+                                {p.valorProducao > 0 && ` (${formatCurrency(p.valorProducao)})`}
+                              </span>
+                            ))}
+                          </div>
+                        ) : (
+                          <span className="text-muted-foreground/60 text-xs italic">Não informado</span>
+                        )}
+                      </td>
                       <td className="py-3 px-4 text-center font-bold text-foreground whitespace-nowrap">
                         <span className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 px-2.5 py-1 rounded-md border border-emerald-500/20 font-mono">
                           {item.QTD_PLANTOES} {item.QTD_PLANTOES === 1 ? 'plantão' : 'plantões'}
                         </span>
                       </td>
-                      <td className="py-3 px-4 text-right text-muted-foreground text-xs font-medium whitespace-nowrap">
-                        {formatCurrency(item.VALOR_MEDIO)}
+                      <td className="py-3 px-4 text-right font-semibold text-emerald-600 dark:text-emerald-400 text-xs whitespace-nowrap font-mono">
+                        {formatCurrency(item.valorProducaoTotal || 0)}
                       </td>
-                      <td className="py-3 px-4 text-right font-bold text-foreground text-base whitespace-nowrap">
+                      <td className="py-3 px-4 text-right font-bold text-[#8a1515] dark:text-[#f43f5e] text-base whitespace-nowrap">
                         {formatCurrency(item.VALOR_TOTAL)}
                       </td>
                       <td className="py-3 px-4 text-center">
                         <button
-                          onClick={() => setSelectedSinteticoItem(item)}
+                          onClick={() => handleOpenSinteticoModal(item)}
                           className="p-1.5 text-muted-foreground hover:text-[#8a1515] hover:bg-[#8a1515]/10 rounded-md transition-colors cursor-pointer"
-                          title="Ver Chamados Agrupados"
+                          title="Lançar Produção Médica / Editar"
                         >
-                          <Info className="h-4 w-4" />
+                          <Edit3 className="h-4 w-4" />
                         </button>
                       </td>
                     </tr>
@@ -1517,7 +1767,7 @@ const PlantaoMedico: React.FC = () => {
               </tbody>
             </table>
           ) : (
-            /* TABELA ANALÍTICA (DETALHADA) */
+            /* TABELA ANALÍTICA (DETALHADA - SIMPLES) */
             <table className="w-full text-left text-sm font-sans border-collapse">
               <thead>
                 <tr className="border-b border-border bg-muted/40 text-muted-foreground text-xs uppercase font-semibold">
@@ -1621,106 +1871,212 @@ const PlantaoMedico: React.FC = () => {
         )}
       </div>
 
-      {/* ── MODAL DETALHES SINTÉTICOS ── */}
+      {/* ── MODAL PRODUÇÃO MÉDICA SINTÉTICA ── */}
       <AnimatePresence>
-        {selectedSinteticoItem && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              className="bg-card dark:bg-slate-900 border border-border rounded-xl shadow-2xl max-w-2xl w-full p-6 space-y-5"
-            >
-              <div className="flex justify-between items-center border-b border-border pb-3">
-                <div className="flex items-center gap-2">
-                  <Layers className="h-5 w-5 text-[#8a1515] dark:text-[#f43f5e]" />
+        {selectedSinteticoItem && (() => {
+          const basePlantaoTotal = selectedSinteticoItem.ITEMS.reduce((acc, p) => acc + p.VALOR, 0);
+          const currentProdValTotal = editProducoesList.reduce((acc, row) => {
+            const cleanStr = String(row.valorProducao).replace(/[R$\s]/g, '').replace(/\./g, '').replace(',', '.');
+            const numVal = parseFloat(cleanStr);
+            return acc + (isNaN(numVal) ? 0 : numVal);
+          }, 0);
+          const calculatedFinalTotal = basePlantaoTotal + currentProdValTotal;
+
+          return (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.95 }}
+                className="bg-card dark:bg-slate-900 border border-border rounded-xl shadow-2xl max-w-2xl w-full p-6 space-y-5"
+              >
+                <div className="flex justify-between items-center border-b border-border pb-3">
+                  <div className="flex items-center gap-2.5">
+                    <div className="p-2 bg-[#8a1515]/10 rounded-lg text-[#8a1515] dark:text-[#f43f5e] border border-[#8a1515]/20">
+                      <Edit3 className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <h3 className="text-lg font-bold text-foreground font-sans">
+                        Lançamento de Produção Médica (Sintético)
+                      </h3>
+                      <p className="text-xs text-muted-foreground font-sans">
+                        Adicione um ou mais tipos de produção e valores que serão somados ao total dos plantões.
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setSelectedSinteticoItem(null)}
+                    className="p-1 rounded-lg hover:bg-muted text-muted-foreground transition-colors cursor-pointer"
+                  >
+                    <X className="h-5 w-5" />
+                  </button>
+                </div>
+
+                {/* Resumo do Grupo */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-muted/30 p-3.5 rounded-lg border border-border/40 font-sans text-xs">
                   <div>
-                    <h3 className="text-lg font-bold text-foreground font-sans">
-                      Resumo Sintético do Médico
-                    </h3>
-                    <p className="text-xs text-muted-foreground font-sans">
-                      Detalhamento dos plantões acumulados para este médico e setor
-                    </p>
+                    <span className="text-muted-foreground block font-medium">Médico / Plantonista</span>
+                    <span className="font-bold text-foreground text-sm">{selectedSinteticoItem.MEDICO}</span>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground block font-medium">Especialidade</span>
+                    <span className="font-semibold text-foreground">{selectedSinteticoItem.ESPECIALIDADE}</span>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground block font-medium">Tipo Plantão</span>
+                    <span className="font-semibold text-foreground">{selectedSinteticoItem.TIPO_PLANTAO}</span>
                   </div>
                 </div>
-                <button
-                  onClick={() => setSelectedSinteticoItem(null)}
-                  className="p-1 rounded-lg hover:bg-muted text-muted-foreground transition-colors cursor-pointer"
-                >
-                  <X className="h-5 w-5" />
-                </button>
-              </div>
 
-              {/* Informações Principais */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-muted/30 p-3.5 rounded-lg border border-border/40 font-sans text-xs">
-                <div>
-                  <span className="text-muted-foreground block font-medium">Médico / Plantonista</span>
-                  <span className="font-bold text-foreground text-sm">{selectedSinteticoItem.MEDICO}</span>
-                </div>
-                <div>
-                  <span className="text-muted-foreground block font-medium">Especialidade</span>
-                  <span className="font-semibold text-foreground">{selectedSinteticoItem.ESPECIALIDADE}</span>
-                </div>
-                <div>
-                  <span className="text-muted-foreground block font-medium">Tipo Plantão</span>
-                  <span className="font-semibold text-foreground">{selectedSinteticoItem.TIPO_PLANTAO}</span>
-                </div>
-              </div>
+                {/* Form de Múltiplos Tipos de Produção e Valores */}
+                <div className="space-y-3 pt-1 font-sans">
+                  <div className="flex justify-between items-center">
+                    <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground block">
+                      Lançamentos de Produção ({editProducoesList.length}) *
+                    </label>
+                    <button
+                      type="button"
+                      onClick={handleAddProducaoRow}
+                      className="flex items-center gap-1 text-xs font-semibold text-[#8a1515] dark:text-[#f43f5e] hover:underline cursor-pointer"
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                      <span>+ Adicionar Produção</span>
+                    </button>
+                  </div>
 
-              {/* Totais Agregados */}
-              <div className="grid grid-cols-3 gap-3">
-                <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-lg text-center font-sans">
-                  <span className="text-[10px] text-muted-foreground font-medium uppercase block">Total Plantões</span>
-                  <span className="text-lg font-bold text-emerald-600 dark:text-emerald-400">
-                    {selectedSinteticoItem.QTD_PLANTOES}
-                  </span>
-                </div>
-                <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg text-center font-sans">
-                  <span className="text-[10px] text-muted-foreground font-medium uppercase block">Valor Médio</span>
-                  <span className="text-lg font-bold text-amber-600 dark:text-amber-400">
-                    {formatCurrency(selectedSinteticoItem.VALOR_MEDIO)}
-                  </span>
-                </div>
-                <div className="p-3 bg-[#8a1515]/10 border border-[#8a1515]/20 rounded-lg text-center font-sans">
-                  <span className="text-[10px] text-muted-foreground font-medium uppercase block">Valor Total Sumarizado</span>
-                  <span className="text-lg font-bold text-[#8a1515] dark:text-[#f43f5e]">
-                    {formatCurrency(selectedSinteticoItem.VALOR_TOTAL)}
-                  </span>
-                </div>
-              </div>
-
-              {/* Lista dos Lançamentos Integrantes */}
-              <div className="space-y-2">
-                <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground font-sans">
-                  Lançamentos Individuais Integrantes ({selectedSinteticoItem.ITEMS.length})
-                </h4>
-                <div className="max-h-[220px] overflow-y-auto border border-border rounded-lg divide-y divide-border/60 custom-scrollbar">
-                  {selectedSinteticoItem.ITEMS.map((item, idx) => (
-                    <div key={item.id || idx} className="flex justify-between items-center px-4 py-2.5 text-xs hover:bg-muted/30 font-sans">
-                      <div className="flex items-center gap-3">
-                        <span className="font-mono text-muted-foreground">{formatDate(item.DT_CHAMADO)}</span>
-                        <span className="text-foreground font-medium">{item.TIPO_PLANTAO}</span>
+                  <div className="space-y-2.5 max-h-[190px] overflow-y-auto pr-1 custom-scrollbar">
+                    {editProducoesList.length === 0 ? (
+                      <div className="p-4 bg-muted/20 border border-dashed border-border rounded-xl text-center space-y-2">
+                        <p className="text-xs text-muted-foreground">Nenhuma produção cadastrada para este grupo de plantão.</p>
+                        <button
+                          type="button"
+                          onClick={handleAddProducaoRow}
+                          className="inline-flex items-center gap-1.5 text-xs font-bold text-[#8a1515] dark:text-[#f43f5e] hover:underline cursor-pointer"
+                        >
+                          <Plus className="h-4 w-4" />
+                          <span>Adicionar Produção</span>
+                        </button>
                       </div>
-                      <span className="font-bold text-foreground">{formatCurrency(item.VALOR)}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
+                    ) : (
+                      editProducoesList.map((prodRow, index) => (
+                        <div key={prodRow.id} className="p-3 bg-muted/30 border border-border rounded-xl space-y-2 relative">
+                          <div className="flex justify-between items-center">
+                            <span className="text-[11px] font-bold text-muted-foreground">
+                              Produção #{index + 1}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveProducaoRow(prodRow.id)}
+                              className="text-muted-foreground hover:text-red-500 p-1 transition-colors cursor-pointer"
+                              title="Remover este item de produção"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
 
-              <div className="flex justify-end pt-2">
-                <button
-                  onClick={() => setSelectedSinteticoItem(null)}
-                  className="bg-primary text-primary-foreground hover:bg-primary/95 px-4 py-2 rounded-lg text-xs font-semibold font-sans transition-colors cursor-pointer"
-                >
-                  Fechar
-                </button>
-              </div>
-            </motion.div>
-          </div>
-        )}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <div>
+                            <label className="text-[10px] font-semibold text-muted-foreground block mb-1">
+                              Tipo de Produção
+                            </label>
+                            <select
+                              value={prodRow.tipoProducao}
+                              onChange={(e) => handleUpdateProducaoRow(prodRow.id, 'tipoProducao', e.target.value)}
+                              className="w-full bg-background border border-border focus:border-[#8a1515] rounded-lg px-2.5 py-1.5 text-xs font-semibold text-foreground outline-none cursor-pointer"
+                            >
+                              <option value="Procedimento">1 - Procedimento (Exames/Cirurgias)</option>
+                              <option value="Consulta">2 - Consulta (Atendimento clínico)</option>
+                              <option value="Parto">3 - Parto (Procedimento obstétrico)</option>
+                            </select>
+                          </div>
+
+                          <div>
+                            <label className="text-[10px] font-semibold text-muted-foreground block mb-1">
+                              Valor Adicional (R$)
+                            </label>
+                            <div className="relative">
+                              <span className="absolute left-2.5 top-1.5 text-xs font-bold text-emerald-600 font-mono">R$</span>
+                              <input
+                                type="text"
+                                value={prodRow.valorProducao}
+                                onChange={(e) => handleUpdateProducaoRow(prodRow.id, 'valorProducao', e.target.value)}
+                                placeholder="0,00"
+                                className="w-full bg-background border border-border focus:border-[#8a1515] rounded-lg pl-8 pr-2.5 py-1 text-xs font-bold text-foreground font-mono outline-none"
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )))}
+                  </div>
+
+                  {/* CÁLCULO EM TEMPO REAL */}
+                  <div className="p-3 bg-muted/40 rounded-lg border border-border flex justify-between items-center text-xs">
+                    <div>
+                      <span className="text-muted-foreground block font-medium">Valor Base Plantões ({selectedSinteticoItem.QTD_PLANTOES}):</span>
+                      <span className="font-semibold text-foreground font-mono">{formatCurrency(basePlantaoTotal)}</span>
+                    </div>
+                    <div className="text-right">
+                      <span className="text-muted-foreground block font-medium">Valor Total Final (Plantões + Produções):</span>
+                      <span className="font-bold text-base text-[#8a1515] dark:text-[#f43f5e] font-mono">{formatCurrency(calculatedFinalTotal)}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Lista dos Lançamentos Integrantes */}
+                <div className="space-y-1.5 pt-1">
+                  <h4 className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground font-sans">
+                    Lançamentos Individuais Integrantes ({selectedSinteticoItem.ITEMS.length})
+                  </h4>
+                  <div className="max-h-[110px] overflow-y-auto border border-border rounded-lg divide-y divide-border/60 custom-scrollbar">
+                    {selectedSinteticoItem.ITEMS.map((item, idx) => (
+                      <div key={item.id || idx} className="flex justify-between items-center px-3 py-1.5 text-xs hover:bg-muted/30 font-sans">
+                        <div className="flex items-center gap-3">
+                          <span className="font-mono text-muted-foreground">{formatDate(item.DT_CHAMADO)}</span>
+                          <span className="text-foreground font-medium">{item.TIPO_PLANTAO}</span>
+                        </div>
+                        <span className="font-bold text-foreground">{formatCurrency(item.VALOR)}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Botões do Modal */}
+                <div className="flex justify-between items-center pt-3 border-t border-border">
+                  {saveSuccessMessage ? (
+                    <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-600 dark:text-emerald-400">
+                      <CheckCircle2 className="h-4 w-4" />
+                      <span>Produções salvas com sucesso!</span>
+                    </div>
+                  ) : (
+                    <div />
+                  )}
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedSinteticoItem(null)}
+                      className="px-4 py-2 rounded-lg text-xs font-semibold border border-border hover:bg-muted text-muted-foreground transition-colors cursor-pointer"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleSaveSinteticoProducao}
+                      className="flex items-center gap-1.5 bg-[#8a1515] hover:bg-[#6b1010] text-white px-4 py-2 rounded-lg text-xs font-bold transition-all shadow-sm active:scale-95 cursor-pointer"
+                    >
+                      <Save className="h-4 w-4" />
+                      <span>Salvar Produções</span>
+                    </button>
+                  </div>
+                </div>
+              </motion.div>
+            </div>
+          );
+        })()}
       </AnimatePresence>
 
-      {/* ── MODAL DETALHES ── */}
+      {/* ── MODAL DETALHES ANALÍTICO (SIMPLES) ── */}
       <AnimatePresence>
         {selectedItem && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
