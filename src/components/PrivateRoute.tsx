@@ -26,6 +26,11 @@ const PrivateRoute: React.FC = () => {
     if ((session.user?.email === 'pa@email.com' || profile?.email === 'pa@email.com') && location.pathname !== '/pronto-atendimento') {
       return <Navigate to="/pronto-atendimento" replace />;
     }
+    if ((session.user?.email === 'tvpa@email.com' || profile?.email === 'tvpa@email.com') && 
+        location.pathname !== '/pronto-atendimento/tv' && 
+        location.pathname !== '/painel-pa') {
+      return <Navigate to="/pronto-atendimento/tv" replace />;
+    }
     if (profile?.setor_usuarios && location.pathname !== '/pacientes-internados') {
       return <Navigate to="/pacientes-internados" replace />;
     }
