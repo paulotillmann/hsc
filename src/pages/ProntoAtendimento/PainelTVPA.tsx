@@ -314,10 +314,10 @@ export default function PainelTVPA() {
         {/* Relógio na Cor Preta */}
         <div className="flex items-center gap-6">
           <div className="flex flex-col items-end">
-            <span className="text-[16pt] font-mono font-black tracking-tight text-black">
+            <span className="text-[20pt] font-black tracking-wide text-black">
               {currentTime.toLocaleTimeString('pt-BR')}
             </span>
-            <span className="text-xs lg:text-sm font-bold text-black capitalize mt-0.5">
+            <span className="text-[16px] lg:text-[18px] font-black tracking-wide text-black capitalize mt-0.5">
               {currentTime.toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit', month: 'long' })}
             </span>
           </div>
@@ -347,69 +347,69 @@ export default function PainelTVPA() {
         </main>
 
         {/* COLUNA/LINHA DE INDICADORES (20%) */}
-        <aside className="w-full h-[20%] landscape:w-[20%] landscape:h-full bg-slate-200/80 border-t landscape:border-t-0 landscape:border-l border-slate-300 p-2 md:p-3 landscape:py-3 landscape:px-3 flex flex-row landscape:flex-col justify-between items-center landscape:items-stretch gap-2 md:gap-3 landscape:gap-2.5 shrink-0 z-10 shadow-sm backdrop-blur-md overflow-x-auto landscape:overflow-x-hidden landscape:overflow-y-auto">
+        <aside className="w-full h-[20%] landscape:w-[20%] landscape:h-full bg-slate-200/80 border-t landscape:border-t-0 landscape:border-l border-slate-300 p-[28px] md:p-[32px] landscape:py-[32px] landscape:px-[32px] flex flex-row landscape:flex-col justify-between items-center landscape:items-stretch gap-[36px] md:gap-[40px] landscape:gap-[38px] shrink-0 z-10 shadow-sm backdrop-blur-md overflow-x-auto landscape:overflow-x-hidden landscape:overflow-y-auto">
           {/* Card 1: Pacientes no PA */}
-          <div className="flex-1 min-w-[130px] sm:min-w-[150px] max-w-[280px] landscape:max-w-none h-[85px] sm:h-[95px] landscape:h-auto bg-white border border-slate-200 border-l-4 border-l-blue-500 rounded-xl p-2.5 sm:p-3 landscape:py-3.5 landscape:px-3 flex items-center justify-between shadow-sm relative overflow-hidden group hover:border-blue-500/40 transition-all duration-300">
+          <div className="flex-1 min-w-[88px] sm:min-w-[108px] max-w-[238px] landscape:max-w-none h-[85px] sm:h-[95px] landscape:h-auto bg-white border border-slate-200 border-l-4 border-l-blue-500 rounded-xl p-2.5 sm:p-3 landscape:py-3.5 landscape:px-3 flex items-center justify-between shadow-sm relative overflow-hidden group hover:border-blue-500/40 transition-all duration-300">
             <div className="flex flex-col min-w-0">
-              <span className="text-[9px] sm:text-[10px] md:text-[11px] landscape:text-xs landscape:md:text-sm font-bold text-[#851c1c] uppercase tracking-wider leading-tight">Pacientes no PA</span>
-              <span className="text-lg sm:text-xl md:text-2xl landscape:text-2xl landscape:md:text-3xl landscape:lg:text-4xl font-black font-extrabold tracking-tight text-slate-900 mt-0.5 sm:mt-1">
+              <span className="text-[17px] sm:text-[18px] md:text-[19px] landscape:text-[20px] landscape:md:text-[22px] font-bold text-[#851c1c] uppercase tracking-wider leading-tight">Pacientes no PA</span>
+              <span className="text-3xl sm:text-3xl md:text-4xl landscape:text-4xl landscape:md:text-5xl landscape:lg:text-6xl font-black font-extrabold tracking-tight text-slate-900 mt-0.5 sm:mt-1">
                 {totalAtivos}
               </span>
             </div>
             <div className="text-blue-500/25 group-hover:text-blue-500/45 transition-colors shrink-0 ml-2">
-              <Users className="h-5 w-5 sm:h-6 sm:w-6 landscape:h-6 landscape:w-6 landscape:md:h-8 landscape:md:w-8 landscape:lg:h-10 landscape:lg:w-10" />
+              <Users className="h-[30px] w-[30px] sm:h-[34px] sm:w-[34px] landscape:h-[34px] landscape:w-[34px] landscape:md:h-[42px] landscape:md:w-[42px] landscape:lg:h-[50px] landscape:lg:w-[50px]" />
             </div>
           </div>
 
           {/* Card 2: Aguardando Médico */}
-          <div className="flex-1 min-w-[130px] sm:min-w-[150px] max-w-[280px] landscape:max-w-none h-[85px] sm:h-[95px] landscape:h-auto bg-white border border-slate-200 border-l-4 border-l-amber-500 rounded-xl p-2.5 sm:p-3 landscape:py-3.5 landscape:px-3 flex items-center justify-between shadow-sm relative overflow-hidden group hover:border-amber-500/40 transition-all duration-300">
+          <div className="flex-1 min-w-[88px] sm:min-w-[108px] max-w-[238px] landscape:max-w-none h-[85px] sm:h-[95px] landscape:h-auto bg-white border border-slate-200 border-l-4 border-l-amber-500 rounded-xl p-2.5 sm:p-3 landscape:py-3.5 landscape:px-3 flex items-center justify-between shadow-sm relative overflow-hidden group hover:border-amber-500/40 transition-all duration-300">
             <div className="flex flex-col min-w-0">
-              <span className="text-[9px] sm:text-[10px] md:text-[11px] landscape:text-xs landscape:md:text-sm font-bold text-[#851c1c] uppercase tracking-wider leading-tight">Aguardando Médico</span>
-              <span className="text-lg sm:text-xl md:text-2xl landscape:text-2xl landscape:md:text-3xl landscape:lg:text-4xl font-black font-extrabold tracking-tight text-slate-900 mt-0.5 sm:mt-1">
+              <span className="text-[17px] sm:text-[18px] md:text-[19px] landscape:text-[20px] landscape:md:text-[22px] font-bold text-[#851c1c] uppercase tracking-wider leading-tight">Aguardando Médico</span>
+              <span className="text-3xl sm:text-3xl md:text-4xl landscape:text-4xl landscape:md:text-5xl landscape:lg:text-6xl font-black font-extrabold tracking-tight text-slate-900 mt-0.5 sm:mt-1">
                 {aguardandoAtendimento}
               </span>
             </div>
             <div className="text-amber-500/25 group-hover:text-amber-500/45 transition-colors shrink-0 ml-2">
-              <Hourglass className="h-5 w-5 sm:h-6 sm:w-6 landscape:h-6 landscape:w-6 landscape:md:h-8 landscape:md:w-8 landscape:lg:h-10 landscape:lg:w-10 animate-spin-slow" />
+              <Hourglass className="h-[30px] w-[30px] sm:h-[34px] sm:w-[34px] landscape:h-[34px] landscape:w-[34px] landscape:md:h-[42px] landscape:md:w-[42px] landscape:lg:h-[50px] landscape:lg:w-[50px] animate-spin-slow" />
             </div>
           </div>
 
           {/* Card 3: Em Atendimento */}
-          <div className="flex-1 min-w-[130px] sm:min-w-[150px] max-w-[280px] landscape:max-w-none h-[85px] sm:h-[95px] landscape:h-auto bg-white border border-slate-200 border-l-4 border-l-emerald-500 rounded-xl p-2.5 sm:p-3 landscape:py-3.5 landscape:px-3 flex items-center justify-between shadow-sm relative overflow-hidden group hover:border-emerald-500/40 transition-all duration-300">
+          <div className="flex-1 min-w-[88px] sm:min-w-[108px] max-w-[238px] landscape:max-w-none h-[85px] sm:h-[95px] landscape:h-auto bg-white border border-slate-200 border-l-4 border-l-emerald-500 rounded-xl p-2.5 sm:p-3 landscape:py-3.5 landscape:px-3 flex items-center justify-between shadow-sm relative overflow-hidden group hover:border-emerald-500/40 transition-all duration-300">
             <div className="flex flex-col min-w-0">
-              <span className="text-[9px] sm:text-[10px] md:text-[11px] landscape:text-xs landscape:md:text-sm font-bold text-[#851c1c] uppercase tracking-wider leading-tight">Em Atendimento</span>
-              <span className="text-lg sm:text-xl md:text-2xl landscape:text-2xl landscape:md:text-3xl landscape:lg:text-4xl font-black font-extrabold tracking-tight text-slate-900 mt-0.5 sm:mt-1">
+              <span className="text-[17px] sm:text-[18px] md:text-[19px] landscape:text-[20px] landscape:md:text-[22px] font-bold text-[#851c1c] uppercase tracking-wider leading-tight">Em Atendimento</span>
+              <span className="text-3xl sm:text-3xl md:text-4xl landscape:text-4xl landscape:md:text-5xl landscape:lg:text-6xl font-black font-extrabold tracking-tight text-slate-900 mt-0.5 sm:mt-1">
                 {emAtendimentoMedico}
               </span>
             </div>
             <div className="text-emerald-500/25 group-hover:text-emerald-500/45 transition-colors shrink-0 ml-2">
-              <HeartPulse className="h-5 w-5 sm:h-6 sm:w-6 landscape:h-6 landscape:w-6 landscape:md:h-8 landscape:md:w-8 landscape:lg:h-10 landscape:lg:w-10" />
+              <HeartPulse className="h-[30px] w-[30px] sm:h-[34px] sm:w-[34px] landscape:h-[34px] landscape:w-[34px] landscape:md:h-[42px] landscape:md:w-[42px] landscape:lg:h-[50px] landscape:lg:w-[50px]" />
             </div>
           </div>
 
           {/* Card 4: Média de Espera */}
-          <div className="flex-1 min-w-[130px] sm:min-w-[150px] max-w-[280px] landscape:max-w-none h-[85px] sm:h-[95px] landscape:h-auto bg-white border border-slate-200 border-l-4 border-l-cyan-500 rounded-xl p-2.5 sm:p-3 landscape:py-3.5 landscape:px-3 flex items-center justify-between shadow-sm relative overflow-hidden group hover:border-cyan-500/40 transition-all duration-300">
+          <div className="flex-1 min-w-[88px] sm:min-w-[108px] max-w-[238px] landscape:max-w-none h-[85px] sm:h-[95px] landscape:h-auto bg-white border border-slate-200 border-l-4 border-l-cyan-500 rounded-xl p-2.5 sm:p-3 landscape:py-3.5 landscape:px-3 flex items-center justify-between shadow-sm relative overflow-hidden group hover:border-cyan-500/40 transition-all duration-300">
             <div className="flex flex-col min-w-0">
-              <span className="text-[9px] sm:text-[10px] md:text-[11px] landscape:text-xs landscape:md:text-sm font-bold text-[#851c1c] uppercase tracking-wider leading-tight">Média de Espera</span>
-              <span className="text-lg sm:text-xl md:text-2xl landscape:text-2xl landscape:md:text-3xl landscape:lg:text-4xl font-black font-extrabold tracking-tight text-slate-900 mt-0.5 sm:mt-1">
+              <span className="text-[17px] sm:text-[18px] md:text-[19px] landscape:text-[20px] landscape:md:text-[22px] font-bold text-[#851c1c] uppercase tracking-wider leading-tight">Média de Espera</span>
+              <span className="text-3xl sm:text-3xl md:text-4xl landscape:text-4xl landscape:md:text-5xl landscape:lg:text-6xl font-black font-extrabold tracking-tight text-slate-900 mt-0.5 sm:mt-1">
                 {formatWaitTime(tempoMedioEsperaMinutos)}
               </span>
             </div>
             <div className="text-cyan-500/25 group-hover:text-cyan-500/45 transition-colors shrink-0 ml-2">
-              <Clock className="h-5 w-5 sm:h-6 sm:w-6 landscape:h-6 landscape:w-6 landscape:md:h-8 landscape:md:w-8 landscape:lg:h-10 landscape:lg:w-10" />
+              <Clock className="h-[30px] w-[30px] sm:h-[34px] sm:w-[34px] landscape:h-[34px] landscape:w-[34px] landscape:md:h-[42px] landscape:md:w-[42px] landscape:lg:h-[50px] landscape:lg:w-[50px]" />
             </div>
           </div>
 
           {/* Card 5: Média Atendimento */}
-          <div className="flex-1 min-w-[130px] sm:min-w-[150px] max-w-[280px] landscape:max-w-none h-[85px] sm:h-[95px] landscape:h-auto bg-white border border-slate-200 border-l-4 border-l-violet-500 rounded-xl p-2.5 sm:p-3 landscape:py-3.5 landscape:px-3 flex items-center justify-between shadow-sm relative overflow-hidden group hover:border-violet-500/40 transition-all duration-300">
+          <div className="flex-1 min-w-[88px] sm:min-w-[108px] max-w-[238px] landscape:max-w-none h-[85px] sm:h-[95px] landscape:h-auto bg-white border border-slate-200 border-l-4 border-l-violet-500 rounded-xl p-2.5 sm:p-3 landscape:py-3.5 landscape:px-3 flex items-center justify-between shadow-sm relative overflow-hidden group hover:border-violet-500/40 transition-all duration-300">
             <div className="flex flex-col min-w-0">
-              <span className="text-[9px] sm:text-[10px] md:text-[11px] landscape:text-xs landscape:md:text-sm font-bold text-[#851c1c] uppercase tracking-wider leading-tight">Média Atendimento</span>
-              <span className="text-lg sm:text-xl md:text-2xl landscape:text-2xl landscape:md:text-3xl landscape:lg:text-4xl font-black font-extrabold tracking-tight text-slate-900 mt-0.5 sm:mt-1">
+              <span className="text-[17px] sm:text-[18px] md:text-[19px] landscape:text-[20px] landscape:md:text-[22px] font-bold text-[#851c1c] uppercase tracking-wider leading-tight">Média Atendimento</span>
+              <span className="text-3xl sm:text-3xl md:text-4xl landscape:text-4xl landscape:md:text-5xl landscape:lg:text-6xl font-black font-extrabold tracking-tight text-slate-900 mt-0.5 sm:mt-1">
                 {formatWaitTime(tempoMedioAtendimentoMinutos)}
               </span>
             </div>
             <div className="text-violet-500/25 group-hover:text-violet-500/45 transition-colors shrink-0 ml-2">
-              <Activity className="h-5 w-5 sm:h-6 sm:w-6 landscape:h-6 landscape:w-6 landscape:md:h-8 landscape:md:w-8 landscape:lg:h-10 landscape:lg:w-10 animate-pulse" />
+              <Activity className="h-[30px] w-[30px] sm:h-[34px] sm:w-[34px] landscape:h-[34px] landscape:w-[34px] landscape:md:h-[42px] landscape:md:w-[42px] landscape:lg:h-[50px] landscape:lg:w-[50px] animate-pulse" />
             </div>
           </div>
         </aside>
