@@ -314,7 +314,7 @@ export default function PainelTVPA() {
         {/* Relógio na Cor Preta */}
         <div className="flex items-center gap-6">
           <div className="flex flex-col items-end">
-            <span className="text-[16pt] font-mono font-black tracking-tight text-black">
+            <span className="text-[17pt] font-mono font-black tracking-tight text-black">
               {currentTime.toLocaleTimeString('pt-BR')}
             </span>
             <span className="text-xs lg:text-sm font-bold text-black capitalize mt-0.5">
