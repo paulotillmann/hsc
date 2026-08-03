@@ -11,6 +11,12 @@ interface N8NPacientePA {
   DT_ENTRADA: string | null;
   DT_ALTA: string | null;
   DS_CLINICA: string | null;
+  DS_CONVENIO?: string | null;
+  ds_convenio?: string | null;
+  CONVENIO?: string | null;
+  convenio?: string | null;
+  NM_CONVENIO?: string | null;
+  nm_convenio?: string | null;
   HR_INICIO_CONSULTA?: string | null;
   hr_inicio_consulta?: string | null;
   DT_LIB_MEDICO: string | null;
@@ -26,6 +32,7 @@ interface DBPacientePA {
   dt_entrada: string | null;
   dt_alta: string | null;
   ds_clinica: string | null;
+  ds_convenio: string | null;
   hr_inicio_consulta: string | null;
   dt_lib_medico: string | null;
   ie_status: string | null;
@@ -141,6 +148,7 @@ Deno.serve(async (req: Request) => {
         dt_entrada: parseDate(item.DT_ENTRADA),
         dt_alta: parseDate(item.DT_ALTA),
         ds_clinica: item.DS_CLINICA ? item.DS_CLINICA.trim() : null,
+        ds_convenio: (item.DS_CONVENIO || item.ds_convenio || item.CONVENIO || item.convenio || item.NM_CONVENIO || item.nm_convenio)?.trim() || null,
         hr_inicio_consulta: parseConsultaDate(item.HR_INICIO_CONSULTA || item.hr_inicio_consulta || null, item.DT_ENTRADA),
         dt_lib_medico: parseDate(item.DT_LIB_MEDICO),
         ie_status: item.IE_STATUS ? item.IE_STATUS.trim() : null,

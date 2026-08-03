@@ -19,10 +19,16 @@ import {
   Database, 
   FileText,
   AlertTriangle,
-  Filter
+  Filter,
+  FileSpreadsheet,
+  Download
 } from 'lucide-react';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 import { webhookService } from '../../services/webhookService';
 import { VisaoGeralCard } from '../../components/recepcao/VisaoGeralCard';
+
+const months = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
 
 interface Equipamento {
   NR_SEQUENCIA: number;
@@ -41,6 +47,8 @@ interface Equipamento {
   DS_OBSERVACAO_TENSAO: string | null;
   INICIO_CONTRATO: string | null;
   FIM_CONTRATO: string | null;
+  FORNECEDOR?: string | null;
+  fornecedor?: string | null;
 }
 
 export default function Equipamentos() {
@@ -50,14 +58,16 @@ export default function Equipamentos() {
   
   // Filtros
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedTipo, setSelectedTipo] = useState('');
   const [selectedPropriedade, setSelectedPropriedade] = useState('');
   const [selectedLocalizacoes, setSelectedLocalizacoes] = useState<string[]>([]);
   const [selectedCategorias, setSelectedCategorias] = useState<string[]>([]);
+  const [selectedFornecedores, setSelectedFornecedores] = useState<string[]>([]);
   const [isCategoriaDropdownOpen, setIsCategoriaDropdownOpen] = useState(false);
   const [isLocalizacaoDropdownOpen, setIsLocalizacaoDropdownOpen] = useState(false);
-  const [startGarantia, setStartGarantia] = useState('');
-  const [endGarantia, setEndGarantia] = useState('');
+  const [isFornecedorDropdownOpen, setIsFornecedorDropdownOpen] = useState(false);
+  const [selectedMonth, setSelectedMonth] = useState<number | null>(null);
+  const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
+  const [isDatePickerOpen, setIsDatePickerOpen] = useState(false);
   
   // Paginação e Ordenação
   const [currentPage, setCurrentPage] = useState(1);
@@ -68,6 +78,7 @@ export default function Equipamentos() {
   // Modal de Detalhes
   const [selectedEquipamento, setSelectedEquipamento] = useState<Equipamento | null>(null);
   const [copiedAnydesk, setCopiedAnydesk] = useState(false);
+  const [isExportingPdf, setIsExportingPdf] = useState(false);
 
   const loadData = async (showRefreshIndicator = false) => {
     if (showRefreshIndicator) {
@@ -101,6 +112,12 @@ export default function Equipamentos() {
       if (!target.closest('.localizacao-dropdown-container')) {
         setIsLocalizacaoDropdownOpen(false);
       }
+      if (!target.closest('.fornecedor-dropdown-container')) {
+        setIsFornecedorDropdownOpen(false);
+      }
+      if (!target.closest('.datepicker-dropdown-container')) {
+        setIsDatePickerOpen(false);
+      }
     };
     document.addEventListener('mousedown', handleOutsideClick);
     return () => document.removeEventListener('mousedown', handleOutsideClick);
@@ -109,34 +126,36 @@ export default function Equipamentos() {
   // Resetar todos os filtros
   const handleResetFilters = () => {
     setSearchTerm('');
-    setSelectedTipo('');
     setSelectedPropriedade('');
     setSelectedLocalizacoes([]);
     setSelectedCategorias([]);
-    setStartGarantia('');
-    setEndGarantia('');
+    setSelectedFornecedores([]);
+    setSelectedMonth(null);
+    setSelectedYear(new Date().getFullYear());
     setCurrentPage(1);
   };
 
   // Listas de opções para filtros (obtidas dinamicamente a partir dos dados)
   const filterOptions = useMemo(() => {
-    const tipos = new Set<string>();
     const propriedades = new Set<string>();
     const localizacoes = new Set<string>();
     const categorias = new Set<string>();
-
+    const fornecedores = new Set<string>();
+ 
     equipamentos.forEach(e => {
-      if (e.TIPO) tipos.add(e.TIPO.trim());
       if (e.PROPRIEDADE) propriedades.add(e.PROPRIEDADE.trim());
       if (e.LOCALIZACAO) localizacoes.add(e.LOCALIZACAO.trim());
       if (e.DS_CATEGORIA) categorias.add(e.DS_CATEGORIA.trim());
+      
+      const forn = e.FORNECEDOR || e.fornecedor || e['OBTER_NOME_PJ(A.CD_CGC_TERC)'] || e['OBTER_NOME_PJ(CD_CGC_TERC)'];
+      if (forn) fornecedores.add(forn.trim());
     });
 
     return {
-      tipos: Array.from(tipos).sort(),
       propriedades: Array.from(propriedades).sort(),
       localizacoes: Array.from(localizacoes).sort(),
-      categorias: Array.from(categorias).sort()
+      categorias: Array.from(categorias).sort(),
+      fornecedores: Array.from(fornecedores).sort()
     };
   }, [equipamentos]);
 
@@ -167,39 +186,49 @@ export default function Equipamentos() {
           e.PROCESSADOR?.toLowerCase().includes(term) ||
           e.MEMORIA?.toLowerCase().includes(term) ||
           e.DS_CATEGORIA?.toLowerCase().includes(term) ||
-          e.NR_SEQUENCIA?.toString().includes(term);
+          e.NR_SEQUENCIA?.toString().includes(term) ||
+          e.FORNECEDOR?.toLowerCase().includes(term) ||
+          e.fornecedor?.toLowerCase().includes(term) ||
+          e['OBTER_NOME_PJ(A.CD_CGC_TERC)']?.toLowerCase().includes(term) ||
+          e['OBTER_NOME_PJ(CD_CGC_TERC)']?.toLowerCase().includes(term);
 
         // Filtros estruturados
-        const matchesTipo = !selectedTipo || e.TIPO?.trim() === selectedTipo;
         const matchesPropriedade = !selectedPropriedade || e.PROPRIEDADE?.trim() === selectedPropriedade;
         const matchesLocalizacao = selectedLocalizacoes.length === 0 || 
           (e.LOCALIZACAO && selectedLocalizacoes.includes(e.LOCALIZACAO.trim()));
         const matchesCategoria = selectedCategorias.length === 0 || 
           (e.DS_CATEGORIA && selectedCategorias.includes(e.DS_CATEGORIA.trim()));
+        const matchesFornecedor = selectedFornecedores.length === 0 || 
+          (() => {
+            const forn = e.FORNECEDOR || e.fornecedor || e['OBTER_NOME_PJ(A.CD_CGC_TERC)'] || e['OBTER_NOME_PJ(CD_CGC_TERC)'];
+            return !!forn && selectedFornecedores.includes(forn.trim());
+          })();
 
-        // Filtro de Datas de Contrato/Garantia
+        // Filtro de Mês/Ano de Fim de Contrato
         let matchesGarantia = true;
-        if (startGarantia) {
-          if (e.INICIO_CONTRATO) {
-            const dateEquipStart = new Date(e.INICIO_CONTRATO).getTime();
-            const filterStart = new Date(startGarantia + 'T00:00:00').getTime();
-            if (dateEquipStart < filterStart) matchesGarantia = false;
-          } else {
-            matchesGarantia = false;
-          }
-        }
-
-        if (endGarantia) {
+        if (selectedMonth !== null) {
           if (e.FIM_CONTRATO) {
-            const dateEquipEnd = new Date(e.FIM_CONTRATO).getTime();
-            const filterEnd = new Date(endGarantia + 'T23:59:59').getTime();
-            if (dateEquipEnd > filterEnd) matchesGarantia = false;
+            const dateParts = e.FIM_CONTRATO.split('-');
+            if (dateParts.length >= 2) {
+              const year = parseInt(dateParts[0], 10);
+              const month = parseInt(dateParts[1], 10) - 1; // 0-indexed
+              if (year !== selectedYear || month !== selectedMonth) {
+                matchesGarantia = false;
+              }
+            } else {
+              const date = new Date(e.FIM_CONTRATO);
+              const year = date.getFullYear();
+              const month = date.getMonth();
+              if (year !== selectedYear || month !== selectedMonth) {
+                matchesGarantia = false;
+              }
+            }
           } else {
             matchesGarantia = false;
           }
         }
 
-        return matchesSearch && matchesTipo && matchesPropriedade && matchesLocalizacao && matchesCategoria && matchesGarantia;
+        return matchesSearch && matchesPropriedade && matchesLocalizacao && matchesCategoria && matchesFornecedor && matchesGarantia;
       })
       .sort((a, b) => {
         let valA = a[sortField];
@@ -221,7 +250,7 @@ export default function Equipamentos() {
 
         return 0;
       });
-  }, [equipamentos, searchTerm, selectedTipo, selectedPropriedade, selectedLocalizacoes, selectedCategorias, startGarantia, endGarantia, sortField, sortDirection]);
+  }, [equipamentos, searchTerm, selectedPropriedade, selectedLocalizacoes, selectedCategorias, selectedFornecedores, selectedMonth, selectedYear, sortField, sortDirection]);
 
   // Estatísticas / KPIs calculadas dinamicamente com base nos dados filtrados
   const stats = useMemo(() => {
@@ -260,6 +289,224 @@ export default function Equipamentos() {
     }
   };
 
+  // Exportar Excel (CSV com BOM UTF-8 totalmente compatível com Excel + Cabeçalho de Filtros)
+  const handleExportExcel = () => {
+    if (filteredAndSortedEquipamentos.length === 0) return;
+
+    // Detalhes dos Filtros Ativos para o Cabeçalho
+    const filtrosAplicados: string[] = [];
+    if (searchTerm) filtrosAplicados.push(`Busca: "${searchTerm}"`);
+    if (selectedPropriedade) filtrosAplicados.push(`Propriedade: ${selectedPropriedade}`);
+    if (selectedCategorias.length > 0) filtrosAplicados.push(`Categorias: ${selectedCategorias.join(', ')}`);
+    if (selectedFornecedores.length > 0) filtrosAplicados.push(`Fornecedores: ${selectedFornecedores.join(', ')}`);
+    if (selectedLocalizacoes.length > 0) filtrosAplicados.push(`Setores: ${selectedLocalizacoes.join(', ')}`);
+    if (selectedMonth !== null) filtrosAplicados.push(`Período: ${months[selectedMonth]} / ${selectedYear}`);
+
+    const dataEmissao = new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short' }).format(new Date());
+
+    const metaHeaderRows = [
+      `"SANTA CASA DE MISERICÓRDIA DE PELOTAS - HSC"`,
+      `"RELATÓRIO DE EQUIPAMENTOS DE T.I."`,
+      `"Gerado em: ${dataEmissao}"`,
+      `"Total de Registros: ${filteredAndSortedEquipamentos.length}"`,
+      `"Filtros Aplicados: ${filtrosAplicados.length > 0 ? filtrosAplicados.join(' | ') : 'Nenhum (Todos os registros)'}"`,
+      `""`
+    ];
+
+    const headers = [
+      'Seq',
+      'Equipamento',
+      'Patrimônio',
+      'Tipo',
+      'Categoria',
+      'Propriedade',
+      'Fornecedor',
+      'Início Contrato',
+      'Fim Contrato',
+      'Localização / Setor',
+      'IP',
+      'AnyDesk',
+      'Processador',
+      'Memória',
+      'Observação / Tensão'
+    ];
+
+    const rows = filteredAndSortedEquipamentos.map(e => {
+      const forn = e.FORNECEDOR || e.fornecedor || e['OBTER_NOME_PJ(A.CD_CGC_TERC)'] || e['OBTER_NOME_PJ(CD_CGC_TERC)'] || '';
+      return [
+        e.NR_SEQUENCIA || '',
+        e.DS_EQUIPAMENTO || '',
+        e.PATRIMONIO || '',
+        e.TIPO || '',
+        e.DS_CATEGORIA || '',
+        e.PROPRIEDADE || '',
+        forn,
+        e.INICIO_CONTRATO ? formatDate(e.INICIO_CONTRATO) : '',
+        e.FIM_CONTRATO ? formatDate(e.FIM_CONTRATO) : '',
+        e.LOCALIZACAO || '',
+        e.IP || '',
+        e.ANYDESK || '',
+        e.PROCESSADOR || '',
+        e.MEMORIA || '',
+        e.DS_OBSERVACAO_TENSAO || ''
+      ];
+    });
+
+    const csvContent = 
+      '\uFEFF' + 
+      [
+        ...metaHeaderRows,
+        headers.join(';'), 
+        ...rows.map(row => row.map(val => `"${String(val).replace(/"/g, '""')}"`).join(';'))
+      ].join('\n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    const today = new Date().toISOString().split('T')[0];
+    link.setAttribute('href', url);
+    link.setAttribute('download', `Relatorio_Equipamentos_TI_${today}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
+  // Exportar PDF
+  const handleExportPDF = async () => {
+    if (filteredAndSortedEquipamentos.length === 0) return;
+
+    setIsExportingPdf(true);
+    try {
+      const doc = new jsPDF('landscape', 'mm', 'a4');
+
+      // Tentar adicionar logo do HSC
+      try {
+        const imgObj = new Image();
+        imgObj.src = '/LOGO_HSC_PRIMARY.png';
+        await new Promise((resolve) => {
+          imgObj.onload = resolve;
+          imgObj.onerror = resolve;
+        });
+        doc.addImage(imgObj, 'PNG', 14, 10, 45, 12);
+      } catch (e) {
+        console.error('Erro ao carregar logo para o PDF:', e);
+      }
+
+      // Cabeçalho do Documento com cores do Hospital Santa Casa (#5A1010 / RGB: 90, 16, 16)
+      doc.setFontSize(16);
+      doc.setTextColor(90, 16, 16); // Vermelho Institucional HSC
+      doc.setFont('helvetica', 'bold');
+      doc.text('Relatório de Equipamentos de T.I.', 14, 28);
+
+      // Linha decorativa no tom vermelho do hospital
+      doc.setDrawColor(90, 16, 16);
+      doc.setLineWidth(0.6);
+      doc.line(14, 31, 283, 31);
+
+      // Data de emissão e estatísticas
+      doc.setFontSize(9);
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(100, 116, 139);
+      const dataEmissao = new Intl.DateTimeFormat('pt-BR', {
+        dateStyle: 'short',
+        timeStyle: 'short'
+      }).format(new Date());
+      doc.text(`Gerado em: ${dataEmissao}`, 283, 16, { align: 'right' });
+      doc.text(`Total de registros: ${filteredAndSortedEquipamentos.length}`, 283, 22, { align: 'right' });
+
+      // Detalhes dos Filtros Ativos
+      const filtrosAplicados: string[] = [];
+      if (searchTerm) filtrosAplicados.push(`Busca: "${searchTerm}"`);
+      if (selectedPropriedade) filtrosAplicados.push(`Propriedade: ${selectedPropriedade}`);
+      if (selectedCategorias.length > 0) filtrosAplicados.push(`Categorias: ${selectedCategorias.join(', ')}`);
+      if (selectedFornecedores.length > 0) filtrosAplicados.push(`Fornecedores: ${selectedFornecedores.join(', ')}`);
+      if (selectedLocalizacoes.length > 0) filtrosAplicados.push(`Setores: ${selectedLocalizacoes.join(', ')}`);
+      if (selectedMonth !== null) filtrosAplicados.push(`Período: ${months[selectedMonth]} / ${selectedYear}`);
+
+      let startY = 37;
+      if (filtrosAplicados.length > 0) {
+        doc.setFontSize(8.5);
+        doc.setTextColor(71, 85, 105);
+        const txtFiltros = `Filtros aplicados: ${filtrosAplicados.join(' | ')}`;
+        const splitFiltros = doc.splitTextToSize(txtFiltros, 269);
+        doc.text(splitFiltros, 14, startY);
+        startY += (splitFiltros.length * 4.5) + 2;
+      }
+
+      // Tabela com autoTable nas cores do hospital (#5A1010)
+      const tableHeaders = [
+        ['Seq', 'Equipamento', 'Patrimônio', 'Tipo', 'Categoria', 'Propriedade', 'Fornecedor', 'Local / Setor', 'IP', 'AnyDesk', 'Fim Contrato']
+      ];
+
+      const tableRows = filteredAndSortedEquipamentos.map(e => {
+        const forn = e.FORNECEDOR || e.fornecedor || e['OBTER_NOME_PJ(A.CD_CGC_TERC)'] || e['OBTER_NOME_PJ(CD_CGC_TERC)'] || '-';
+        return [
+          e.NR_SEQUENCIA ? String(e.NR_SEQUENCIA) : '-',
+          e.DS_EQUIPAMENTO || '-',
+          e.PATRIMONIO || '-',
+          e.TIPO || '-',
+          e.DS_CATEGORIA || '-',
+          e.PROPRIEDADE || '-',
+          forn,
+          e.LOCALIZACAO || '-',
+          e.IP || '-',
+          e.ANYDESK || '-',
+          e.FIM_CONTRATO ? formatDate(e.FIM_CONTRATO) : '-'
+        ];
+      });
+
+      autoTable(doc, {
+        head: tableHeaders,
+        body: tableRows,
+        startY: startY,
+        theme: 'striped',
+        headStyles: {
+          fillColor: [90, 16, 16], // Vermelho Institucional HSC #5A1010
+          textColor: [255, 255, 255],
+          fontSize: 8,
+          fontStyle: 'bold',
+          halign: 'left'
+        },
+        bodyStyles: {
+          fontSize: 7.5,
+          textColor: [51, 65, 85]
+        },
+        alternateRowStyles: {
+          fillColor: [253, 242, 242] // Tom suave avermelhado de fundo alternado
+        },
+        columnStyles: {
+          0: { cellWidth: 12, halign: 'center' },
+          1: { cellWidth: 38 },
+          2: { cellWidth: 20 },
+          3: { cellWidth: 18 },
+          4: { cellWidth: 26 },
+          5: { cellWidth: 20 },
+          6: { cellWidth: 38 },
+          7: { cellWidth: 35 },
+          8: { cellWidth: 22 },
+          9: { cellWidth: 20 },
+          10: { cellWidth: 20 }
+        },
+        margin: { top: 15, right: 14, bottom: 15, left: 14 },
+        didDrawPage: (data) => {
+          const str = `Página ${data.pageNumber} de ${doc.getNumberOfPages()}`;
+          doc.setFontSize(8);
+          doc.setTextColor(148, 163, 184);
+          doc.text(str, 283, 200, { align: 'right' });
+          doc.text('Santa Casa de Misericórdia de Pelotas - HSC', 14, 200);
+        }
+      });
+
+      const today = new Date().toISOString().split('T')[0];
+      doc.save(`Relatorio_Equipamentos_TI_${today}.pdf`);
+    } catch (err) {
+      console.error('Erro ao gerar PDF de equipamentos:', err);
+    } finally {
+      setIsExportingPdf(false);
+    }
+  };
+
   return (
     <div className="flex-1 space-y-8 min-h-screen pb-12 w-full mx-auto pt-4 animate-in fade-in duration-300">
       {/* Header Geral com Filtros Inline Compactos */}
@@ -290,21 +537,6 @@ export default function Equipamentos() {
               className="w-full bg-background border border-border rounded-lg pl-8 pr-3 py-1.5 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary transition-all h-[34px]"
             />
           </div>
-
-          {/* 2. Tipo */}
-          <select
-            value={selectedTipo}
-            onChange={(e) => {
-              setSelectedTipo(e.target.value);
-              setCurrentPage(1);
-            }}
-            className="w-full sm:w-32 bg-background border border-border rounded-lg px-2.5 py-1.5 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary transition-all font-medium h-[34px]"
-          >
-            <option value="">Todos os Tipos</option>
-            {filterOptions.tipos.map(tipo => (
-              <option key={tipo} value={tipo}>{tipo}</option>
-            ))}
-          </select>
 
           {/* 3. Categoria (Multi-seleção Checkbox) */}
           <div className="relative w-full sm:w-40 categoria-dropdown-container">
@@ -347,6 +579,55 @@ export default function Equipamentos() {
                           className="h-3.5 w-3.5 rounded border-border text-primary focus:ring-primary"
                         />
                         <span className="truncate">{cat}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* 4. Fornecedor (Multi-seleção Checkbox) */}
+          <div className="relative w-full sm:w-44 fornecedor-dropdown-container">
+            <button
+              type="button"
+              onClick={() => setIsFornecedorDropdownOpen(!isFornecedorDropdownOpen)}
+              className="w-full bg-background border border-border rounded-lg px-2.5 py-1.5 text-xs text-foreground text-left flex justify-between items-center focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary transition-all font-medium h-[34px]"
+            >
+              <span className="truncate max-w-[85%]">
+                {selectedFornecedores.length === 0
+                  ? 'Fornecedores'
+                  : selectedFornecedores.length === 1
+                  ? selectedFornecedores[0]
+                  : `${selectedFornecedores.length} selecionados`}
+              </span>
+              <ChevronRight className={`h-3 w-3 transform transition-transform text-muted-foreground ${isFornecedorDropdownOpen ? 'rotate-90' : ''}`} />
+            </button>
+
+            {isFornecedorDropdownOpen && (
+              <div className="absolute top-[100%] left-0 right-0 z-20 mt-1 bg-card border border-border rounded-lg shadow-lg py-1.5 max-h-48 overflow-y-auto animate-in fade-in slide-in-from-top-1 duration-150 min-w-[200px]">
+                <div className="flex flex-col px-1">
+                  {filterOptions.fornecedores.map(forn => {
+                    const isChecked = selectedFornecedores.includes(forn);
+                    return (
+                      <label
+                        key={forn}
+                        className="flex items-center gap-2 px-2 py-1 hover:bg-muted rounded cursor-pointer text-xs transition-colors select-none font-medium text-foreground"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          onChange={() => {
+                            if (isChecked) {
+                              setSelectedFornecedores(prev => prev.filter(f => f !== forn));
+                            } else {
+                              setSelectedFornecedores(prev => [...prev, forn]);
+                            }
+                            setCurrentPage(1);
+                          }}
+                          className="h-3.5 w-3.5 rounded border-border text-primary focus:ring-primary"
+                        />
+                        <span className="truncate" title={forn}>{forn}</span>
                       </label>
                     );
                   })}
@@ -419,32 +700,86 @@ export default function Equipamentos() {
             )}
           </div>
 
-          {/* 6. Datas de Contrato */}
-          <div className="flex items-center gap-1 bg-background border border-border rounded-lg px-2 py-1 text-xs text-foreground h-[34px]">
-            <span className="text-muted-foreground shrink-0 font-medium">Contrato:</span>
-            <input
-              type="date"
-              value={startGarantia}
-              onChange={(e) => {
-                setStartGarantia(e.target.value);
-                setCurrentPage(1);
-              }}
-              className="bg-transparent border-none p-0 focus:ring-0 w-24 focus:outline-none text-foreground font-medium text-xs shadow-none outline-none border-0"
-            />
-            <span className="text-muted-foreground shrink-0 font-medium">até</span>
-            <input
-              type="date"
-              value={endGarantia}
-              onChange={(e) => {
-                setEndGarantia(e.target.value);
-                setCurrentPage(1);
-              }}
-              className="bg-transparent border-none p-0 focus:ring-0 w-24 focus:outline-none text-foreground font-medium text-xs shadow-none outline-none border-0"
-            />
+          {/* 6. Filtro de Mês/Ano do Contrato */}
+          <div className="relative w-full sm:w-48 datepicker-dropdown-container">
+            <button
+              type="button"
+              onClick={() => setIsDatePickerOpen(!isDatePickerOpen)}
+              className="w-full bg-background border border-border rounded-lg px-2.5 py-1.5 text-xs text-foreground text-left flex justify-between items-center focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary transition-all font-medium h-[34px]"
+            >
+              <span className="flex items-center gap-1.5 truncate">
+                <Calendar className="h-3.5 w-3.5 text-muted-foreground" />
+                {selectedMonth !== null
+                  ? `${months[selectedMonth]} ${selectedYear}`
+                  : 'Todos os Períodos'}
+              </span>
+              <ChevronRight className={`h-3 w-3 transform transition-transform text-muted-foreground ${isDatePickerOpen ? 'rotate-90' : ''}`} />
+            </button>
+
+            {isDatePickerOpen && (
+              <div className="absolute top-[100%] right-0 z-20 mt-1 bg-card border border-border rounded-lg shadow-lg p-3 w-64 animate-in fade-in slide-in-from-top-1 duration-150">
+                {/* Cabeçalho do Ano */}
+                <div className="flex items-center justify-between mb-3 px-1">
+                  <button
+                    type="button"
+                    onClick={() => setSelectedYear(prev => prev - 1)}
+                    className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                  </button>
+                  <span className="text-xs font-bold text-foreground">{selectedYear}</span>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedYear(prev => prev + 1)}
+                    className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    <ChevronRight className="h-4 w-4" />
+                  </button>
+                </div>
+
+                {/* Grade de Meses */}
+                <div className="grid grid-cols-3 gap-1.5 mb-3">
+                  {months.map((m, idx) => {
+                    const isSelected = selectedMonth === idx;
+                    return (
+                      <button
+                        key={m}
+                        type="button"
+                        onClick={() => {
+                          setSelectedMonth(idx);
+                          setIsDatePickerOpen(false);
+                          setCurrentPage(1);
+                        }}
+                        className={`py-1.5 text-2xs font-semibold rounded-md transition-all ${
+                          isSelected
+                            ? 'bg-primary text-primary-foreground shadow-sm shadow-primary/20'
+                            : 'hover:bg-muted text-foreground'
+                        }`}
+                      >
+                        {m}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Botão Todos os Períodos */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedMonth(null);
+                    setIsDatePickerOpen(false);
+                    setCurrentPage(1);
+                  }}
+                  className="w-full py-1.5 text-2xs font-bold text-center border border-border rounded-md hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
+                >
+                  Todos os Períodos
+                </button>
+              </div>
+            )}
           </div>
 
           {/* Botão de Limpar Filtros */}
-          {(searchTerm || selectedTipo || selectedPropriedade || selectedLocalizacoes.length > 0 || selectedCategorias.length > 0 || startGarantia || endGarantia) && (
+          {(searchTerm || selectedPropriedade || selectedLocalizacoes.length > 0 || selectedCategorias.length > 0 || selectedFornecedores.length > 0 || selectedMonth !== null) && (
             <button
               onClick={handleResetFilters}
               title="Limpar Filtros"
@@ -464,6 +799,36 @@ export default function Equipamentos() {
             <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin' : ''}`} />
             {isRefreshing ? 'Atualizando...' : 'Atualizar'}
           </button>
+
+          {/* Separador */}
+          <div className="h-4 w-px bg-border/60 mx-0.5 hidden sm:block" />
+
+          {/* Botões de Exportação Relatório (Excel / PDF) */}
+          <div className="flex items-center gap-1.5">
+            <button
+              onClick={handleExportExcel}
+              disabled={isLoading || filteredAndSortedEquipamentos.length === 0}
+              title="Exportar relatório em Excel (CSV) com os dados filtrados"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-700 dark:text-emerald-400 border border-emerald-500/30 text-xs font-semibold transition-colors disabled:opacity-40 disabled:cursor-not-allowed h-[34px]"
+            >
+              <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+              <span>Excel</span>
+            </button>
+
+            <button
+              onClick={handleExportPDF}
+              disabled={isLoading || isExportingPdf || filteredAndSortedEquipamentos.length === 0}
+              title="Exportar relatório em PDF com os dados filtrados"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-700 dark:text-rose-400 border border-rose-500/30 text-xs font-semibold transition-colors disabled:opacity-40 disabled:cursor-not-allowed h-[34px]"
+            >
+              {isExportingPdf ? (
+                <RefreshCw className="w-3.5 h-3.5 animate-spin text-rose-600 dark:text-rose-400" />
+              ) : (
+                <FileText className="w-3.5 h-3.5 text-rose-600 dark:text-rose-400" />
+              )}
+              <span>{isExportingPdf ? 'Gerando...' : 'PDF'}</span>
+            </button>
+          </div>
         </div>
       </div>
 
@@ -563,6 +928,18 @@ export default function Equipamentos() {
                       Propriedade {sortField === 'PROPRIEDADE' && (sortDirection === 'asc' ? '↑' : '↓')}
                     </th>
                     <th 
+                      onClick={() => handleSort('FORNECEDOR' as any)} 
+                      className="px-6 py-3.5 cursor-pointer hover:text-foreground transition-colors select-none"
+                    >
+                      Fornecedor {sortField === 'FORNECEDOR' && (sortDirection === 'asc' ? '↑' : '↓')}
+                    </th>
+                    <th 
+                      onClick={() => handleSort('FIM_CONTRATO')} 
+                      className="px-6 py-3.5 cursor-pointer hover:text-foreground transition-colors select-none"
+                    >
+                      Fim do Contrato {sortField === 'FIM_CONTRATO' && (sortDirection === 'asc' ? '↑' : '↓')}
+                    </th>
+                    <th 
                       onClick={() => handleSort('LOCALIZACAO')} 
                       className="px-6 py-3.5 cursor-pointer hover:text-foreground transition-colors select-none"
                     >
@@ -574,13 +951,6 @@ export default function Equipamentos() {
                     >
                       IP {sortField === 'IP' && (sortDirection === 'asc' ? '↑' : '↓')}
                     </th>
-                    <th 
-                      onClick={() => handleSort('ANYDESK')} 
-                      className="px-6 py-3.5 cursor-pointer hover:text-foreground transition-colors select-none"
-                    >
-                      AnyDesk {sortField === 'ANYDESK' && (sortDirection === 'asc' ? '↑' : '↓')}
-                    </th>
-                    <th className="px-6 py-3.5 text-right">Ações</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border/40">
@@ -622,22 +992,17 @@ export default function Equipamentos() {
                           {eq.PROPRIEDADE}
                         </span>
                       </td>
+                      <td className="px-6 py-4 text-muted-foreground text-xs font-medium whitespace-normal break-words max-w-[240px]">
+                        {eq.FORNECEDOR || eq.fornecedor || eq['OBTER_NOME_PJ(A.CD_CGC_TERC)'] || eq['OBTER_NOME_PJ(CD_CGC_TERC)'] || <span className="text-muted-foreground/45">—</span>}
+                      </td>
+                      <td className="px-6 py-4 font-medium text-foreground text-xs">
+                        {eq.FIM_CONTRATO ? formatDate(eq.FIM_CONTRATO) : <span className="text-muted-foreground/45">—</span>}
+                      </td>
                       <td className="px-6 py-4 text-muted-foreground max-w-[200px] truncate" title={eq.LOCALIZACAO}>
                         {eq.LOCALIZACAO}
                       </td>
                       <td className="px-6 py-4 font-mono text-xs text-foreground">
                         {eq.IP || <span className="text-muted-foreground/45">—</span>}
-                      </td>
-                      <td className="px-6 py-4 font-mono text-xs text-foreground">
-                        {eq.ANYDESK || <span className="text-muted-foreground/45">—</span>}
-                      </td>
-                      <td className="px-6 py-4 text-right" onClick={(e) => e.stopPropagation()}>
-                        <button
-                          onClick={() => setSelectedEquipamento(eq)}
-                          className="text-xs font-semibold px-3 py-1.5 rounded-md bg-secondary text-secondary-foreground hover:bg-secondary/80 border border-border transition-colors opacity-80 group-hover:opacity-100"
-                        >
-                          Visualizar
-                        </button>
                       </td>
                     </tr>
                   ))}
@@ -647,9 +1012,37 @@ export default function Equipamentos() {
 
             {/* Rodapé e Paginação */}
             <div className="flex flex-col sm:flex-row items-center justify-between border-t border-border/50 px-6 py-4 gap-4 bg-muted/20">
-              <span className="text-xs text-muted-foreground font-medium">
-                Exibindo {paginatedEquipamentos.length} de {filteredAndSortedEquipamentos.length} equipamentos
-              </span>
+              <div className="flex flex-wrap items-center gap-3">
+                <span className="text-xs text-muted-foreground font-medium">
+                  Exibindo {paginatedEquipamentos.length} de {filteredAndSortedEquipamentos.length} equipamentos
+                </span>
+
+                <div className="flex items-center gap-1.5 border-l border-border/60 pl-3">
+                  <button
+                    onClick={handleExportExcel}
+                    disabled={isLoading || filteredAndSortedEquipamentos.length === 0}
+                    title="Exportar dados filtrados do grid para Excel (CSV)"
+                    className="flex items-center gap-1 px-2.5 py-1 rounded bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-700 dark:text-emerald-400 border border-emerald-500/30 text-2xs font-semibold transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    <FileSpreadsheet className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
+                    <span>Excel</span>
+                  </button>
+
+                  <button
+                    onClick={handleExportPDF}
+                    disabled={isLoading || isExportingPdf || filteredAndSortedEquipamentos.length === 0}
+                    title="Exportar relatório PDF com os dados filtrados do grid"
+                    className="flex items-center gap-1 px-2.5 py-1 rounded bg-rose-500/10 hover:bg-rose-500/20 text-rose-700 dark:text-rose-400 border border-rose-500/30 text-2xs font-semibold transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    {isExportingPdf ? (
+                      <RefreshCw className="w-3 h-3 animate-spin text-rose-600 dark:text-rose-400" />
+                    ) : (
+                      <FileText className="w-3 h-3 text-rose-600 dark:text-rose-400" />
+                    )}
+                    <span>{isExportingPdf ? 'Gerando...' : 'PDF'}</span>
+                  </button>
+                </div>
+              </div>
 
               <div className="flex items-center gap-1.5">
                 <button

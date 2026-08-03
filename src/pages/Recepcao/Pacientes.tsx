@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Search, ChevronLeft, ChevronRight, RefreshCw, Loader2, UserCircle2, X, ArrowUp, ArrowDown, History, LogOut } from 'lucide-react';
+import { Search, ChevronLeft, ChevronRight, RefreshCw, Loader2, UserCircle2, X, ArrowUp, ArrowDown, History, LogOut, Printer } from 'lucide-react';
 import { buscarPacientes, limparCachePacientes, Paciente } from '../../services/pacienteService';
 import { listarVisitasPorPaciente, buscarContagemVisitasAbertas, registrarSaidaVisita } from '../../services/visitaService';
 
@@ -417,7 +417,7 @@ export default function Pacientes() {
                           <th className="h-10 px-4 text-left font-medium text-muted-foreground">Crachá</th>
                           <th className="h-10 px-4 text-left font-medium text-muted-foreground">Entrada</th>
                           <th className="h-10 px-4 text-left font-medium text-muted-foreground">Saída</th>
-                          <th className="h-10 px-4 text-center font-medium text-muted-foreground w-16">Ações</th>
+                          <th className="h-10 px-4 text-center font-medium text-muted-foreground w-24">Ações</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-border">
@@ -441,15 +441,24 @@ export default function Pacientes() {
                               {v.data_hora_saida ? new Date(v.data_hora_saida).toLocaleString('pt-BR') : '-'}
                             </td>
                             <td className="p-4 text-center">
-                              {!v.data_hora_saida && (
+                              <div className="flex items-center justify-center gap-2">
                                 <button
-                                  onClick={() => handleEncerrarVisita(v)}
-                                  className="p-1 rounded hover:bg-amber-500/10 text-muted-foreground hover:text-amber-500 transition-colors"
-                                  title="Encerrar Visita"
+                                  onClick={() => window.open(`/imprimir/etiqueta/${v.id}`, '_blank')}
+                                  className="p-1 rounded hover:bg-primary/10 text-muted-foreground hover:text-primary transition-colors"
+                                  title="Reimprimir Crachá"
                                 >
-                                  <LogOut className="h-4 w-4" />
+                                  <Printer className="h-4 w-4" />
                                 </button>
-                              )}
+                                {!v.data_hora_saida && (
+                                  <button
+                                    onClick={() => handleEncerrarVisita(v)}
+                                    className="p-1 rounded hover:bg-amber-500/10 text-muted-foreground hover:text-amber-500 transition-colors"
+                                    title="Encerrar Visita"
+                                  >
+                                    <LogOut className="h-4 w-4" />
+                                  </button>
+                                )}
+                              </div>
                             </td>
                           </tr>
                         ))}

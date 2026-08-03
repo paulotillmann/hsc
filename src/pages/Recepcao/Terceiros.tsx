@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Search, Filter, Plus, UserCircle2, ArrowUpDown, ChevronLeft, ChevronRight, Edit, Trash2, AlertTriangle, RefreshCw, X, CheckCircle2, Link2, History, PlusCircle, QrCode, LogOut } from 'lucide-react';
+import { Search, Filter, Plus, UserCircle2, ArrowUpDown, ChevronLeft, ChevronRight, Edit, Trash2, AlertTriangle, RefreshCw, X, CheckCircle2, Link2, History, PlusCircle, QrCode, LogOut, Printer } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { 
   listarVisitantes, 
@@ -1169,7 +1169,7 @@ export default function Terceiros() {
                           <th className="h-10 px-4 font-bold uppercase text-[10px] tracking-widest">Motivo de Acesso Terceiro</th>
                           <th className="h-10 px-4 font-bold uppercase text-[10px] tracking-widest">Identificado</th>
                           <th className="h-10 px-4 font-bold uppercase text-[10px] tracking-widest">Atendente</th>
-                          {isAdmin && <th className="h-10 px-4 font-bold uppercase text-[10px] tracking-widest text-right">Ações</th>}
+                          <th className="h-10 px-4 font-bold uppercase text-[10px] tracking-widest text-right">Ações</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -1195,17 +1195,26 @@ export default function Terceiros() {
                             <td className="p-3 text-muted-foreground text-[11px] max-w-[100px] truncate" title={v.atendente || ''}>
                               {v.atendente || '-'}
                             </td>
-                            {isAdmin && (
-                              <td className="p-3 text-right">
+                            <td className="p-3 text-right">
+                              <div className="flex items-center justify-end gap-2">
                                 <button
-                                  onClick={() => handleDeleteVisita(v)}
-                                  className="p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
-                                  title="Excluir Visita"
+                                  onClick={() => window.open(`/imprimir/etiqueta/${v.id}`, '_blank')}
+                                  className="p-1 rounded hover:bg-primary/10 text-muted-foreground hover:text-primary transition-colors"
+                                  title="Reimprimir Crachá"
                                 >
-                                  <Trash2 className="h-4 w-4" />
+                                  <Printer className="h-4 w-4" />
                                 </button>
-                              </td>
-                            )}
+                                {isAdmin && (
+                                  <button
+                                    onClick={() => handleDeleteVisita(v)}
+                                    className="p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
+                                    title="Excluir Visita"
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </button>
+                                )}
+                              </div>
+                            </td>
                           </tr>
                         ))}
                       </tbody>

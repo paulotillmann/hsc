@@ -27,7 +27,8 @@
     --foreground: #0f172a;
     --card: #ffffff;
     --card-foreground: #0f172a;
-    --primary: #5A1010; /* Bordô do Hospital Santa Casa de Araguari */
+    --primary: #5A1010;
+    /* Bordô do Hospital Santa Casa de Araguari */
     --primary-foreground: #ffffff;
     --muted: #f1f5f9;
     --muted-foreground: #64748b;
@@ -45,7 +46,8 @@
     --foreground: #f8fafc;
     --card: #1e293b;
     --card-foreground: #f8fafc;
-    --primary: #851c1c; /* Leve reluz no Dark Mode */
+    --primary: #851c1c;
+    /* Leve reluz no Dark Mode */
     --primary-foreground: #ffffff;
     --muted: #334155;
     --muted-foreground: #94a3b8;
@@ -61,6 +63,7 @@
   * {
     border-color: var(--border);
   }
+
   body {
     background-color: var(--background);
     color: var(--foreground);
@@ -78,11 +81,15 @@
 
 @layer utilities {
   .scrollbar-hide {
-    -ms-overflow-style: none; /* IE and Edge */
-    scrollbar-width: none; /* Firefox */
+    -ms-overflow-style: none;
+    /* IE and Edge */
+    scrollbar-width: none;
+    /* Firefox */
   }
+
   .scrollbar-hide::-webkit-scrollbar {
-    display: none; /* Chrome, Safari and Opera */
+    display: none;
+    /* Chrome, Safari and Opera */
   }
 
   /* Custom styled scrollbars for Kanban columns and modals */
@@ -113,16 +120,17 @@
 }
 
 @media print {
+
   /* Hide sidebar and navigation */
-  aside, 
-  nav, 
+  aside,
+  nav,
   header,
   .print-hidden,
   button,
   .print\:hidden {
     display: none !important;
   }
-  
+
   /* Make main layout full width */
   main {
     padding: 0 !important;
@@ -133,15 +141,16 @@
     background: white !important;
     color: black !important;
   }
-  
+
   /* Force light colors and remove dark backgrounds */
-  body, html {
+  body,
+  html {
     background: white !important;
     color: black !important;
   }
 
-  .bg-card, 
-  .bg-background, 
+  .bg-card,
+  .bg-background,
   .bg-muted,
   .bg-muted\/20,
   .bg-muted\/50 {
@@ -149,12 +158,12 @@
     background: white !important;
     color: black !important;
   }
-  
+
   /* Reset border colors to visible black/grey for print */
   .border,
   .border-b,
   .border-t,
-  .divide-y > * {
+  .divide-y>* {
     border-color: #cbd5e1 !important;
   }
 

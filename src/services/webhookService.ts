@@ -2,6 +2,9 @@
  * Service to handle generic webhook integrations (like n8n)
  */
 
+const qualidadeCache = new Map<string, { timestamp: number; data: any[] }>();
+const CACHE_TTL = 30 * 1000; // 30 segundos de cache
+
 export const webhookService = {
   /**
    * Trigger the "Gestão de Pendências" webhook
@@ -131,6 +134,71 @@ export const webhookService = {
     } catch (error) {
       console.error('Error in webhook triggerFinanceiro:', error);
       return null;
+    }
+  },
+
+  /**
+  /**
+   * Trigger the "Indicadores Qualidade" webhook
+   * @param payload { indicador: string, data_inicio: string, data_fim: string }
+   */
+  async fetchIndicadoresQualidade(payload: { indicador: string; data_inicio: string; data_fim: string }): Promise<any[]> {
+    const webhookUrl = import.meta.env.VITE_N8N_WEBHOOK_QUALIDADE || 'https://n8n-n8n.7woir1.easypanel.host/webhook/indicadores_qualidade';
+    
+    if (!webhookUrl) {
+      console.error('Webhook URL (VITE_N8N_WEBHOOK_QUALIDADE) is not configured.');
+      return [];
+    }
+
+    const cacheKey = `${payload.indicador}_${payload.data_inicio}_${payload.data_fim}`;
+    const cached = qualidadeCache.get(cacheKey);
+    const now = Date.now();
+
+    if (cached && (now - cached.timestamp < CACHE_TTL)) {
+      return cached.data;
+    }
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 30000); // Timeout de 30 segundos
+
+    try {
+      const response = await fetch(webhookUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+        signal: controller.signal
+      });
+
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        throw new Error(`Error triggering webhook: ${response.statusText}`);
+      }
+
+      const text = await response.text();
+      if (!text || text.trim() === '') {
+        return []; // Retorna vazio se o body estiver vazio, ativando o mock no front
+      }
+
+      const data = JSON.parse(text);
+      const dataArray = Array.isArray(data) ? data : [];
+      
+      // Salva no cache apenas se tivermos dados reais
+      if (dataArray.length > 0) {
+        qualidadeCache.set(cacheKey, { timestamp: now, data: dataArray });
+      }
+
+      return dataArray;
+    } catch (error: any) {
+      clearTimeout(timeoutId);
+      if (error.name === 'AbortError') {
+        console.warn('Webhook fetchIndicadoresQualidade: timeout de 30s atingido. Abortando requisição.');
+      } else {
+        console.error('Error in webhook fetchIndicadoresQualidade:', error);
+      }
+      return [];
     }
   },
 

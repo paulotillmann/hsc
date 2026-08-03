@@ -477,7 +477,7 @@ export default function OrdemServico() {
             
             // Se a OS modificada for a selecionada, atualiza seus dados e histórico no modal
             if (selectedOrderRef.current && selectedOrderRef.current.nr_sequencia === updated.nr_sequencia) {
-              setSelectedOrder(updated);
+              setSelectedOrder(prev => prev ? { ...prev, ...updated } : updated);
               refreshSelectedOrderDetails(updated);
             }
           } else if (eventType === 'DELETE') {
@@ -491,11 +491,36 @@ export default function OrdemServico() {
       )
       .subscribe();
 
+    // Inscreve no Realtime para alterações nos relatos da tabela historico_ordem_servico
+    const historyChannel = supabase
+      .channel('historico-os-realtime-changes')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'historico_ordem_servico' },
+        (payload) => {
+          console.log('[Realtime] Alteração na tabela historico_ordem_servico:', payload.eventType);
+          const newRecord = payload.new as any;
+          if (newRecord && newRecord.nr_sequencia) {
+            const seq = Number(newRecord.nr_sequencia);
+            setOrdersWithHistory(prev => {
+              const updatedSet = new Set(prev);
+              updatedSet.add(seq);
+              return updatedSet;
+            });
+            if (selectedOrderRef.current && selectedOrderRef.current.nr_sequencia === seq) {
+              refreshSelectedOrderDetails(selectedOrderRef.current);
+            }
+          }
+        }
+      )
+      .subscribe();
+
     return () => {
       if (fetchTimeoutRef.current) {
         clearTimeout(fetchTimeoutRef.current);
       }
       supabase.removeChannel(ordersChannel);
+      supabase.removeChannel(historyChannel);
     };
   }, []);
 

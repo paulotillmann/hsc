@@ -47,3 +47,5 @@ supabase.exe
 supabase-go.exe
 
 
+# Temporary agent scratch files
+scratch/
