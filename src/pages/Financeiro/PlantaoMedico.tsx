@@ -5,7 +5,7 @@ import {
   ChevronLeft, ChevronRight, BarChart3, PieChart, ArrowUpRight, 
   TrendingUp, Info, Check, ChevronDown, UserCheck, DollarSign, 
   FileSpreadsheet, Award, Activity, X, Layers, Edit3, Save, Baby,
-  ClipboardList, CheckCircle2, Plus, Trash2
+  ClipboardList, CheckCircle2, Plus, Trash2, GraduationCap, Briefcase, Clock
 } from 'lucide-react';
 import { webhookService } from '../../services/webhookService';
 import jsPDF from 'jspdf';
@@ -23,13 +23,13 @@ export interface PlantaoMedicoItem {
   VALOR: number;
   VALOR_RAW: string | number;
   TIPO_PLANTAO: string;
-  tipoProducao?: 'Procedimento' | 'Consulta' | 'Parto' | string;
+  tipoProducao?: 'Procedimento' | 'Consulta' | 'Parto' | 'Aula' | 'CC' | 'Coordenação' | string;
   valorProducao?: number;
 }
 
 export interface ProducaoItem {
   id: string;
-  tipoProducao: 'Procedimento' | 'Consulta' | 'Parto' | string;
+  tipoProducao: 'Procedimento' | 'Consulta' | 'Parto' | 'Aula' | 'CC' | 'Coordenação' | string;
   valorProducao: number;
 }
 
@@ -43,6 +43,7 @@ export interface PlantaoMedicoSintetico {
   VALOR_MEDIO: number;
   producoes?: ProducaoItem[];
   valorProducaoTotal?: number;
+  status: 'Pago' | 'Pendente';
   ITEMS: PlantaoMedicoItem[];
 }
 
@@ -245,6 +246,9 @@ const PlantaoMedico: React.FC = () => {
   const [tipoSearch, setTipoSearch] = useState<string>('');
   const tipoDropdownRef = useRef<HTMLDivElement>(null);
 
+  // Filtro de Status de Pagamento (Sintético): 'todos' | 'Pago' | 'Pendente'
+  const [statusFilter, setStatusFilter] = useState<'todos' | 'Pago' | 'Pendente'>('todos');
+
   // Ordenação
   const [sortField, setSortField] = useState<keyof PlantaoMedicoItem>('DT_CHAMADO');
   const [sortAsc, setSortAsc] = useState<boolean>(false);
@@ -258,7 +262,7 @@ const PlantaoMedico: React.FC = () => {
   const [sortFieldSintetico, setSortFieldSintetico] = useState<keyof PlantaoMedicoSintetico>('VALOR_TOTAL');
   const [sortAscSintetico, setSortAscSintetico] = useState<boolean>(false);
   // Armazenamento de edições de produção para a visão Sintética (suporta múltiplos tipos por grupo)
-  const [syntheticEdits, setSyntheticEdits] = useState<Record<string, { producoes?: ProducaoItem[] }>>(() => {
+  const [syntheticEdits, setSyntheticEdits] = useState<Record<string, { producoes?: ProducaoItem[]; status?: 'Pago' | 'Pendente' }>>(() => {
     try {
       const cached = getStorageItem('hsc_plantao_medico_synthetic_edits');
       if (cached) return JSON.parse(cached);
@@ -269,12 +273,14 @@ const PlantaoMedico: React.FC = () => {
   const [selectedSinteticoItem, setSelectedSinteticoItem] = useState<PlantaoMedicoSintetico | null>(null);
   const [selectedItem, setSelectedItem] = useState<PlantaoMedicoItem | null>(null);
 
-  // Form state para Múltiplas Produções Médicas (Sintético)
+  // Form state para Múltiplas Produções Médicas e Status (Sintético)
   const [editProducoesList, setEditProducoesList] = useState<{ id: string; tipoProducao: string; valorProducao: string }[]>([]);
+  const [editStatus, setEditStatus] = useState<'Pago' | 'Pendente'>('Pendente');
   const [saveSuccessMessage, setSaveSuccessMessage] = useState<boolean>(false);
 
   const handleOpenSinteticoModal = (item: PlantaoMedicoSintetico) => {
     setSelectedSinteticoItem(item);
+    setEditStatus(item.status || 'Pendente');
     if (item.producoes && item.producoes.length > 0) {
       setEditProducoesList(
         item.producoes.map((p, i) => ({
@@ -328,7 +334,8 @@ const PlantaoMedico: React.FC = () => {
     const updatedEdits = {
       ...syntheticEdits,
       [selectedSinteticoItem.id]: {
-        producoes: validProducoes
+        producoes: validProducoes,
+        status: editStatus
       }
     };
 
@@ -533,7 +540,7 @@ const PlantaoMedico: React.FC = () => {
   // Reset de página ao alterar filtros ou modo de visão
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm, selectedEspecialidades, selectedMedicos, selectedTipos, periodFrom, periodTo, viewMode]);
+  }, [searchTerm, selectedEspecialidades, selectedMedicos, selectedTipos, periodFrom, periodTo, viewMode, statusFilter]);
 
   // Listas únicas para os seletores
   const especialidadesDisponiveis = useMemo(() => {
@@ -690,7 +697,7 @@ const PlantaoMedico: React.FC = () => {
       }
     });
 
-    const result: PlantaoMedicoSintetico[] = Array.from(map.entries()).map(([key, data], idx) => {
+    let filteredResult = Array.from(map.entries()).map(([key, data], idx) => {
       const syntheticId = `sintetico-${idx}-${key}`;
       const edit = syntheticEdits[syntheticId] || syntheticEdits[key];
       const producoesList: ProducaoItem[] = edit?.producoes || [];
@@ -708,11 +715,17 @@ const PlantaoMedico: React.FC = () => {
         VALOR_MEDIO: data.qtd > 0 ? finalValorTotal / data.qtd : 0,
         producoes: producoesList,
         valorProducaoTotal: valProducaoTotal,
+        status: edit?.status || 'Pendente',
         ITEMS: data.items
       };
     });
 
-    result.sort((a, b) => {
+    // Filtro por Status (Pago, Pendente ou Todos)
+    if (statusFilter !== 'todos') {
+      filteredResult = filteredResult.filter(item => item.status === statusFilter);
+    }
+
+    filteredResult.sort((a, b) => {
       let valA = a[sortFieldSintetico];
       let valB = b[sortFieldSintetico];
 
@@ -731,8 +744,8 @@ const PlantaoMedico: React.FC = () => {
       return 0;
     });
 
-    return result;
-  }, [plantaosFiltrados, sortFieldSintetico, sortAscSintetico, syntheticEdits]);
+    return filteredResult;
+  }, [plantaosFiltrados, sortFieldSintetico, sortAscSintetico, syntheticEdits, statusFilter]);
 
   // KPIs
   const kpis = useMemo(() => {
@@ -808,11 +821,11 @@ const PlantaoMedico: React.FC = () => {
   }, [plantaosFiltrados]);
 
   // Ordenação por colunas da visão sintética
-  const handleSortSintetico = (field: keyof PlantaoMedicoSintetico) => {
-    if (sortFieldSintetico === field) {
+  const handleSortSintetico = (field: keyof PlantaoMedicoSintetico | 'tipoProducao' | 'valorProducao') => {
+    if (sortFieldSintetico === (field as any)) {
       setSortAscSintetico(!sortAscSintetico);
     } else {
-      setSortFieldSintetico(field);
+      setSortFieldSintetico(field as any);
       setSortAscSintetico(true);
     }
   };
@@ -913,13 +926,14 @@ const PlantaoMedico: React.FC = () => {
           tiposStr,
           s.QTD_PLANTOES.toString(),
           formatCurrency(s.valorProducaoTotal || 0),
-          formatCurrency(s.VALOR_TOTAL)
+          formatCurrency(s.VALOR_TOTAL),
+          s.status || 'Pendente'
         ];
       });
 
       autoTable(doc, {
         startY: nextY + 4,
-        head: [['Médico / Plantonista', 'Especialidade', 'Tipo Plantão', 'Tipos Produção', 'Qtd. Plantões', 'Valor Produção (R$)', 'Valor Total (R$)']],
+        head: [['Médico / Plantonista', 'Especialidade', 'Tipo Plantão', 'Tipos Produção', 'Qtd. Plantões', 'Valor Produção (R$)', 'Valor Total (R$)', 'Status']],
         body: tableBody,
         theme: 'striped',
         headStyles: { fillColor: [138, 21, 21] },
@@ -930,7 +944,8 @@ const PlantaoMedico: React.FC = () => {
           3: { halign: 'center', fontStyle: 'bold' },
           4: { halign: 'center', fontStyle: 'bold' },
           5: { halign: 'right' },
-          6: { halign: 'right', fontStyle: 'bold' }
+          6: { halign: 'right', fontStyle: 'bold' },
+          7: { halign: 'center', fontStyle: 'bold' }
         }
       });
 
@@ -968,7 +983,7 @@ const PlantaoMedico: React.FC = () => {
   // Exportar CSV
   const handleExportCSV = () => {
     if (viewMode === 'sintetico') {
-      const headers = ['Medico', 'Especialidade', 'Tipo_Plantao', 'Tipos_Producao', 'Qtd_Plantoes', 'Valor_Producao_Total_Reais', 'Valor_Total_Reais'];
+      const headers = ['Medico', 'Especialidade', 'Tipo_Plantao', 'Tipos_Producao', 'Qtd_Plantoes', 'Valor_Producao_Total_Reais', 'Valor_Total_Reais', 'Status'];
       const rows = plantaosSinteticos.map(s => {
         const tiposStr = s.producoes && s.producoes.length > 0
           ? s.producoes.map(p => p.tipoProducao).join(', ')
@@ -980,7 +995,8 @@ const PlantaoMedico: React.FC = () => {
           tiposStr,
           s.QTD_PLANTOES,
           s.valorProducaoTotal || 0,
-          s.VALOR_TOTAL
+          s.VALOR_TOTAL,
+          s.status || 'Pendente'
         ];
       });
 
@@ -1072,13 +1088,14 @@ const PlantaoMedico: React.FC = () => {
             <Filter className="h-4 w-4 text-[#8a1515] dark:text-[#f43f5e]" />
             <span className="font-sans">Filtros de Pesquisa</span>
           </div>
-          {(searchTerm || selectedEspecialidades.length > 0 || selectedMedicos.length > 0 || selectedTipos.length > 0 || periodFrom !== getDefaultDates().from || periodTo !== getDefaultDates().to) && (
+          {(searchTerm || selectedEspecialidades.length > 0 || selectedMedicos.length > 0 || selectedTipos.length > 0 || statusFilter !== 'todos' || periodFrom !== getDefaultDates().from || periodTo !== getDefaultDates().to) && (
             <button
               onClick={() => {
                 setSearchTerm('');
                 setSelectedEspecialidades([]);
                 setSelectedMedicos([]);
                 setSelectedTipos([]);
+                setStatusFilter('todos');
                 const defaults = getDefaultDates();
                 setPeriodFrom(defaults.from);
                 setPeriodTo(defaults.to);
@@ -1091,7 +1108,7 @@ const PlantaoMedico: React.FC = () => {
           )}
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-4">
           {/* Data Início */}
           <div className="flex flex-col gap-1.5">
             <label className="text-xs font-semibold text-muted-foreground flex items-center gap-1 font-sans">
@@ -1410,6 +1427,23 @@ const PlantaoMedico: React.FC = () => {
               </AnimatePresence>
             </div>
           </div>
+
+          {/* Filtro: Status de Pagamento (Pago / Pendente / Todos) */}
+          <div className="flex flex-col gap-1.5">
+            <label className="text-xs font-semibold text-muted-foreground flex items-center gap-1 font-sans">
+              <CheckCircle2 className="h-3.5 w-3.5" />
+              Status Pagamento
+            </label>
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value as 'todos' | 'Pago' | 'Pendente')}
+              className="w-full bg-background border border-border hover:border-muted-foreground/40 focus:border-[#8a1515] focus:ring-1 focus:ring-[#8a1515] rounded-lg px-3 py-2 text-sm text-foreground outline-none transition-colors cursor-pointer font-sans"
+            >
+              <option value="todos">Todos (Pago / Pendente)</option>
+              <option value="Pago">Somente Pagos</option>
+              <option value="Pendente">Somente Pendentes</option>
+            </select>
+          </div>
         </div>
 
 
@@ -1683,13 +1717,16 @@ const PlantaoMedico: React.FC = () => {
                   <th className="py-3 px-4 text-right cursor-pointer hover:text-foreground" onClick={() => handleSortSintetico('VALOR_TOTAL')}>
                     Valor Total (R$)
                   </th>
+                  <th className="py-3 px-4 text-center cursor-pointer hover:text-foreground" onClick={() => handleSortSintetico('status')}>
+                    STATUS
+                  </th>
                   <th className="py-3 px-4 text-center">Ações</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border/60">
                 {loading ? (
                   <tr>
-                    <td colSpan={8} className="py-12 text-center text-muted-foreground">
+                    <td colSpan={9} className="py-12 text-center text-muted-foreground">
                       <div className="flex flex-col items-center gap-2">
                         <RefreshCw className="h-6 w-6 animate-spin text-[#8a1515]" />
                         <span>Carregando dados de plantão médico...</span>
@@ -1698,7 +1735,7 @@ const PlantaoMedico: React.FC = () => {
                   </tr>
                 ) : paginatedSinteticos.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="py-12 text-center text-muted-foreground">
+                    <td colSpan={9} className="py-12 text-center text-muted-foreground">
                       Nenhum registro agrupado encontrado com os filtros aplicados.
                     </td>
                   </tr>
@@ -1727,11 +1764,20 @@ const PlantaoMedico: React.FC = () => {
                                   ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20 dark:text-emerald-400'
                                   : p.tipoProducao === 'Parto'
                                   ? 'bg-purple-500/10 text-purple-600 border-purple-500/20 dark:text-purple-400'
-                                  : 'bg-amber-500/10 text-amber-600 border-amber-500/20 dark:text-amber-400'
+                                  : p.tipoProducao === 'Aula'
+                                  ? 'bg-cyan-500/10 text-cyan-600 border-cyan-500/20 dark:text-cyan-400'
+                                  : p.tipoProducao === 'CC'
+                                  ? 'bg-rose-500/10 text-rose-600 border-rose-500/20 dark:text-rose-400'
+                                  : p.tipoProducao === 'Coordenação'
+                                  ? 'bg-amber-500/10 text-amber-600 border-amber-500/20 dark:text-amber-400'
+                                  : 'bg-slate-500/10 text-slate-600 border-slate-500/20 dark:text-slate-400'
                               }`}>
                                 {p.tipoProducao === 'Procedimento' && <ClipboardList className="h-3 w-3" />}
                                 {p.tipoProducao === 'Consulta' && <Stethoscope className="h-3 w-3" />}
                                 {p.tipoProducao === 'Parto' && <Baby className="h-3 w-3" />}
+                                {p.tipoProducao === 'Aula' && <GraduationCap className="h-3 w-3" />}
+                                {p.tipoProducao === 'CC' && <Activity className="h-3 w-3" />}
+                                {p.tipoProducao === 'Coordenação' && <Briefcase className="h-3 w-3" />}
                                 {p.tipoProducao}
                                 {p.valorProducao > 0 && ` (${formatCurrency(p.valorProducao)})`}
                               </span>
@@ -1751,6 +1797,19 @@ const PlantaoMedico: React.FC = () => {
                       </td>
                       <td className="py-3 px-4 text-right font-bold text-[#8a1515] dark:text-[#f43f5e] text-base whitespace-nowrap">
                         {formatCurrency(item.VALOR_TOTAL)}
+                      </td>
+                      <td className="py-3 px-4 text-center whitespace-nowrap">
+                        {item.status === 'Pago' ? (
+                          <span className="inline-flex items-center gap-1.5 text-xs font-bold px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                            <CheckCircle2 className="h-3.5 w-3.5" />
+                            Pago
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1.5 text-xs font-bold px-2.5 py-1 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
+                            <Clock className="h-3.5 w-3.5" />
+                            Pendente
+                          </span>
+                        )}
                       </td>
                       <td className="py-3 px-4 text-center">
                         <button
@@ -1928,6 +1987,29 @@ const PlantaoMedico: React.FC = () => {
                   </div>
                 </div>
 
+                {/* Status de Pagamento (Pago / Pendente) */}
+                <div className="p-3 bg-muted/40 border border-border rounded-xl flex items-center justify-between font-sans">
+                  <div>
+                    <label className="text-xs font-bold text-foreground block">
+                      Status de Pagamento
+                    </label>
+                    <span className="text-[11px] text-muted-foreground block">
+                      Marque o checkbox para alterar o status para Pago.
+                    </span>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer gap-2 bg-background px-3.5 py-1.5 rounded-lg border border-border hover:bg-muted/40 transition-all select-none shadow-sm">
+                    <input
+                      type="checkbox"
+                      checked={editStatus === 'Pago'}
+                      onChange={(e) => setEditStatus(e.target.checked ? 'Pago' : 'Pendente')}
+                      className="h-4 w-4 rounded border-border text-[#8a1515] focus:ring-[#8a1515] accent-[#8a1515] cursor-pointer"
+                    />
+                    <span className={`text-xs font-bold font-mono tracking-wide ${editStatus === 'Pago' ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'}`}>
+                      {editStatus === 'Pago' ? 'PAGO' : 'PENDENTE'}
+                    </span>
+                  </label>
+                </div>
+
                 {/* Form de Múltiplos Tipos de Produção e Valores */}
                 <div className="space-y-3 pt-1 font-sans">
                   <div className="flex justify-between items-center">
@@ -1987,6 +2069,9 @@ const PlantaoMedico: React.FC = () => {
                               <option value="Procedimento">1 - Procedimento (Exames/Cirurgias)</option>
                               <option value="Consulta">2 - Consulta (Atendimento clínico)</option>
                               <option value="Parto">3 - Parto (Procedimento obstétrico)</option>
+                              <option value="Aula">4 - Aula</option>
+                              <option value="CC">5 - CC (Centro Cirúrgico)</option>
+                              <option value="Coordenação">6 - Coordenação</option>
                             </select>
                           </div>
 
