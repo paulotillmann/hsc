@@ -426,7 +426,18 @@ export default function InternatoAgenda() {
     if (!temPermissaoEscrita) return;
     setIsEditing(true);
     setEditingId(evento.id);
-    setFormTurmaId(evento.turma_id || 'acolhimento');
+    
+    // Se não houver turma_id, verifica pelo texto da observação para restaurar "funcionarios" ou "acolhimento"
+    if (!evento.turma_id) {
+      if (evento.observacao && evento.observacao.startsWith('[Funcionários]')) {
+        setFormTurmaId('funcionarios');
+      } else {
+        setFormTurmaId('acolhimento');
+      }
+    } else {
+      setFormTurmaId(evento.turma_id);
+    }
+
     setFormClinica(evento.clinica || '');
     setFormSala(evento.sala);
     setFormProfessorId(evento.professor_id || '');
@@ -446,13 +457,21 @@ export default function InternatoAgenda() {
       setFormHorario('Manhã');
     }
 
-    setFormObservacao(evento.observacao || '');
+    // Remove a tag interna da observação ao carregar no form se existir
+    let obsLimpa = evento.observacao || '';
+    if (obsLimpa.startsWith('[Funcionários] ')) {
+      obsLimpa = obsLimpa.replace('[Funcionários] ', '');
+    } else if (obsLimpa === '[Funcionários]') {
+      obsLimpa = '';
+    }
+    setFormObservacao(obsLimpa);
     setShowFormModal(true);
   };
 
   const handleSaveEvento = async (e: React.FormEvent) => {
     e.preventDefault();
-    const clinicaObrigatoria = formTurmaId !== 'acolhimento';
+    const isEspecial = formTurmaId === 'acolhimento' || formTurmaId === 'funcionarios';
+    const clinicaObrigatoria = !isEspecial;
     const horarioParaSalvar = formHorarioPersonalizado;
 
     if (!formSala || !horarioParaSalvar || !formTurmaId || (clinicaObrigatoria && !formClinica)) {
@@ -461,14 +480,20 @@ export default function InternatoAgenda() {
     }
 
     setOperando(true);
+
+    let observacaoFinal = formObservacao || null;
+    if (formTurmaId === 'funcionarios') {
+      observacaoFinal = formObservacao ? `[Funcionários] ${formObservacao}` : '[Funcionários]';
+    }
+
     const payload = {
       data: selectedDateString,
-      turma_id: formTurmaId === 'acolhimento' ? null : (formTurmaId || null),
+      turma_id: isEspecial ? null : (formTurmaId || null),
       clinica: formClinica || null,
       sala: formSala,
       professor_id: formProfessorId || null,
       horario: horarioParaSalvar,
-      observacao: formObservacao || null
+      observacao: observacaoFinal
     };
 
     try {
@@ -682,15 +707,16 @@ export default function InternatoAgenda() {
                       <div className="flex-1 mt-1.5 space-y-1 pr-0.5">
                         {diaEventos.map(evento => {
                           const estilo = getLocalEstilo(evento.sala);
+                          const nomeTurmaDisplay = evento.internato_turmas?.nome || (evento.observacao && evento.observacao.startsWith('[Funcionários]') ? 'Funcionários' : 'Acolhimento');
                           return (
                             <div
                               key={evento.id}
                               className={`flex items-center flex-wrap gap-1 px-1 py-0.5 rounded text-[10px] font-semibold border ${estilo.bg} ${estilo.border} ${estilo.text}`}
-                              title={`${evento.internato_turmas?.nome || 'Acolhimento'} - ${evento.sala} (${evento.horario})`}
+                              title={`${nomeTurmaDisplay} - ${evento.sala} (${evento.horario})`}
                             >
                               <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${estilo.bullet}`} />
                               <span className="flex-1 break-words">
-                                {evento.internato_turmas?.nome || 'Acolhimento'}
+                                {nomeTurmaDisplay}
                               </span>
                               <span className="text-[9.5px] opacity-90 font-medium shrink-0 ml-1 border-l border-current/20 pl-1">
                                 {evento.sala}
@@ -745,6 +771,7 @@ export default function InternatoAgenda() {
               eventosDoDiaSelecionado.map(evento => {
                 const estilo = getLocalEstilo(evento.sala);
                 const clinicaNome = CLINICAS.find(c => c.id === evento.clinica)?.nome || evento.clinica || 'Não informado';
+                const isFuncionarios = !evento.internato_turmas && evento.observacao && evento.observacao.startsWith('[Funcionários]');
                 return (
                   <div
                     key={evento.id}
@@ -789,6 +816,8 @@ export default function InternatoAgenda() {
                               {' '}({evento.internato_turmas.periodo})
                             </span>
                           </>
+                        ) : isFuncionarios ? (
+                          'Funcionários'
                         ) : (
                           'Acolhimento'
                         )}
@@ -874,6 +903,7 @@ export default function InternatoAgenda() {
                   >
                     <option value="" disabled>Selecione uma turma</option>
                     <option value="acolhimento">Acolhimento</option>
+                    <option value="funcionarios">Funcionários</option>
                     {turmas.map(t => (
                       <option key={t.id} value={t.id}>
                         {t.nome} ({t.periodo})
@@ -933,13 +963,13 @@ export default function InternatoAgenda() {
 
                 <div className="flex flex-col gap-1.5">
                   <label className="text-xs font-bold text-muted-foreground uppercase">
-                    Clínica {formTurmaId !== 'acolhimento' && '*'}
+                    Clínica {formTurmaId !== 'acolhimento' && formTurmaId !== 'funcionarios' && '*'}
                   </label>
                   <select
                     value={formClinica}
                     onChange={e => setFormClinica(e.target.value)}
                     className="w-full px-3 py-2 text-sm rounded-lg border border-border bg-background focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all"
-                    required={formTurmaId !== 'acolhimento'}
+                    required={formTurmaId !== 'acolhimento' && formTurmaId !== 'funcionarios'}
                   >
                     <option value="" disabled>Selecione uma clínica</option>
                     {CLINICAS.map(c => (

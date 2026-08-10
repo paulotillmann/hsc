@@ -1186,7 +1186,7 @@ const Secretaria: React.FC = () => {
                       key={turma.id}
                       onClick={() => handleVerDetalhesTurma(turma)}
                       className={`p-5 rounded-xl border bg-card hover:shadow-md transition-all cursor-pointer flex flex-col justify-between ${
-                        selectedTurma?.id === turma.id ? 'border-primary ring-1 ring-primary' : 'border-border'
+                        selectedTurma?.id === turma.id ? 'border-amber-500 ring-1 ring-amber-500 bg-amber-50/30 dark:bg-amber-950/20' : 'border-border'
                       } ${!turma.ativa ? 'opacity-65 border-dashed bg-slate-50/40 dark:bg-slate-900/40' : ''}`}
                     >
                       <div>
