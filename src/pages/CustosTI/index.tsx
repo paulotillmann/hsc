@@ -803,8 +803,8 @@ const CustosTI: React.FC = () => {
                 <h3 className="text-2xl font-bold tracking-tight text-foreground font-sans">{formatCurrency(kpis.totalValor)}</h3>
                 {momMetrics.percentage !== null && (
                   <span className={`inline-flex items-center gap-0.5 text-[10px] font-bold px-2 py-0.5 rounded-full ${momMetrics.percentage > 0
-                      ? 'bg-rose-500/10 text-rose-600 dark:text-rose-400'
-                      : 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+                    ? 'bg-rose-500/10 text-rose-600 dark:text-rose-400'
+                    : 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
                     }`} title={`Variação do último mês (${momMetrics.label})`}>
                     {momMetrics.percentage > 0 ? '▲' : '▼'} {Math.abs(momMetrics.percentage).toFixed(1)}% MoM
                   </span>
@@ -1111,8 +1111,8 @@ const CustosTI: React.FC = () => {
                     </td>
                     <td className="p-4 text-center">
                       <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium font-sans ${t.IE_SITUACAO === 'L'
-                          ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
-                          : 'bg-amber-500/10 text-amber-600 dark:text-amber-400'
+                        ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+                        : 'bg-amber-500/10 text-amber-600 dark:text-amber-400'
                         }`}>
                         {t.IE_SITUACAO === 'L' ? (
                           <CheckCircle2 className="h-3 w-3" />
@@ -1254,8 +1254,8 @@ const CustosTI: React.FC = () => {
                   <div>
                     <span className="text-xs font-semibold text-muted-foreground block font-sans">Situação</span>
                     <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium font-sans mt-1.5 ${selectedTitulo.IE_SITUACAO === 'L'
-                        ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
-                        : 'bg-amber-500/10 text-amber-600 dark:text-amber-400'
+                      ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+                      : 'bg-amber-500/10 text-amber-600 dark:text-amber-400'
                       }`}>
                       {selectedTitulo.IE_SITUACAO === 'L' ? <CheckCircle2 className="h-3 w-3" /> : <Clock className="h-3 w-3" />}
                       {getStatusLabel(selectedTitulo.IE_SITUACAO)}

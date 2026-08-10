@@ -43,7 +43,9 @@ export interface PlantaoMedicoSintetico {
   VALOR_MEDIO: number;
   producoes?: ProducaoItem[];
   valorProducaoTotal?: number;
-  status: 'Pago' | 'Pendente';
+  valorPago?: number;
+  valorPendente?: number;
+  status: 'Pago' | 'Pendente' | 'Parcial';
   ITEMS: PlantaoMedicoItem[];
 }
 
@@ -246,8 +248,8 @@ const PlantaoMedico: React.FC = () => {
   const [tipoSearch, setTipoSearch] = useState<string>('');
   const tipoDropdownRef = useRef<HTMLDivElement>(null);
 
-  // Filtro de Status de Pagamento (Sintético): 'todos' | 'Pago' | 'Pendente'
-  const [statusFilter, setStatusFilter] = useState<'todos' | 'Pago' | 'Pendente'>('todos');
+  // Filtro de Status de Pagamento (Sintético): 'todos' | 'Pago' | 'Pendente' | 'Parcial'
+  const [statusFilter, setStatusFilter] = useState<'todos' | 'Pago' | 'Pendente' | 'Parcial'>('todos');
 
   // Ordenação
   const [sortField, setSortField] = useState<keyof PlantaoMedicoItem>('DT_CHAMADO');
@@ -261,8 +263,8 @@ const PlantaoMedico: React.FC = () => {
   const [viewMode, setViewMode] = useState<'analitico' | 'sintetico'>('analitico');
   const [sortFieldSintetico, setSortFieldSintetico] = useState<keyof PlantaoMedicoSintetico>('VALOR_TOTAL');
   const [sortAscSintetico, setSortAscSintetico] = useState<boolean>(false);
-  // Armazenamento de edições de produção para a visão Sintética (suporta múltiplos tipos por grupo)
-  const [syntheticEdits, setSyntheticEdits] = useState<Record<string, { producoes?: ProducaoItem[]; status?: 'Pago' | 'Pendente' }>>(() => {
+  // Armazenamento de edições de produção e valor pago para a visão Sintética
+  const [syntheticEdits, setSyntheticEdits] = useState<Record<string, { producoes?: ProducaoItem[]; status?: 'Pago' | 'Pendente' | 'Parcial'; valorPago?: number }>>(() => {
     try {
       const cached = getStorageItem('hsc_plantao_medico_synthetic_edits');
       if (cached) return JSON.parse(cached);
@@ -273,14 +275,16 @@ const PlantaoMedico: React.FC = () => {
   const [selectedSinteticoItem, setSelectedSinteticoItem] = useState<PlantaoMedicoSintetico | null>(null);
   const [selectedItem, setSelectedItem] = useState<PlantaoMedicoItem | null>(null);
 
-  // Form state para Múltiplas Produções Médicas e Status (Sintético)
+  // Form state para Múltiplas Produções Médicas, Status e Valor Pago (Sintético)
   const [editProducoesList, setEditProducoesList] = useState<{ id: string; tipoProducao: string; valorProducao: string }[]>([]);
-  const [editStatus, setEditStatus] = useState<'Pago' | 'Pendente'>('Pendente');
+  const [editStatus, setEditStatus] = useState<'Pago' | 'Pendente' | 'Parcial'>('Pendente');
+  const [editValorPago, setEditValorPago] = useState<string>('0');
   const [saveSuccessMessage, setSaveSuccessMessage] = useState<boolean>(false);
 
   const handleOpenSinteticoModal = (item: PlantaoMedicoSintetico) => {
     setSelectedSinteticoItem(item);
     setEditStatus(item.status || 'Pendente');
+    setEditValorPago(item.valorPago !== undefined ? String(item.valorPago) : (item.status === 'Pago' ? String(item.VALOR_TOTAL) : '0'));
     if (item.producoes && item.producoes.length > 0) {
       setEditProducoesList(
         item.producoes.map((p, i) => ({
@@ -331,11 +335,30 @@ const PlantaoMedico: React.FC = () => {
       };
     });
 
+    const cleanValorPagoStr = String(editValorPago).replace(/[R$\s]/g, '').replace(/\./g, '').replace(',', '.');
+    const parsedValorPago = parseFloat(cleanValorPagoStr);
+    const validValorPago = isNaN(parsedValorPago) ? 0 : Math.max(0, parsedValorPago);
+
+    // Calcular o total final esperado (Base Plantões + Produções)
+    const basePlantaoTotal = selectedSinteticoItem.ITEMS.reduce((acc, p) => acc + p.VALOR, 0);
+    const prodTotal = validProducoes.reduce((acc, p) => acc + (p.valorProducao || 0), 0);
+    const totalEsperado = basePlantaoTotal + prodTotal;
+
+    let finalStatus: 'Pago' | 'Pendente' | 'Parcial' = editStatus;
+    if (validValorPago >= totalEsperado && totalEsperado > 0) {
+      finalStatus = 'Pago';
+    } else if (validValorPago > 0 && validValorPago < totalEsperado) {
+      finalStatus = 'Parcial';
+    } else if (validValorPago === 0) {
+      finalStatus = 'Pendente';
+    }
+
     const updatedEdits = {
       ...syntheticEdits,
       [selectedSinteticoItem.id]: {
         producoes: validProducoes,
-        status: editStatus
+        status: finalStatus,
+        valorPago: validValorPago
       }
     };
 
@@ -705,6 +728,22 @@ const PlantaoMedico: React.FC = () => {
       const valPlantaoBase = data.valorTotal;
       const finalValorTotal = valPlantaoBase + valProducaoTotal;
 
+      let computedStatus: 'Pago' | 'Pendente' | 'Parcial' = edit?.status || 'Pendente';
+      let valPago = edit?.valorPago;
+      if (valPago === undefined) {
+        valPago = computedStatus === 'Pago' ? finalValorTotal : 0;
+      }
+
+      if (valPago >= finalValorTotal && finalValorTotal > 0) {
+        computedStatus = 'Pago';
+      } else if (valPago > 0 && valPago < finalValorTotal) {
+        computedStatus = 'Parcial';
+      } else if (valPago === 0) {
+        computedStatus = 'Pendente';
+      }
+
+      const valPendenteCalculado = Math.max(0, finalValorTotal - valPago);
+
       return {
         id: syntheticId,
         MEDICO: data.medico,
@@ -715,12 +754,14 @@ const PlantaoMedico: React.FC = () => {
         VALOR_MEDIO: data.qtd > 0 ? finalValorTotal / data.qtd : 0,
         producoes: producoesList,
         valorProducaoTotal: valProducaoTotal,
-        status: edit?.status || 'Pendente',
+        valorPago: valPago,
+        valorPendente: valPendenteCalculado,
+        status: computedStatus,
         ITEMS: data.items
       };
     });
 
-    // Filtro por Status (Pago, Pendente ou Todos)
+    // Filtro por Status (Pago, Pendente, Parcial ou Todos)
     if (statusFilter !== 'todos') {
       filteredResult = filteredResult.filter(item => item.status === statusFilter);
     }
@@ -750,17 +791,26 @@ const PlantaoMedico: React.FC = () => {
   // KPIs
   const kpis = useMemo(() => {
     let totalValor = 0;
+    let totalPago = 0;
+    let totalPendente = 0;
     const medicosUnicos = new Set<string>();
 
     if (viewMode === 'sintetico') {
       plantaosSinteticos.forEach(s => {
         totalValor += s.VALOR_TOTAL;
+        totalPago += s.valorPago || 0;
+        totalPendente += s.valorPendente || 0;
         if (s.MEDICO) medicosUnicos.add(s.MEDICO);
       });
     } else {
       plantaosFiltrados.forEach(p => {
         totalValor += p.VALOR;
         if (p.MEDICO) medicosUnicos.add(p.MEDICO);
+      });
+      // Na visão analítica, estimamos pago/pendente a partir do sintético consolidado
+      plantaosSinteticos.forEach(s => {
+        totalPago += s.valorPago || 0;
+        totalPendente += s.valorPendente || 0;
       });
     }
 
@@ -769,6 +819,8 @@ const PlantaoMedico: React.FC = () => {
 
     return {
       totalValor,
+      totalPago,
+      totalPendente,
       count,
       mediaPorPlantao,
       medicosAtivos: medicosUnicos.size
@@ -845,9 +897,9 @@ const PlantaoMedico: React.FC = () => {
     ? Math.ceil(plantaosSinteticos.length / itemsPerPage)
     : Math.ceil(plantaosFiltrados.length / itemsPerPage);
 
-  // Exportar PDF Executivo (Sintético ou Analítico)
+  // Exportar PDF Executivo (Sintético ou Analítico em Modo Paisagem / Landscape)
   const handleExportPDF = async () => {
-    const doc = new jsPDF();
+    const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
     
     try {
       const img = new Image();
@@ -867,12 +919,12 @@ const PlantaoMedico: React.FC = () => {
 
     doc.setFontSize(16);
     doc.setFont('helvetica', 'bold');
-    doc.text(titleText, 14, 32);
+    doc.text(titleText, 10, 26);
 
     doc.setFontSize(9);
     doc.setFont('helvetica', 'normal');
     doc.setTextColor(100);
-    doc.text(`Data de Emissão: ${new Date().toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })} às ${new Date().toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit' })}`, 14, 38);
+    doc.text(`Data de Emissão: ${new Date().toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })} às ${new Date().toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit' })}`, 10, 32);
     
     const activeFilters = [];
     if (periodFrom || periodTo) {
@@ -881,43 +933,48 @@ const PlantaoMedico: React.FC = () => {
     }
     if (selectedTipos.length > 0) activeFilters.push(`Tipos: ${selectedTipos.join(', ')}`);
     if (selectedEspecialidades.length > 0) activeFilters.push(`Especialidades: ${selectedEspecialidades.join(', ')}`);
+    if (statusFilter !== 'todos') activeFilters.push(`Status: ${statusFilter}`);
 
     if (activeFilters.length > 0) {
-      doc.text(`Filtros: ${activeFilters.join(' | ')}`, 14, 43);
+      doc.text(`Filtros: ${activeFilters.join(' | ')}`, 10, 37);
     }
 
     doc.setFontSize(11);
     doc.setFont('helvetica', 'bold');
     doc.setTextColor(0);
-    doc.text('Resumo Financeiro de Plantões', 14, 52);
+    doc.text('Resumo Financeiro de Plantões', 10, 45);
 
     autoTable(doc, {
-      startY: 56,
-      head: [['Total de Plantões', 'Valor Total', 'Valor Médio por Plantão', 'Médicos Ativos']],
+      startY: 48,
+      margin: { left: 10, right: 10 },
+      head: [['Total de Plantões', 'Valor Previsto', 'Total Pago Realizado', 'Saldo Pendente (A Pagar)', 'Médicos Ativos']],
       body: [[
         kpis.count.toString(),
         formatCurrency(kpis.totalValor),
-        formatCurrency(kpis.mediaPorPlantao),
+        formatCurrency(kpis.totalPago),
+        formatCurrency(kpis.totalPendente),
         kpis.medicosAtivos.toString()
       ]],
       theme: 'grid',
-      headStyles: { fillColor: [138, 21, 21], halign: 'center' },
+      headStyles: { fillColor: [138, 21, 21], halign: 'center', fontSize: 8.5 },
+      styles: { fontSize: 8.5, cellPadding: 2 },
       columnStyles: {
         0: { halign: 'center', fontStyle: 'bold' },
         1: { halign: 'center' },
-        2: { halign: 'center' },
-        3: { halign: 'center', fontStyle: 'bold' }
+        2: { halign: 'center', fontStyle: 'bold' },
+        3: { halign: 'center', fontStyle: 'bold' },
+        4: { halign: 'center', fontStyle: 'bold' }
       }
     });
 
-    const nextY = (doc as any).lastAutoTable.finalY + 12;
+    const nextY = (doc as any).lastAutoTable.finalY + 9;
 
     if (viewMode === 'sintetico') {
-      doc.text('Consolidado Sintético por Médico, Setor e Produção Médica', 14, nextY);
+      doc.text('Consolidado Sintético por Médico, Setor e Produção Médica', 10, nextY);
 
       const tableBody = plantaosSinteticos.map(s => {
         const tiposStr = s.producoes && s.producoes.length > 0
-          ? s.producoes.map(p => p.tipoProducao).join(', ')
+          ? s.producoes.map(p => `${p.tipoProducao}${p.valorProducao ? ` (${formatCurrency(p.valorProducao)})` : ''}`).join(', ')
           : 'Não informado';
         return [
           s.MEDICO,
@@ -925,33 +982,49 @@ const PlantaoMedico: React.FC = () => {
           s.TIPO_PLANTAO,
           tiposStr,
           s.QTD_PLANTOES.toString(),
-          formatCurrency(s.valorProducaoTotal || 0),
           formatCurrency(s.VALOR_TOTAL),
-          s.status || 'Pendente'
+          formatCurrency(s.valorPago || 0),
+          formatCurrency(s.valorPendente || 0),
+          s.status === 'Pago' ? 'PAGO' : s.status === 'Parcial' ? 'PARCIAL' : 'PENDENTE'
         ];
       });
 
       autoTable(doc, {
         startY: nextY + 4,
-        head: [['Médico / Plantonista', 'Especialidade', 'Tipo Plantão', 'Tipos Produção', 'Qtd. Plantões', 'Valor Produção (R$)', 'Valor Total (R$)', 'Status']],
+        margin: { left: 10, right: 10 },
+        head: [['Médico / Plantonista', 'Especialidade', 'Tipo Plantão', 'Tipos Produção Adicionais', 'Qtd.', 'Valor Total (R$)', 'Valor Pago (R$)', 'Saldo Pendente (R$)', 'Status']],
         body: tableBody,
         theme: 'striped',
-        headStyles: { fillColor: [138, 21, 21] },
+        headStyles: { 
+          fillColor: [138, 21, 21], 
+          textColor: [255, 255, 255], 
+          fontStyle: 'bold', 
+          fontSize: 8,
+          valign: 'middle',
+          halign: 'left'
+        },
+        styles: { 
+          fontSize: 8, 
+          cellPadding: 2.2, 
+          overflow: 'linebreak',
+          valign: 'middle'
+        },
         columnStyles: {
-          0: { halign: 'left', fontStyle: 'bold' },
-          1: { halign: 'left' },
-          2: { halign: 'left' },
-          3: { halign: 'center', fontStyle: 'bold' },
-          4: { halign: 'center', fontStyle: 'bold' },
-          5: { halign: 'right' },
-          6: { halign: 'right', fontStyle: 'bold' },
-          7: { halign: 'center', fontStyle: 'bold' }
+          0: { halign: 'left', fontStyle: 'bold', cellWidth: 46 },
+          1: { halign: 'left', cellWidth: 32 },
+          2: { halign: 'left', cellWidth: 26 },
+          3: { halign: 'left', cellWidth: 42 },
+          4: { halign: 'center', fontStyle: 'bold', cellWidth: 12 },
+          5: { halign: 'right', fontStyle: 'bold', cellWidth: 28 },
+          6: { halign: 'right', cellWidth: 28 },
+          7: { halign: 'right', fontStyle: 'bold', cellWidth: 30 },
+          8: { halign: 'center', fontStyle: 'bold', cellWidth: 23 }
         }
       });
 
       doc.save(`HSC_Relatorio_Sintetico_Plantao_Medico_${new Date().toISOString().split('T')[0]}.pdf`);
     } else {
-      doc.text('Detalhamento de Escalas e Honorários', 14, nextY);
+      doc.text('Detalhamento de Escalas e Honorários', 10, nextY);
 
       const tableBody = plantaosFiltrados.map(p => [
         formatDate(p.DT_CHAMADO),
@@ -963,6 +1036,7 @@ const PlantaoMedico: React.FC = () => {
 
       autoTable(doc, {
         startY: nextY + 4,
+        margin: { left: 10, right: 10 },
         head: [['Data/Hora Chamado', 'Médico / Plantonista', 'Especialidade', 'Tipo Plantão', 'Valor (R$)']],
         body: tableBody,
         theme: 'striped',
@@ -983,7 +1057,7 @@ const PlantaoMedico: React.FC = () => {
   // Exportar CSV
   const handleExportCSV = () => {
     if (viewMode === 'sintetico') {
-      const headers = ['Medico', 'Especialidade', 'Tipo_Plantao', 'Tipos_Producao', 'Qtd_Plantoes', 'Valor_Producao_Total_Reais', 'Valor_Total_Reais', 'Status'];
+      const headers = ['Medico', 'Especialidade', 'Tipo_Plantao', 'Tipos_Producao', 'Qtd_Plantoes', 'Valor_Total_Reais', 'Valor_Pago_Reais', 'Saldo_Pendente_Reais', 'Status'];
       const rows = plantaosSinteticos.map(s => {
         const tiposStr = s.producoes && s.producoes.length > 0
           ? s.producoes.map(p => p.tipoProducao).join(', ')
@@ -994,9 +1068,10 @@ const PlantaoMedico: React.FC = () => {
           s.TIPO_PLANTAO,
           tiposStr,
           s.QTD_PLANTOES,
-          s.valorProducaoTotal || 0,
           s.VALOR_TOTAL,
-          s.status || 'Pendente'
+          s.valorPago || 0,
+          s.valorPendente || 0,
+          s.status
         ];
       });
 
@@ -1428,7 +1503,7 @@ const PlantaoMedico: React.FC = () => {
             </div>
           </div>
 
-          {/* Filtro: Status de Pagamento (Pago / Pendente / Todos) */}
+          {/* Filtro: Status de Pagamento (Pago / Parcial / Pendente / Todos) */}
           <div className="flex flex-col gap-1.5">
             <label className="text-xs font-semibold text-muted-foreground flex items-center gap-1 font-sans">
               <CheckCircle2 className="h-3.5 w-3.5" />
@@ -1436,12 +1511,13 @@ const PlantaoMedico: React.FC = () => {
             </label>
             <select
               value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value as 'todos' | 'Pago' | 'Pendente')}
+              onChange={(e) => setStatusFilter(e.target.value as 'todos' | 'Pago' | 'Pendente' | 'Parcial')}
               className="w-full bg-background border border-border hover:border-muted-foreground/40 focus:border-[#8a1515] focus:ring-1 focus:ring-[#8a1515] rounded-lg px-3 py-2 text-sm text-foreground outline-none transition-colors cursor-pointer font-sans"
             >
-              <option value="todos">Todos (Pago / Pendente)</option>
-              <option value="Pago">Somente Pagos</option>
-              <option value="Pendente">Somente Pendentes</option>
+              <option value="todos">Todos os Status</option>
+              <option value="Pago">Somente Pagos (Integral)</option>
+              <option value="Parcial">Somente Parciais (Com Saldo)</option>
+              <option value="Pendente">Somente Pendentes (0% Pago)</option>
             </select>
           </div>
         </div>
@@ -1450,67 +1526,83 @@ const PlantaoMedico: React.FC = () => {
       </div>
 
       {/* ── KPI CARDS ── */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* Total Valor */}
-        <div className="bg-card border border-border rounded-xl p-5 shadow-sm hover:shadow-md transition-all flex flex-col justify-between">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+        {/* Total Valor Previsto */}
+        <div className="bg-card border border-border rounded-xl p-4 shadow-sm hover:shadow-md transition-all flex flex-col justify-between">
           <div className="flex justify-between items-start">
             <div className="space-y-1">
-              <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider font-sans">Valor Total Plantões</span>
-              <h3 className="text-2xl font-bold tracking-tight text-foreground font-sans">{formatCurrency(kpis.totalValor)}</h3>
+              <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider font-sans">Valor Total Previsto</span>
+              <h3 className="text-xl font-bold tracking-tight text-foreground font-sans">{formatCurrency(kpis.totalValor)}</h3>
             </div>
-            <div className="p-2.5 bg-[#8a1515]/10 text-[#8a1515] dark:text-[#f43f5e] rounded-lg border border-[#8a1515]/20">
-              <DollarSign className="h-5 w-5" />
+            <div className="p-2 bg-[#8a1515]/10 text-[#8a1515] dark:text-[#f43f5e] rounded-lg border border-[#8a1515]/20">
+              <DollarSign className="h-4 w-4" />
             </div>
           </div>
-          <p className="text-[10px] text-muted-foreground mt-3 font-sans">
-            Soma dos honorários no período filtrado
+          <p className="text-[10px] text-muted-foreground mt-2 font-sans">
+            Plantões + Produções Adicionais
+          </p>
+        </div>
+
+        {/* Total Pago Realizado */}
+        <div className="bg-card border border-border rounded-xl p-4 shadow-sm hover:shadow-md transition-all flex flex-col justify-between">
+          <div className="flex justify-between items-start">
+            <div className="space-y-1">
+              <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider font-sans">Total Pago Realizado</span>
+              <h3 className="text-xl font-bold tracking-tight text-emerald-600 dark:text-emerald-400 font-sans">{formatCurrency(kpis.totalPago)}</h3>
+            </div>
+            <div className="p-2 bg-emerald-500/10 text-emerald-500 rounded-lg border border-emerald-500/20">
+              <CheckCircle2 className="h-4 w-4" />
+            </div>
+          </div>
+          <p className="text-[10px] text-muted-foreground mt-2 font-sans">
+            Valores já quitados aos médicos
+          </p>
+        </div>
+
+        {/* Saldo Pendente */}
+        <div className="bg-card border border-border rounded-xl p-4 shadow-sm hover:shadow-md transition-all flex flex-col justify-between">
+          <div className="flex justify-between items-start">
+            <div className="space-y-1">
+              <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider font-sans">Saldo Pendente</span>
+              <h3 className="text-xl font-bold tracking-tight text-amber-600 dark:text-amber-400 font-sans">{formatCurrency(kpis.totalPendente)}</h3>
+            </div>
+            <div className="p-2 bg-amber-500/10 text-amber-500 rounded-lg border border-amber-500/20">
+              <Clock className="h-4 w-4" />
+            </div>
+          </div>
+          <p className="text-[10px] text-muted-foreground mt-2 font-sans">
+            Saldo restante a ser pago
           </p>
         </div>
 
         {/* Total Plantões */}
-        <div className="bg-card border border-border rounded-xl p-5 shadow-sm hover:shadow-md transition-all flex flex-col justify-between">
+        <div className="bg-card border border-border rounded-xl p-4 shadow-sm hover:shadow-md transition-all flex flex-col justify-between">
           <div className="flex justify-between items-start">
             <div className="space-y-1">
-              <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider font-sans">Total de Escalas</span>
-              <h3 className="text-2xl font-bold tracking-tight text-emerald-600 dark:text-emerald-400 font-sans">{kpis.count}</h3>
+              <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider font-sans">Total de Escalas</span>
+              <h3 className="text-xl font-bold tracking-tight text-blue-600 dark:text-blue-400 font-sans">{kpis.count}</h3>
             </div>
-            <div className="p-2.5 bg-emerald-500/10 text-emerald-500 rounded-lg border border-emerald-500/20">
-              <Activity className="h-5 w-5" />
-            </div>
-          </div>
-          <p className="text-[10px] text-muted-foreground mt-3 font-sans">
-            Número total de chamados/escalas
-          </p>
-        </div>
-
-        {/* Valor Médio */}
-        <div className="bg-card border border-border rounded-xl p-5 shadow-sm hover:shadow-md transition-all flex flex-col justify-between">
-          <div className="flex justify-between items-start">
-            <div className="space-y-1">
-              <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider font-sans">Média por Plantão</span>
-              <h3 className="text-2xl font-bold tracking-tight text-amber-600 dark:text-amber-400 font-sans">{formatCurrency(kpis.mediaPorPlantao)}</h3>
-            </div>
-            <div className="p-2.5 bg-amber-500/10 text-amber-500 rounded-lg border border-amber-500/20">
-              <TrendingUp className="h-5 w-5" />
+            <div className="p-2 bg-blue-500/10 text-blue-500 rounded-lg border border-blue-500/20">
+              <Activity className="h-4 w-4" />
             </div>
           </div>
-          <p className="text-[10px] text-muted-foreground mt-3 font-sans">
-            Valor médio por chamado efetuado
+          <p className="text-[10px] text-muted-foreground mt-2 font-sans">
+            Número total de chamados
           </p>
         </div>
 
         {/* Médicos Ativos */}
-        <div className="bg-card border border-border rounded-xl p-5 shadow-sm hover:shadow-md transition-all flex flex-col justify-between">
+        <div className="bg-card border border-border rounded-xl p-4 shadow-sm hover:shadow-md transition-all flex flex-col justify-between">
           <div className="flex justify-between items-start">
             <div className="space-y-1">
-              <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider font-sans">Médicos Ativos</span>
-              <h3 className="text-2xl font-bold tracking-tight text-foreground font-sans">{kpis.medicosAtivos}</h3>
+              <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider font-sans">Médicos Ativos</span>
+              <h3 className="text-xl font-bold tracking-tight text-foreground font-sans">{kpis.medicosAtivos}</h3>
             </div>
-            <div className="p-2.5 bg-indigo-500/10 text-indigo-500 rounded-lg border border-indigo-500/20">
-              <UserCheck className="h-5 w-5" />
+            <div className="p-2 bg-indigo-500/10 text-indigo-500 rounded-lg border border-indigo-500/20">
+              <UserCheck className="h-4 w-4" />
             </div>
           </div>
-          <p className="text-[10px] text-muted-foreground mt-3 font-sans">
+          <p className="text-[10px] text-muted-foreground mt-2 font-sans">
             Plantonistas distintos no período
           </p>
         </div>
@@ -1709,13 +1801,16 @@ const PlantaoMedico: React.FC = () => {
                     Tipo Produção
                   </th>
                   <th className="py-3 px-4 text-center cursor-pointer hover:text-foreground" onClick={() => handleSortSintetico('QTD_PLANTOES')}>
-                    Qtd. Plantões
-                  </th>
-                  <th className="py-3 px-4 text-right cursor-pointer hover:text-foreground" onClick={() => handleSortSintetico('valorProducao' as any)}>
-                    Valor Produção (R$)
+                    Qtd.
                   </th>
                   <th className="py-3 px-4 text-right cursor-pointer hover:text-foreground" onClick={() => handleSortSintetico('VALOR_TOTAL')}>
                     Valor Total (R$)
+                  </th>
+                  <th className="py-3 px-4 text-right cursor-pointer hover:text-foreground" onClick={() => handleSortSintetico('valorPago' as any)}>
+                    Valor Pago (R$)
+                  </th>
+                  <th className="py-3 px-4 text-right cursor-pointer hover:text-foreground" onClick={() => handleSortSintetico('valorPendente' as any)}>
+                    Saldo Pendente (R$)
                   </th>
                   <th className="py-3 px-4 text-center cursor-pointer hover:text-foreground" onClick={() => handleSortSintetico('status')}>
                     STATUS
@@ -1726,7 +1821,7 @@ const PlantaoMedico: React.FC = () => {
               <tbody className="divide-y divide-border/60">
                 {loading ? (
                   <tr>
-                    <td colSpan={9} className="py-12 text-center text-muted-foreground">
+                    <td colSpan={10} className="py-12 text-center text-muted-foreground">
                       <div className="flex flex-col items-center gap-2">
                         <RefreshCw className="h-6 w-6 animate-spin text-[#8a1515]" />
                         <span>Carregando dados de plantão médico...</span>
@@ -1735,14 +1830,14 @@ const PlantaoMedico: React.FC = () => {
                   </tr>
                 ) : paginatedSinteticos.length === 0 ? (
                   <tr>
-                    <td colSpan={9} className="py-12 text-center text-muted-foreground">
+                    <td colSpan={10} className="py-12 text-center text-muted-foreground">
                       Nenhum registro agrupado encontrado com os filtros aplicados.
                     </td>
                   </tr>
                 ) : (
                   paginatedSinteticos.map((item) => (
                     <tr key={item.id} className="hover:bg-muted/30 transition-colors">
-                      <td className="py-3 px-4 font-semibold text-foreground max-w-[240px] truncate" title={item.MEDICO}>
+                      <td className="py-3 px-4 font-semibold text-foreground max-w-[220px] truncate" title={item.MEDICO}>
                         {item.MEDICO}
                       </td>
                       <td className="py-3 px-4 text-muted-foreground text-xs font-medium whitespace-nowrap">
@@ -1788,15 +1883,24 @@ const PlantaoMedico: React.FC = () => {
                         )}
                       </td>
                       <td className="py-3 px-4 text-center font-bold text-foreground whitespace-nowrap">
-                        <span className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 px-2.5 py-1 rounded-md border border-emerald-500/20 font-mono">
-                          {item.QTD_PLANTOES} {item.QTD_PLANTOES === 1 ? 'plantão' : 'plantões'}
+                        <span className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 px-2 py-0.5 rounded-md border border-emerald-500/20 font-mono text-xs">
+                          {item.QTD_PLANTOES}
                         </span>
                       </td>
-                      <td className="py-3 px-4 text-right font-semibold text-emerald-600 dark:text-emerald-400 text-xs whitespace-nowrap font-mono">
-                        {formatCurrency(item.valorProducaoTotal || 0)}
-                      </td>
-                      <td className="py-3 px-4 text-right font-bold text-[#8a1515] dark:text-[#f43f5e] text-base whitespace-nowrap">
+                      <td className="py-3 px-4 text-right font-bold text-foreground text-sm whitespace-nowrap font-mono">
                         {formatCurrency(item.VALOR_TOTAL)}
+                      </td>
+                      <td className="py-3 px-4 text-right font-bold text-emerald-600 dark:text-emerald-400 text-sm whitespace-nowrap font-mono">
+                        {formatCurrency(item.valorPago || 0)}
+                      </td>
+                      <td className="py-3 px-4 text-right font-bold text-amber-600 dark:text-amber-400 text-sm whitespace-nowrap font-mono">
+                        {(item.valorPendente || 0) > 0 ? (
+                          <span className="text-red-600 dark:text-red-400">
+                            {formatCurrency(item.valorPendente || 0)}
+                          </span>
+                        ) : (
+                          <span className="text-muted-foreground font-normal">R$ 0,00</span>
+                        )}
                       </td>
                       <td className="py-3 px-4 text-center whitespace-nowrap">
                         {item.status === 'Pago' ? (
@@ -1804,9 +1908,14 @@ const PlantaoMedico: React.FC = () => {
                             <CheckCircle2 className="h-3.5 w-3.5" />
                             Pago
                           </span>
-                        ) : (
+                        ) : item.status === 'Parcial' ? (
                           <span className="inline-flex items-center gap-1.5 text-xs font-bold px-2.5 py-1 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
                             <Clock className="h-3.5 w-3.5" />
+                            Parcial
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1.5 text-xs font-bold px-2.5 py-1 rounded-full bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20">
+                            <X className="h-3.5 w-3.5" />
                             Pendente
                           </span>
                         )}
@@ -1815,7 +1924,7 @@ const PlantaoMedico: React.FC = () => {
                         <button
                           onClick={() => handleOpenSinteticoModal(item)}
                           className="p-1.5 text-muted-foreground hover:text-[#8a1515] hover:bg-[#8a1515]/10 rounded-md transition-colors cursor-pointer"
-                          title="Lançar Produção Médica / Editar"
+                          title="Lançar Produção Médica / Editar Pagamento"
                         >
                           <Edit3 className="h-4 w-4" />
                         </button>
@@ -1987,28 +2096,98 @@ const PlantaoMedico: React.FC = () => {
                   </div>
                 </div>
 
-                {/* Status de Pagamento (Pago / Pendente) */}
-                <div className="p-3 bg-muted/40 border border-border rounded-xl flex items-center justify-between font-sans">
-                  <div>
-                    <label className="text-xs font-bold text-foreground block">
-                      Status de Pagamento
-                    </label>
-                    <span className="text-[11px] text-muted-foreground block">
-                      Marque o checkbox para alterar o status para Pago.
-                    </span>
-                  </div>
-                  <label className="relative inline-flex items-center cursor-pointer gap-2 bg-background px-3.5 py-1.5 rounded-lg border border-border hover:bg-muted/40 transition-all select-none shadow-sm">
-                    <input
-                      type="checkbox"
-                      checked={editStatus === 'Pago'}
-                      onChange={(e) => setEditStatus(e.target.checked ? 'Pago' : 'Pendente')}
-                      className="h-4 w-4 rounded border-border text-[#8a1515] focus:ring-[#8a1515] accent-[#8a1515] cursor-pointer"
-                    />
-                    <span className={`text-xs font-bold font-mono tracking-wide ${editStatus === 'Pago' ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'}`}>
-                      {editStatus === 'Pago' ? 'PAGO' : 'PENDENTE'}
-                    </span>
-                  </label>
-                </div>
+                {/* Seção de Lançamento de Pagamento & Saldo Pendente */}
+                {(() => {
+                  const cleanPagoStr = String(editValorPago).replace(/[R$\s]/g, '').replace(/\./g, '').replace(',', '.');
+                  const parsedPago = parseFloat(cleanPagoStr);
+                  const currentValorPago = isNaN(parsedPago) ? 0 : Math.max(0, parsedPago);
+                  const currentSaldoPendente = Math.max(0, calculatedFinalTotal - currentValorPago);
+                  let calculatedStatusBadge = 'Pendente';
+                  if (currentValorPago >= calculatedFinalTotal && calculatedFinalTotal > 0) {
+                    calculatedStatusBadge = 'Pago';
+                  } else if (currentValorPago > 0 && currentValorPago < calculatedFinalTotal) {
+                    calculatedStatusBadge = 'Parcial';
+                  }
+
+                  return (
+                    <div className="p-4 bg-muted/40 border border-border rounded-xl space-y-3 font-sans">
+                      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+                        <div>
+                          <label className="text-xs font-bold text-foreground block">
+                            Valor Pago Realizado (R$) *
+                          </label>
+                          <span className="text-[11px] text-muted-foreground block">
+                            Informe o valor efetivamente quitado. Se houver saldo restante, será classificado como Parcial.
+                          </span>
+                        </div>
+
+                        {/* Botões de Ação Rápida */}
+                        <div className="flex items-center gap-1.5 self-end sm:self-auto">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditValorPago(String(calculatedFinalTotal));
+                              setEditStatus('Pago');
+                            }}
+                            className="px-2.5 py-1 rounded bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-bold transition-all shadow-sm cursor-pointer"
+                          >
+                            Quitar Total
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditValorPago('0');
+                              setEditStatus('Pendente');
+                            }}
+                            className="px-2.5 py-1 rounded bg-rose-600/20 hover:bg-rose-600/30 text-rose-700 dark:text-rose-300 text-[11px] font-bold transition-all cursor-pointer"
+                          >
+                            Zerar (Pendente)
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                        <div>
+                          <label className="text-[11px] font-semibold text-muted-foreground block mb-1">
+                            Valor Efetivamente Pago (R$)
+                          </label>
+                          <div className="relative">
+                            <span className="absolute left-3 top-2 text-sm font-bold text-emerald-600 font-mono">R$</span>
+                            <input
+                              type="text"
+                              value={editValorPago}
+                              onChange={(e) => setEditValorPago(e.target.value)}
+                              placeholder="0,00"
+                              className="w-full bg-background border border-border focus:border-[#8a1515] rounded-lg pl-9 pr-3 py-1.5 text-sm font-bold text-foreground font-mono outline-none"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="flex flex-col justify-end">
+                          <div className="p-2 bg-background border border-border rounded-lg flex justify-between items-center">
+                            <span className="text-xs font-semibold text-muted-foreground">Status Atual:</span>
+                            {calculatedStatusBadge === 'Pago' ? (
+                              <span className="inline-flex items-center gap-1 text-xs font-bold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 font-mono">
+                                <CheckCircle2 className="h-3 w-3" />
+                                PAGO INTEGRAL
+                              </span>
+                            ) : calculatedStatusBadge === 'Parcial' ? (
+                              <span className="inline-flex items-center gap-1 text-xs font-bold px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 font-mono">
+                                <Clock className="h-3 w-3" />
+                                PAGO PARCIAL
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 text-xs font-bold px-2 py-0.5 rounded-full bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20 font-mono">
+                                <X className="h-3 w-3" />
+                                PENDENTE
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })()}
 
                 {/* Form de Múltiplos Tipos de Produção e Valores */}
                 <div className="space-y-3 pt-1 font-sans">
@@ -2026,7 +2205,7 @@ const PlantaoMedico: React.FC = () => {
                     </button>
                   </div>
 
-                  <div className="space-y-2.5 max-h-[190px] overflow-y-auto pr-1 custom-scrollbar">
+                  <div className="space-y-2.5 max-h-[170px] overflow-y-auto pr-1 custom-scrollbar">
                     {editProducoesList.length === 0 ? (
                       <div className="p-4 bg-muted/20 border border-dashed border-border rounded-xl text-center space-y-2">
                         <p className="text-xs text-muted-foreground">Nenhuma produção cadastrada para este grupo de plantão.</p>
@@ -2095,17 +2274,36 @@ const PlantaoMedico: React.FC = () => {
                     )))}
                   </div>
 
-                  {/* CÁLCULO EM TEMPO REAL */}
-                  <div className="p-3 bg-muted/40 rounded-lg border border-border flex justify-between items-center text-xs">
-                    <div>
-                      <span className="text-muted-foreground block font-medium">Valor Base Plantões ({selectedSinteticoItem.QTD_PLANTOES}):</span>
-                      <span className="font-semibold text-foreground font-mono">{formatCurrency(basePlantaoTotal)}</span>
-                    </div>
-                    <div className="text-right">
-                      <span className="text-muted-foreground block font-medium">Valor Total Final (Plantões + Produções):</span>
-                      <span className="font-bold text-base text-[#8a1515] dark:text-[#f43f5e] font-mono">{formatCurrency(calculatedFinalTotal)}</span>
-                    </div>
-                  </div>
+                  {/* CÁLCULO FINANCEIRO COMPLETO EM TEMPO REAL */}
+                  {(() => {
+                    const cleanPagoStr = String(editValorPago).replace(/[R$\s]/g, '').replace(/\./g, '').replace(',', '.');
+                    const parsedPago = parseFloat(cleanPagoStr);
+                    const currentValorPago = isNaN(parsedPago) ? 0 : Math.max(0, parsedPago);
+                    const currentSaldoPendente = Math.max(0, calculatedFinalTotal - currentValorPago);
+
+                    return (
+                      <div className="p-3.5 bg-muted/40 rounded-xl border border-border grid grid-cols-1 sm:grid-cols-4 gap-3 text-xs font-sans">
+                        <div>
+                          <span className="text-muted-foreground block font-medium text-[11px]">Base Plantões:</span>
+                          <span className="font-semibold text-foreground font-mono">{formatCurrency(basePlantaoTotal)}</span>
+                        </div>
+                        <div>
+                          <span className="text-muted-foreground block font-medium text-[11px]">Total Produções:</span>
+                          <span className="font-semibold text-emerald-600 dark:text-emerald-400 font-mono">{formatCurrency(currentProdValTotal)}</span>
+                        </div>
+                        <div>
+                          <span className="text-muted-foreground block font-medium text-[11px]">Valor Total Previsto:</span>
+                          <span className="font-bold text-[#8a1515] dark:text-[#f43f5e] font-mono">{formatCurrency(calculatedFinalTotal)}</span>
+                        </div>
+                        <div className="border-l border-border/60 sm:pl-3">
+                          <span className="text-muted-foreground block font-medium text-[11px]">Saldo Pendente:</span>
+                          <span className={`font-bold font-mono text-sm ${currentSaldoPendente > 0 ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
+                            {formatCurrency(currentSaldoPendente)}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </div>
 
                 {/* Lista dos Lançamentos Integrantes */}
