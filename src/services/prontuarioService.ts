@@ -30,6 +30,35 @@ export interface SolicitacaoProntuario {
   updated_at: string;
 }
 
+export interface SolicitacaoCadastro {
+  id: number;
+  paciente_cpf: string;
+  paciente_nome: string;
+  paciente_data_nascimento: string;
+  paciente_contato: string;
+  paciente_email: string;
+  status: 'Pendente' | 'Em Análise' | 'Aprovado' | 'Rejeitado' | 'Documento Disponibilizado';
+  data_solicitacao: string;
+  responsavel_id: string | null;
+  responsavel_nome: string | null;
+  justificativa_rejeicao: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface HistoricoSolicitacaoCadastro {
+  id: string;
+  solicitacao_id: number;
+  data: string;
+  status_anterior: string | null;
+  status_novo: string;
+  descricao: string;
+  usuario_id: string | null;
+  usuario_nome: string;
+  created_at: string;
+}
+
+
 export interface HistoricoSolicitacao {
   id: string;
   solicitacao_id: string;
@@ -56,6 +85,77 @@ export interface IndicadoresProntuario {
 
 const STORAGE_KEY_SOLICITACOES = 'hsc_solicitacoes_prontuario';
 const STORAGE_KEY_HISTORICO = 'hsc_historico_solicitacoes_prontuario';
+const STORAGE_KEY_CADASTROS = 'hsc_solicitacoes_cadastro';
+const STORAGE_KEY_HISTORICO_CADASTROS = 'hsc_historico_solicitacoes_cadastro';
+
+const MOCK_CADASTROS: SolicitacaoCadastro[] = [
+  {
+    id: 1,
+    paciente_cpf: '111.222.333-44',
+    paciente_nome: 'Antônio da Silva Santos',
+    paciente_data_nascimento: '1980-01-01',
+    paciente_contato: '(34) 98888-7777',
+    paciente_email: 'antonio.santos@email.com',
+    status: 'Pendente',
+    data_solicitacao: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),
+    responsavel_id: null,
+    responsavel_nome: null,
+    justificativa_rejeicao: null,
+    created_at: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),
+    updated_at: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),
+  },
+  {
+    id: 2,
+    paciente_cpf: '555.666.777-88',
+    paciente_nome: 'Regina Célia de Souza',
+    paciente_data_nascimento: '1975-06-10',
+    paciente_contato: '(34) 99999-8888',
+    paciente_email: 'regina.souza@email.com',
+    status: 'Em Análise',
+    data_solicitacao: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
+    responsavel_id: 'dev-user-id',
+    responsavel_nome: 'Gestor de Teste',
+    justificativa_rejeicao: null,
+    created_at: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
+    updated_at: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(),
+  }
+];
+
+const MOCK_HISTORICO_CADASTROS: HistoricoSolicitacaoCadastro[] = [
+  {
+    id: 'hc1',
+    solicitacao_id: 1,
+    data: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),
+    status_anterior: null,
+    status_novo: 'Pendente',
+    descricao: 'Solicitação de acesso criada pelo paciente.',
+    usuario_id: null,
+    usuario_nome: 'Paciente (Antônio da Silva Santos)',
+    created_at: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString()
+  },
+  {
+    id: 'hc2',
+    solicitacao_id: 2,
+    data: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
+    status_anterior: null,
+    status_novo: 'Pendente',
+    descricao: 'Solicitação de acesso criada pelo paciente.',
+    usuario_id: null,
+    usuario_nome: 'Paciente (Regina Célia de Souza)',
+    created_at: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString()
+  },
+  {
+    id: 'hc3',
+    solicitacao_id: 2,
+    data: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(),
+    status_anterior: 'Pendente',
+    status_novo: 'Em Análise',
+    descricao: 'Análise da solicitação de acesso iniciada pelo gestor.',
+    usuario_id: 'dev-user-id',
+    usuario_nome: 'Gestor de Teste',
+    created_at: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString()
+  }
+];
 
 const MOCK_SOLICITACOES: SolicitacaoProntuario[] = [
   {
@@ -917,4 +1017,447 @@ export async function criarSolicitacaoTeste(): Promise<void> {
 
   if (error) throw error;
 }
+
+// ─────────────────────────────────────────────────────────────
+// MÉTODOS DE SOLICITAÇÃO DE CADASTRO / ACESSO
+// ─────────────────────────────────────────────────────────────
+
+function initializeCadastroLocalStorage() {
+  if (!localStorage.getItem(STORAGE_KEY_CADASTROS)) {
+    localStorage.setItem(STORAGE_KEY_CADASTROS, JSON.stringify(MOCK_CADASTROS));
+  }
+  if (!localStorage.getItem(STORAGE_KEY_HISTORICO_CADASTROS)) {
+    localStorage.setItem(STORAGE_KEY_HISTORICO_CADASTROS, JSON.stringify(MOCK_HISTORICO_CADASTROS));
+  }
+}
+
+function getLocalCadastros(): SolicitacaoCadastro[] {
+  initializeCadastroLocalStorage();
+  const raw = localStorage.getItem(STORAGE_KEY_CADASTROS);
+  return raw ? JSON.parse(raw) : [];
+}
+
+function saveLocalCadastros(list: SolicitacaoCadastro[]) {
+  localStorage.setItem(STORAGE_KEY_CADASTROS, JSON.stringify(list));
+}
+
+function getLocalHistoricoCadastros(): HistoricoSolicitacaoCadastro[] {
+  initializeCadastroLocalStorage();
+  const raw = localStorage.getItem(STORAGE_KEY_HISTORICO_CADASTROS);
+  return raw ? JSON.parse(raw) : [];
+}
+
+function saveLocalHistoricoCadastros(list: HistoricoSolicitacaoCadastro[]) {
+  localStorage.setItem(STORAGE_KEY_HISTORICO_CADASTROS, JSON.stringify(list));
+}
+
+function registrarLocalHistoricoCadastro(
+  solicitacaoId: number,
+  statusAnterior: string | null,
+  statusNovo: string,
+  descricao: string,
+  usuarioId: string | null,
+  usuarioNome: string
+) {
+  const list = getLocalHistoricoCadastros();
+  const newHist: HistoricoSolicitacaoCadastro = {
+    id: `hc_gen_${Date.now()}`,
+    solicitacao_id: solicitacaoId,
+    data: new Date().toISOString(),
+    status_anterior: statusAnterior,
+    status_novo: statusNovo,
+    descricao,
+    usuario_id: usuarioId,
+    usuario_nome: usuarioNome,
+    created_at: new Date().toISOString()
+  };
+  list.push(newHist);
+  saveLocalHistoricoCadastros(list);
+}
+
+/**
+ * Busca todas as solicitações de cadastro, suportando filtros por termo de busca e status.
+ */
+export async function fetchSolicitacoesCadastro(busca?: string, statusFilter?: string): Promise<SolicitacaoCadastro[]> {
+  try {
+    let query = supabase
+      .from('solicitacoes_cadastro')
+      .select('*')
+      .order('id', { ascending: false });
+
+    if (statusFilter && statusFilter !== 'Todos') {
+      query = query.eq('status', statusFilter);
+    }
+
+    const { data, error } = await query;
+
+    if (error) throw error;
+
+    let result = (data ?? []) as SolicitacaoCadastro[];
+
+    if (busca) {
+      const term = busca.toLowerCase();
+      result = result.filter(s =>
+        s.paciente_nome.toLowerCase().includes(term) ||
+        s.paciente_cpf.includes(term) ||
+        `#${String(s.id).padStart(4, '0')}`.includes(term)
+      );
+    }
+
+    return result;
+
+  } catch (dbErr) {
+    console.warn('[Supabase Dev] Erro ao listar cadastros do banco, usando LocalStorage:', dbErr);
+    let local = getLocalCadastros();
+
+    if (statusFilter && statusFilter !== 'Todos') {
+      local = local.filter(s => s.status === statusFilter);
+    }
+
+    if (busca) {
+      const term = busca.toLowerCase();
+      local = local.filter(s =>
+        s.paciente_nome.toLowerCase().includes(term) ||
+        s.paciente_cpf.includes(term) ||
+        `#${String(s.id).padStart(4, '0')}`.includes(term)
+      );
+    }
+
+    return local.sort((a, b) => b.id - a.id);
+  }
+}
+
+/**
+ * Calcula indicadores com base nas solicitações de cadastro.
+ */
+export async function fetchIndicadoresCadastro(): Promise<IndicadoresProntuario> {
+  try {
+    const { data, error } = await supabase
+      .from('solicitacoes_cadastro')
+      .select('status');
+
+    if (error) throw error;
+
+    const list = data ?? [];
+    return {
+      pendentes: list.filter(item => item.status === 'Pendente').length,
+      emAnalise: list.filter(item => item.status === 'Em Análise').length,
+      aprovadas: list.filter(item => item.status === 'Aprovado').length,
+      rejeitadas: list.filter(item => item.status === 'Rejeitado').length,
+      disponibilizados: list.filter(item => item.status === 'Documento Disponibilizado').length
+    };
+  } catch (dbErr) {
+    console.warn('[Supabase Dev] Erro de indicadores de cadastro no banco, usando LocalStorage:', dbErr);
+    const list = getLocalCadastros();
+    return {
+      pendentes: list.filter(item => item.status === 'Pendente').length,
+      emAnalise: list.filter(item => item.status === 'Em Análise').length,
+      aprovadas: list.filter(item => item.status === 'Aprovado').length,
+      rejeitadas: list.filter(item => item.status === 'Rejeitado').length,
+      disponibilizados: list.filter(item => item.status === 'Documento Disponibilizado').length
+    };
+  }
+}
+
+/**
+ * Altera o status da solicitação de cadastro para "Em Análise" e registra o gestor responsável.
+ */
+export async function iniciarAnaliseCadastro(
+  solicitacaoId: number,
+  usuarioNome: string,
+  usuarioId: string | null
+): Promise<void> {
+  const status_novo = 'Em Análise';
+  const descricao = `Análise da solicitação de acesso iniciada pelo gestor.`;
+
+  try {
+    const { data: current } = await supabase
+      .from('solicitacoes_cadastro')
+      .select('status')
+      .eq('id', solicitacaoId)
+      .single();
+
+    const status_anterior = current?.status || 'Pendente';
+
+    const { error: updateErr } = await supabase
+      .from('solicitacoes_cadastro')
+      .update({
+        status: status_novo,
+        responsavel_id: usuarioId,
+        responsavel_nome: usuarioNome,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', solicitacaoId);
+
+    if (updateErr) throw updateErr;
+
+    // Tenta gravar no histórico do banco
+    await supabase.from('historico_solicitacoes_cadastro').insert({
+      solicitacao_id: solicitacaoId,
+      status_anterior,
+      status_novo,
+      descricao,
+      usuario_id: usuarioId,
+      usuario_nome: usuarioNome
+    });
+
+  } catch (dbErr) {
+    console.warn('[Supabase Dev] Erro ao iniciar análise de cadastro no banco, salvando no LocalStorage:', dbErr);
+    const local = getLocalCadastros();
+    const index = local.findIndex(s => s.id === solicitacaoId);
+    if (index !== -1) {
+      const status_anterior = local[index].status;
+      local[index].status = status_novo;
+      local[index].responsavel_id = usuarioId;
+      local[index].responsavel_nome = usuarioNome;
+      local[index].updated_at = new Date().toISOString();
+      saveLocalCadastros(local);
+
+      registrarLocalHistoricoCadastro(solicitacaoId, status_anterior, status_novo, descricao, usuarioId, usuarioNome);
+    }
+  }
+}
+
+/**
+ * Aprova a solicitação de cadastro (muda status para Aprovado).
+ */
+export async function aprovarSolicitacaoCadastro(
+  solicitacaoId: number,
+  usuarioNome: string,
+  usuarioId: string | null
+): Promise<void> {
+  const status_novo = 'Aprovado';
+  const descricao = 'Solicitação de acesso aprovada pelo gestor.';
+
+  try {
+    const { data: current } = await supabase
+      .from('solicitacoes_cadastro')
+      .select('status')
+      .eq('id', solicitacaoId)
+      .single();
+
+    const status_anterior = current?.status || 'Em Análise';
+
+    const { error: updateErr } = await supabase
+      .from('solicitacoes_cadastro')
+      .update({
+        status: status_novo,
+        responsavel_id: usuarioId,
+        responsavel_nome: usuarioNome,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', solicitacaoId);
+
+    if (updateErr) throw updateErr;
+
+    await supabase.from('historico_solicitacoes_cadastro').insert({
+      solicitacao_id: solicitacaoId,
+      status_anterior,
+      status_novo,
+      descricao,
+      usuario_id: usuarioId,
+      usuario_nome: usuarioNome
+    });
+
+  } catch (dbErr) {
+    console.warn('[Supabase Dev] Erro ao aprovar cadastro no banco, salvando no LocalStorage:', dbErr);
+    const local = getLocalCadastros();
+    const index = local.findIndex(s => s.id === solicitacaoId);
+    if (index !== -1) {
+      const status_anterior = local[index].status;
+      local[index].status = status_novo;
+      local[index].responsavel_id = usuarioId;
+      local[index].responsavel_nome = usuarioNome;
+      local[index].updated_at = new Date().toISOString();
+      saveLocalCadastros(local);
+
+      registrarLocalHistoricoCadastro(solicitacaoId, status_anterior, status_novo, descricao, usuarioId, usuarioNome);
+    }
+  }
+}
+
+/**
+ * Rejeita a solicitação de cadastro salvando uma justificativa.
+ */
+export async function rejeitarSolicitacaoCadastro(
+  solicitacaoId: number,
+  justificativa: string,
+  usuarioNome: string,
+  usuarioId: string | null
+): Promise<void> {
+  const status_novo = 'Rejeitado';
+  const descricao = `Solicitação de acesso rejeitada. Motivo: ${justificativa}`;
+
+  try {
+    const { data: current } = await supabase
+      .from('solicitacoes_cadastro')
+      .select('status')
+      .eq('id', solicitacaoId)
+      .single();
+
+    const status_anterior = current?.status || 'Em Análise';
+
+    const { error: updateErr } = await supabase
+      .from('solicitacoes_cadastro')
+      .update({
+        status: status_novo,
+        justificativa_rejeicao: justificativa,
+        responsavel_id: usuarioId,
+        responsavel_nome: usuarioNome,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', solicitacaoId);
+
+    if (updateErr) throw updateErr;
+
+    await supabase.from('historico_solicitacoes_cadastro').insert({
+      solicitacao_id: solicitacaoId,
+      status_anterior,
+      status_novo,
+      descricao,
+      usuario_id: usuarioId,
+      usuario_nome: usuarioNome
+    });
+
+  } catch (dbErr) {
+    console.warn('[Supabase Dev] Erro ao rejeitar cadastro no banco, usando LocalStorage:', dbErr);
+    const local = getLocalCadastros();
+    const index = local.findIndex(s => s.id === solicitacaoId);
+    if (index !== -1) {
+      const status_anterior = local[index].status;
+      local[index].status = status_novo;
+      local[index].justificativa_rejeicao = justificativa;
+      local[index].responsavel_id = usuarioId;
+      local[index].responsavel_nome = usuarioNome;
+      local[index].updated_at = new Date().toISOString();
+      saveLocalCadastros(local);
+
+      registrarLocalHistoricoCadastro(solicitacaoId, status_anterior, status_novo, descricao, usuarioId, usuarioNome);
+    }
+  }
+}
+
+/**
+ * Busca o histórico de movimentações de uma solicitação de cadastro específica.
+ */
+export async function fetchHistoricoCadastro(solicitacaoId: number): Promise<HistoricoSolicitacaoCadastro[]> {
+  try {
+    const { data, error } = await supabase
+      .from('historico_solicitacoes_cadastro')
+      .select('*')
+      .eq('solicitacao_id', solicitacaoId)
+      .order('data', { ascending: true });
+
+    if (error) throw error;
+    return (data ?? []) as HistoricoSolicitacaoCadastro[];
+
+  } catch (dbErr) {
+    console.warn('[Supabase Dev] Erro ao buscar histórico de cadastro no banco, usando LocalStorage:', dbErr);
+    const localHist = getLocalHistoricoCadastros();
+    return localHist
+      .filter(h => h.solicitacao_id === solicitacaoId)
+      .sort((a, b) => new Date(a.data).getTime() - new Date(b.data).getTime());
+  }
+}
+
+/**
+ * Atualiza qualquer status de solicitação de cadastro de forma genérica.
+ */
+export async function atualizarSolicitacaoCadastroCompleta(
+  solicitacaoId: number,
+  novoStatus: 'Pendente' | 'Em Análise' | 'Aprovado' | 'Rejeitado' | 'Documento Disponibilizado',
+  usuarioNome: string,
+  usuarioId: string | null,
+  justificativaRejeicao?: string
+): Promise<void> {
+  const dataAtual = new Date().toISOString();
+  const descricao = `Solicitação de acesso atualizada para '${novoStatus}' pelo gestor.${
+    justificativaRejeicao ? ` Motivo: ${justificativaRejeicao}` : ''
+  }`;
+
+  try {
+    const { data: current } = await supabase
+      .from('solicitacoes_cadastro')
+      .select('status')
+      .eq('id', solicitacaoId)
+      .single();
+
+    const status_anterior = current?.status || 'Pendente';
+
+    const updateData: any = {
+      status: novoStatus,
+      responsavel_id: usuarioId,
+      responsavel_nome: usuarioNome,
+      updated_at: dataAtual
+    };
+
+    if (novoStatus === 'Rejeitado') {
+      updateData.justificativa_rejeicao = justificativaRejeicao || null;
+    }
+
+    const { error: updateErr } = await supabase
+      .from('solicitacoes_cadastro')
+      .update(updateData)
+      .eq('id', solicitacaoId);
+
+    if (updateErr) throw updateErr;
+
+    await supabase.from('historico_solicitacoes_cadastro').insert({
+      solicitacao_id: solicitacaoId,
+      status_anterior,
+      status_novo: novoStatus,
+      descricao,
+      usuario_id: usuarioId,
+      usuario_nome: usuarioNome
+    });
+
+  } catch (dbErr) {
+    console.warn('[Supabase Dev] Erro na atualização completa de cadastro no banco, usando LocalStorage:', dbErr);
+    const local = getLocalCadastros();
+    const index = local.findIndex(s => s.id === solicitacaoId);
+    if (index !== -1) {
+      const status_anterior = local[index].status;
+      local[index].status = novoStatus;
+      local[index].responsavel_id = usuarioId;
+      local[index].responsavel_nome = usuarioNome;
+      local[index].updated_at = dataAtual;
+
+      if (novoStatus === 'Rejeitado') {
+        local[index].justificativa_rejeicao = justificativaRejeicao || null;
+      }
+
+      saveLocalCadastros(local);
+      registrarLocalHistoricoCadastro(solicitacaoId, status_anterior, novoStatus, descricao, usuarioId, usuarioNome);
+    }
+  }
+}
+
+/**
+ * Cria uma solicitação de cadastro de teste no banco de dados.
+ */
+export async function criarSolicitacaoCadastroTeste(): Promise<void> {
+  const nomesTeste = ['Renato de Souza Lima', 'Patrícia Roberta Silva', 'Gustavo Nogueira Castro'];
+  const cpfsTeste = ['444.555.666-77', '888.999.000-11', '222.333.444-55'];
+  const contatosTeste = ['(34) 95555-6666', '(34) 94444-5555', '(34) 93333-4444'];
+  const emailsTeste = ['renato.lima@email.com', 'patricia.silva@email.com', 'gustavo.castro@email.com'];
+
+  const indice = Math.floor(Math.random() * nomesTeste.length);
+
+  const novaSolicitacao = {
+    paciente_nome: nomesTeste[indice],
+    paciente_cpf: cpfsTeste[indice],
+    paciente_data_nascimento: '1990-05-20',
+    paciente_contato: contatosTeste[indice],
+    paciente_email: emailsTeste[indice],
+    status: 'Pendente',
+    data_solicitacao: new Date().toISOString()
+  };
+
+  const { error } = await supabase
+    .from('solicitacoes_cadastro')
+    .insert(novaSolicitacao);
+
+  if (error) throw error;
+}
+
 
