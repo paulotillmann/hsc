@@ -19,7 +19,8 @@ const Layout: React.FC = () => {
     location.pathname.startsWith('/internato-secretaria') ||
     location.pathname.startsWith('/internato-notas') ||
     location.pathname.startsWith('/internato-agenda') ||
-    location.pathname.startsWith('/financeiro');
+    location.pathname.startsWith('/financeiro') ||
+    location.pathname.startsWith('/nps-dashboard');
 
   return (
     <div className="flex h-screen w-full bg-background text-foreground transition-colors overflow-hidden">
