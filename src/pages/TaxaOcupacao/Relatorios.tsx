@@ -294,14 +294,14 @@ export default function Relatorios() {
     });
   };
 
-  // Cores de Badge de acordo com a taxa de ocupação
+  // Cores de Badge de acordo com a taxa de ocupação (na impressão texto sempre em preto)
   const getRateBadgeStyles = (rate: number) => {
     if (rate > 85) {
-      return 'bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/20 font-bold';
+      return 'bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/20 font-bold print:bg-transparent print:border-none print:text-black print:p-0';
     } else if (rate >= 70) {
-      return 'bg-yellow-500/10 text-yellow-600 dark:text-yellow-400 border border-yellow-500/20 font-bold';
+      return 'bg-yellow-500/10 text-yellow-600 dark:text-yellow-400 border border-yellow-500/20 font-bold print:bg-transparent print:border-none print:text-black print:p-0';
     } else {
-      return 'bg-green-500/10 text-green-600 dark:text-green-400 border border-green-500/20 font-bold';
+      return 'bg-green-500/10 text-green-600 dark:text-green-400 border border-green-500/20 font-bold print:bg-transparent print:border-none print:text-black print:p-0';
     }
   };
 
@@ -383,38 +383,43 @@ export default function Relatorios() {
     <div className="flex flex-1 flex-col gap-6 w-full animate-in fade-in zoom-in duration-500">
       
       {/* ── SEÇÃO EXCLUSIVA PARA IMPRESSÃO (PDF) ── */}
-      <div className="hidden print:block mb-6 text-black">
-        <div className="flex items-center justify-between border-b border-slate-300 pb-4 mb-4">
-          <div>
-            <h1 className="text-2xl font-extrabold tracking-tight">Hospital Santa Casa de Araguari</h1>
-            <p className="text-sm text-slate-500 font-medium">Relatório Mensal de Taxa de Ocupação por Setor</p>
+      <div className="hidden print:block mb-4 text-black">
+        <div className="flex items-center justify-between border-b border-slate-300 pb-3 mb-3">
+          <div className="flex items-center gap-3">
+            <img 
+              src="/LOGO_HSC_PRIMARY.png" 
+              alt="Logo Santa Casa de Araguari" 
+              className="h-10 w-auto object-contain"
+            />
+            <div>
+              <h1 className="text-lg font-extrabold tracking-tight text-black">Hospital Santa Casa de Araguari</h1>
+              <p className="text-xs text-slate-600 font-medium">Relatório Mensal de Taxa de Ocupação por Setor</p>
+            </div>
           </div>
-          <div className="text-right text-xs text-slate-400">
+          <div className="text-right text-[10px] text-slate-500">
             <p>Emitido em: {new Date().toLocaleDateString('pt-BR')} às {new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</p>
           </div>
         </div>
         
-        <div className="grid grid-cols-4 gap-4 bg-slate-50 p-4 rounded-xl border border-slate-200 text-sm mb-6">
+        <div className="grid grid-cols-4 gap-3 bg-slate-50 p-3 rounded-lg border border-slate-200 text-xs mb-4">
           <div>
-            <span className="text-slate-500 block font-semibold text-xs uppercase">Mês de Referência</span>
+            <span className="text-slate-500 block font-semibold text-[10px] uppercase">Mês de Referência</span>
             <span className="font-bold text-slate-800">{monthNames[selectedMonth - 1]} / {selectedYear}</span>
           </div>
           <div>
-            <span className="text-slate-500 block font-semibold text-xs uppercase">Horário Censo</span>
+            <span className="text-slate-500 block font-semibold text-[10px] uppercase">Horário Censo</span>
             <span className="font-bold text-slate-800">{selectedHour === 'Ambos' ? '10:00 & 20:00 (Consolidado)' : selectedHour}</span>
           </div>
           <div>
-            <span className="text-slate-500 block font-semibold text-xs uppercase">Escopo/Visão</span>
+            <span className="text-slate-500 block font-semibold text-[10px] uppercase">Escopo/Visão</span>
             <span className="font-bold text-slate-800">{visaoFiltro === 'Geral' ? 'Hospital Geral' : visaoFiltro === 'SUS' ? 'Leitos SUS' : 'Ambos (Consolidado)'}</span>
           </div>
           <div>
-            <span className="text-slate-500 block font-semibold text-xs uppercase">Setores</span>
-            <span className="font-bold text-slate-800 truncate block max-w-[150px]">
+            <span className="text-slate-500 block font-semibold text-[10px] uppercase">Setores Exibidos</span>
+            <span className="font-bold text-slate-800 truncate block">
               {selectedSectors.length === sectors.length 
-                ? 'Todos' 
-                : selectedSectors.length === 0 
-                ? 'Nenhum' 
-                : `${selectedSectors.length} selecionado(s)`}
+                ? 'Todos os setores' 
+                : `${selectedSectors.length} de ${sectors.length} setor(es)`}
             </span>
           </div>
         </div>
@@ -456,87 +461,83 @@ export default function Relatorios() {
         </div>
       </div>
 
-      {/* ── CARDS KPI RESUMO (MODO DIGITAL: FLEX | IMPRESSÃO: REDUZIDO E ESTILIZADO) ── */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+      {/* ── CARDS KPI RESUMO (MODO DIGITAL E IMPRESSÃO COM ESTILO COMPACTO) ── */}
+      <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-3 print:grid-cols-4 print:gap-2 print:mb-3">
         
         {/* KPI: Taxa de Ocupação Média Geral */}
         {(visaoFiltro === 'Geral' || visaoFiltro === 'Ambos') && (
-          <div className="bg-card rounded-2xl border p-5 shadow-sm relative overflow-hidden flex flex-col justify-between print:border-slate-300 print:shadow-none">
+          <div className="bg-card rounded-xl border p-3 shadow-sm relative overflow-hidden flex flex-col justify-between print:p-2 print:border-slate-300 print:shadow-none">
             <div className="flex items-center justify-between">
-              <span className="text-sm font-semibold text-muted-foreground print:text-slate-500">Ocupação Média Geral</span>
-              <div className="p-2 bg-primary/10 rounded-lg print:hidden">
-                <TrendingUp className="h-4 w-4 text-primary" />
+              <span className="text-xs font-semibold text-muted-foreground print:text-[10px] print:text-slate-600">Ocupação Média Geral</span>
+              <div className="p-1.5 bg-primary/10 rounded-lg print:hidden">
+                <TrendingUp className="h-3.5 w-3.5 text-primary" />
               </div>
             </div>
-            <div className="mt-3 flex items-baseline gap-2">
-              <span className="text-3xl font-extrabold tracking-tight text-foreground print:text-black">
+            <div className="mt-1 flex items-baseline gap-1">
+              <span className="text-2xl font-extrabold tracking-tight text-foreground print:text-lg print:text-black">
                 {formatNumber(totalHospital.taxa_ocupacao_geral)}%
               </span>
             </div>
-            <p className="text-xs text-muted-foreground mt-2 flex items-center gap-1 print:text-slate-400">
-              <Info className="h-3.5 w-3.5 text-muted-foreground shrink-0 print:hidden" />
-              Consolidado dos leitos gerais no mês.
+            <p className="text-[10px] text-muted-foreground mt-1 flex items-center gap-1 print:text-[9px] print:text-slate-500">
+              Consolidado leitos gerais no mês.
             </p>
           </div>
         )}
 
         {/* KPI: Taxa de Ocupação Média SUS */}
         {(visaoFiltro === 'SUS' || visaoFiltro === 'Ambos') && (
-          <div className="bg-card rounded-2xl border p-5 shadow-sm relative overflow-hidden flex flex-col justify-between print:border-slate-300 print:shadow-none">
+          <div className="bg-card rounded-xl border p-3 shadow-sm relative overflow-hidden flex flex-col justify-between print:p-2 print:border-slate-300 print:shadow-none">
             <div className="flex items-center justify-between">
-              <span className="text-sm font-semibold text-muted-foreground print:text-slate-500">Ocupação Média SUS</span>
-              <div className="p-2 bg-primary/10 rounded-lg print:hidden">
-                <Activity className="h-4 w-4 text-primary" />
+              <span className="text-xs font-semibold text-muted-foreground print:text-[10px] print:text-slate-600">Ocupação Média SUS</span>
+              <div className="p-1.5 bg-primary/10 rounded-lg print:hidden">
+                <Activity className="h-3.5 w-3.5 text-primary" />
               </div>
             </div>
-            <div className="mt-3 flex items-baseline gap-2">
-              <span className="text-3xl font-extrabold tracking-tight text-foreground print:text-black">
+            <div className="mt-1 flex items-baseline gap-1">
+              <span className="text-2xl font-extrabold tracking-tight text-foreground print:text-lg print:text-black">
                 {formatNumber(totalHospital.taxa_ocupacao_sus)}%
               </span>
             </div>
-            <p className="text-xs text-muted-foreground mt-2 flex items-center gap-1 print:text-slate-400">
-              <Info className="h-3.5 w-3.5 text-muted-foreground shrink-0 print:hidden" />
-              Consolidado dos leitos SUS no mês.
+            <p className="text-[10px] text-muted-foreground mt-1 flex items-center gap-1 print:text-[9px] print:text-slate-500">
+              Consolidado leitos SUS no mês.
             </p>
           </div>
         )}
 
         {/* KPI: Pacientes-Dia Geral */}
         {(visaoFiltro === 'Geral' || visaoFiltro === 'Ambos') && (
-          <div className="bg-card rounded-2xl border p-5 shadow-sm relative overflow-hidden flex flex-col justify-between print:border-slate-300 print:shadow-none">
+          <div className="bg-card rounded-xl border p-3 shadow-sm relative overflow-hidden flex flex-col justify-between print:p-2 print:border-slate-300 print:shadow-none">
             <div className="flex items-center justify-between">
-              <span className="text-sm font-semibold text-muted-foreground print:text-slate-500">Pacientes-Dia Geral</span>
-              <div className="p-2 bg-primary/10 rounded-lg print:hidden">
-                <Users className="h-4 w-4 text-primary" />
+              <span className="text-xs font-semibold text-muted-foreground print:text-[10px] print:text-slate-600">Pacientes-Dia Geral</span>
+              <div className="p-1.5 bg-primary/10 rounded-lg print:hidden">
+                <Users className="h-3.5 w-3.5 text-primary" />
               </div>
             </div>
-            <div className="mt-3 flex items-baseline gap-2">
-              <span className="text-3xl font-extrabold tracking-tight text-foreground print:text-black">
+            <div className="mt-1 flex items-baseline gap-1">
+              <span className="text-2xl font-extrabold tracking-tight text-foreground print:text-lg print:text-black">
                 {totalHospital.pacientes_dias_geral}
               </span>
             </div>
-            <p className="text-xs text-muted-foreground mt-2 flex items-center gap-1 print:text-slate-400">
-              <Info className="h-3.5 w-3.5 text-muted-foreground shrink-0 print:hidden" />
+            <p className="text-[10px] text-muted-foreground mt-1 flex items-center gap-1 print:text-[9px] print:text-slate-500">
               Soma de ocupantes diários.
             </p>
           </div>
         )}
 
         {/* KPI: Dias com Registro */}
-        <div className="bg-card rounded-2xl border p-5 shadow-sm relative overflow-hidden flex flex-col justify-between print:border-slate-300 print:shadow-none">
+        <div className="bg-card rounded-xl border p-3 shadow-sm relative overflow-hidden flex flex-col justify-between print:p-2 print:border-slate-300 print:shadow-none">
           <div className="flex items-center justify-between">
-            <span className="text-sm font-semibold text-muted-foreground print:text-slate-500">Dias Monitorados</span>
-            <div className="p-2 bg-primary/10 rounded-lg print:hidden">
-              <Building2 className="h-4 w-4 text-primary" />
+            <span className="text-xs font-semibold text-muted-foreground print:text-[10px] print:text-slate-600">Dias Monitorados</span>
+            <div className="p-1.5 bg-primary/10 rounded-lg print:hidden">
+              <Building2 className="h-3.5 w-3.5 text-primary" />
             </div>
           </div>
-          <div className="mt-3 flex items-baseline gap-2">
-            <span className="text-3xl font-extrabold tracking-tight text-foreground print:text-black">
+          <div className="mt-1 flex items-baseline gap-1">
+            <span className="text-2xl font-extrabold tracking-tight text-foreground print:text-lg print:text-black">
               {totalHospital.dias_com_dados} dias
             </span>
           </div>
-          <p className="text-xs text-muted-foreground mt-2 flex items-center gap-1 print:text-slate-400">
-            <Info className="h-3.5 w-3.5 text-muted-foreground shrink-0 print:hidden" />
+          <p className="text-[10px] text-muted-foreground mt-1 flex items-center gap-1 print:text-[9px] print:text-slate-500">
             Quantidade de dias com censo.
           </p>
         </div>
@@ -718,28 +719,48 @@ export default function Relatorios() {
             </div>
           ) : (
             <table className="w-full text-sm text-left">
+              <colgroup>
+                <col className="w-[22%]" />
+                <col className="w-[7%]" />
+                {(visaoFiltro === 'Geral' || visaoFiltro === 'Ambos') && (
+                  <>
+                    <col className="w-[9%]" />
+                    <col className="w-[9%]" />
+                    <col className="w-[9%]" />
+                    <col className="w-[10%]" />
+                  </>
+                )}
+                {(visaoFiltro === 'SUS' || visaoFiltro === 'Ambos') && (
+                  <>
+                    <col className="w-[8%]" />
+                    <col className="w-[8%]" />
+                    <col className="w-[8%]" />
+                    <col className="w-[10%]" />
+                  </>
+                )}
+              </colgroup>
               <thead className="text-xs text-muted-foreground uppercase bg-muted/50 border-b print:bg-slate-100 print:text-slate-800">
                 <tr>
-                  <th className="px-4 py-3.5 font-bold text-left">Setor</th>
-                  <th className="px-4 py-3.5 font-bold text-center">Dias Registrados</th>
+                  <th className="px-2 py-2 font-bold text-left">Setor</th>
+                  <th className="px-1 py-2 font-bold text-center">Dias Reg.</th>
                   
                   {/* Colunas do Hospital Geral */}
                   {(visaoFiltro === 'Geral' || visaoFiltro === 'Ambos') && (
                     <>
-                      <th className="px-3 py-3.5 font-bold text-center bg-blue-500/5 print:bg-transparent">Capacidade Geral</th>
-                      <th className="px-3 py-3.5 font-bold text-center bg-blue-500/5 print:bg-transparent">Pacientes/Dias Geral</th>
-                      <th className="px-3 py-3.5 font-bold text-center bg-blue-500/5 print:bg-transparent">Média Ocup./Dia</th>
-                      <th className="px-4 py-3.5 font-bold text-center bg-blue-500/5 print:bg-transparent">Taxa Ocup. Geral</th>
+                      <th className="px-1 py-2 font-bold text-center bg-blue-500/5 print:bg-transparent">Cap. Geral</th>
+                      <th className="px-1 py-2 font-bold text-center bg-blue-500/5 print:bg-transparent">Pac./Dias Geral</th>
+                      <th className="px-1 py-2 font-bold text-center bg-blue-500/5 print:bg-transparent">Média Ocup.</th>
+                      <th className="px-1 py-2 font-bold text-center bg-blue-500/5 print:bg-transparent">Taxa Geral</th>
                     </>
                   )}
 
                   {/* Colunas do SUS */}
                   {(visaoFiltro === 'SUS' || visaoFiltro === 'Ambos') && (
                     <>
-                      <th className="px-3 py-3.5 font-bold text-center bg-green-500/5 print:bg-transparent">Capacidade SUS</th>
-                      <th className="px-3 py-3.5 font-bold text-center bg-green-500/5 print:bg-transparent">Pacientes/Dias SUS</th>
-                      <th className="px-3 py-3.5 font-bold text-center bg-green-500/5 print:bg-transparent">Média Ocup. SUS</th>
-                      <th className="px-4 py-3.5 font-bold text-center bg-green-500/5 print:bg-transparent">Taxa Ocup. SUS</th>
+                      <th className="px-1 py-2 font-bold text-center bg-green-500/5 print:bg-transparent">Cap. SUS</th>
+                      <th className="px-1 py-2 font-bold text-center bg-green-500/5 print:bg-transparent">Pac./Dias SUS</th>
+                      <th className="px-1 py-2 font-bold text-center bg-green-500/5 print:bg-transparent">Média SUS</th>
+                      <th className="px-1 py-2 font-bold text-center bg-green-500/5 print:bg-transparent">Taxa SUS</th>
                     </>
                   )}
                 </tr>
@@ -749,7 +770,7 @@ export default function Relatorios() {
                   <tr key={item.id} className="hover:bg-muted/20 transition-colors">
                     
                     {/* Nome do Setor */}
-                    <td className="px-4 py-4 font-semibold text-foreground print:text-black">
+                    <td className="px-2 py-1.5 font-semibold text-foreground print:text-black">
                       <div className="flex flex-col">
                         <span>{item.nome_setor}</span>
                         {item.leitos_tipo && (
@@ -761,24 +782,24 @@ export default function Relatorios() {
                     </td>
 
                     {/* Dias Registrados */}
-                    <td className="px-4 py-4 text-center text-muted-foreground font-medium print:text-slate-800">
+                    <td className="px-1 py-1.5 text-center text-muted-foreground font-medium print:text-slate-800">
                       {item.dias_com_dados}
                     </td>
 
                     {/* Dados Geral */}
                     {(visaoFiltro === 'Geral' || visaoFiltro === 'Ambos') && (
                       <>
-                        <td className="px-3 py-4 text-center font-medium bg-blue-500/5 print:bg-transparent print:text-slate-800">
+                        <td className="px-1 py-1.5 text-center font-medium bg-blue-500/5 print:bg-transparent print:text-slate-800">
                           {item.current_capacity_geral}
                         </td>
-                        <td className="px-3 py-4 text-center font-medium bg-blue-500/5 print:bg-transparent print:text-slate-800">
+                        <td className="px-1 py-1.5 text-center font-medium bg-blue-500/5 print:bg-transparent print:text-slate-800">
                           {item.pacientes_dias_geral}
                         </td>
-                        <td className="px-3 py-4 text-center bg-blue-500/5 print:bg-transparent print:text-slate-800">
+                        <td className="px-1 py-1.5 text-center bg-blue-500/5 print:bg-transparent print:text-slate-800">
                           {formatNumber(item.media_ocupacao_geral, 2)}
                         </td>
-                        <td className="px-4 py-4 text-center bg-blue-500/5 print:bg-transparent">
-                          <span className={`inline-flex px-2 py-1 text-xs rounded-full ${getRateBadgeStyles(item.taxa_ocupacao_geral)}`}>
+                        <td className="px-1 py-1.5 text-center bg-blue-500/5 print:bg-transparent">
+                          <span className={`inline-flex px-1.5 py-0.5 text-xs rounded-full ${getRateBadgeStyles(item.taxa_ocupacao_geral)}`}>
                             {formatNumber(item.taxa_ocupacao_geral)}%
                           </span>
                         </td>
@@ -788,18 +809,18 @@ export default function Relatorios() {
                     {/* Dados SUS */}
                     {(visaoFiltro === 'SUS' || visaoFiltro === 'Ambos') && (
                       <>
-                        <td className="px-3 py-4 text-center font-medium bg-green-500/5 print:bg-transparent print:text-slate-800">
+                        <td className="px-1 py-1.5 text-center font-medium bg-green-500/5 print:bg-transparent print:text-slate-800">
                           {item.current_capacity_sus}
                         </td>
-                        <td className="px-3 py-4 text-center font-medium bg-green-500/5 print:bg-transparent print:text-slate-800">
+                        <td className="px-1 py-1.5 text-center font-medium bg-green-500/5 print:bg-transparent print:text-slate-800">
                           {item.pacientes_dias_sus}
                         </td>
-                        <td className="px-3 py-4 text-center bg-green-500/5 print:bg-transparent print:text-slate-800">
+                        <td className="px-1 py-1.5 text-center bg-green-500/5 print:bg-transparent print:text-slate-800">
                           {formatNumber(item.media_ocupacao_sus, 2)}
                         </td>
-                        <td className="px-4 py-4 text-center bg-green-500/5 print:bg-transparent">
+                        <td className="px-1 py-1.5 text-center bg-green-500/5 print:bg-transparent">
                           {item.current_capacity_sus > 0 || item.leitos_dias_sus > 0 ? (
-                            <span className={`inline-flex px-2 py-1 text-xs rounded-full ${getRateBadgeStyles(item.taxa_ocupacao_sus)}`}>
+                            <span className={`inline-flex px-1.5 py-0.5 text-xs rounded-full ${getRateBadgeStyles(item.taxa_ocupacao_sus)}`}>
                               {formatNumber(item.taxa_ocupacao_sus)}%
                             </span>
                           ) : (

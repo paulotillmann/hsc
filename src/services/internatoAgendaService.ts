@@ -21,6 +21,7 @@ export interface AgendaEvent {
   professor_id: string | null;
   horario: string;
   observacao: string | null;
+  cancelada?: boolean;
   created_at?: string;
   updated_at?: string;
   // Joins
@@ -119,25 +120,52 @@ export async function excluirProfessor(id: string) {
 // ── AGENDA CRUD ─────────────────────────────────────────────────────────────
 
 export async function criarEventoAgenda(event: Omit<AgendaEvent, 'id' | 'created_at' | 'updated_at' | 'internato_turmas' | 'internato_professores'>) {
+  const payload: any = { ...event };
   const { data, error } = await supabase
     .from('internato_agenda')
-    .insert(event)
+    .insert(payload)
     .select()
     .single();
 
-  if (error) return { success: false, error: error.message };
+  if (error) {
+    if (error.message?.includes('cancelada') || error.code === 'PGRST204' || error.message?.includes('column')) {
+      const { cancelada, ...payloadSemCancelada } = payload;
+      const resRetry = await supabase
+        .from('internato_agenda')
+        .insert(payloadSemCancelada)
+        .select()
+        .single();
+      if (resRetry.error) return { success: false, error: resRetry.error.message };
+      return { success: true, data: resRetry.data };
+    }
+    return { success: false, error: error.message };
+  }
   return { success: true, data };
 }
 
 export async function atualizarEventoAgenda(id: string, updates: Partial<Omit<AgendaEvent, 'id' | 'created_at' | 'updated_at' | 'internato_turmas' | 'internato_professores'>>) {
+  const payload: any = { ...updates };
   const { data, error } = await supabase
     .from('internato_agenda')
-    .update(updates)
+    .update(payload)
     .eq('id', id)
     .select()
     .single();
 
-  if (error) return { success: false, error: error.message };
+  if (error) {
+    if (error.message?.includes('cancelada') || error.code === 'PGRST204' || error.message?.includes('column')) {
+      const { cancelada, ...payloadSemCancelada } = payload;
+      const resRetry = await supabase
+        .from('internato_agenda')
+        .update(payloadSemCancelada)
+        .eq('id', id)
+        .select()
+        .single();
+      if (resRetry.error) return { success: false, error: resRetry.error.message };
+      return { success: true, data: resRetry.data };
+    }
+    return { success: false, error: error.message };
+  }
   return { success: true, data };
 }
 

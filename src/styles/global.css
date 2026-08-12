@@ -120,8 +120,12 @@
 }
 
 @media print {
+  @page {
+    size: A4 portrait;
+    margin: 6mm;
+  }
 
-  /* Hide sidebar and navigation */
+  /* Hide sidebar, headers, footers and navigation elements */
   aside,
   nav,
   header,
@@ -131,7 +135,10 @@
     display: none !important;
   }
 
-  /* Make main layout full width */
+  /* Reset layout constraints and allow full width page container */
+  body,
+  html,
+  #root,
   main {
     padding: 0 !important;
     margin: 0 !important;
@@ -142,13 +149,15 @@
     color: black !important;
   }
 
-  /* Force light colors and remove dark backgrounds */
-  body,
-  html {
-    background: white !important;
-    color: black !important;
+  /* Expand all inner scroll containers so no table columns are cut off */
+  .overflow-x-auto,
+  .overflow-y-auto,
+  .overflow-auto {
+    overflow: visible !important;
+    width: 100% !important;
   }
 
+  /* Force light colors and remove dark backgrounds */
   .bg-card,
   .bg-background,
   .bg-muted,
@@ -167,10 +176,20 @@
     border-color: #cbd5e1 !important;
   }
 
-  /* Table styling specifically for print */
+  /* Table styling specifically for print A4 portrait */
   table {
     border-collapse: collapse !important;
     width: 100% !important;
+    table-layout: fixed !important;
+    font-size: 8px !important;
+  }
+
+  th, td {
+    padding: 2.5px 2px !important;
+    white-space: normal !important;
+    word-break: break-word !important;
+    overflow: hidden !important;
+    line-height: 1.1 !important;
   }
 
   tr {

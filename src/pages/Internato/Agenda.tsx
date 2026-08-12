@@ -5,7 +5,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Calendar as CalendarIcon, ChevronLeft, ChevronRight, Plus, Trash2, Edit2,
-  Loader2, X, AlertCircle, CheckCircle, Info, MapPin, Users, BookOpen, Clock, FileText
+  Loader2, X, AlertCircle, CheckCircle, Info, MapPin, Users, BookOpen, Clock, FileText, Filter
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { usePermissions } from '../../hooks/usePermissions';
@@ -66,11 +66,20 @@ const CLINICAS = [
   { id: 'Clinica Medica', nome: 'Clínica Médica' },
   { id: 'Clinica Cirurgica', nome: 'Clínica Cirúrgica' },
   { id: 'Saude Mental', nome: 'Saúde Mental' },
-  { id: 'Urgencia Emergencia', nome: 'Urgência e Emergência' }
+  { id: 'Urgencia Emergencia', nome: 'Urgência e Emergência' },
+  { id: 'OSCE - Pediatria', nome: 'OSCE - Pediatria' },
+  { id: 'OSCE - GO', nome: 'OSCE - GO' },
+  { id: 'OSCE - Clinica Medica', nome: 'OSCE - Clínica Médica' },
+  { id: 'OSCE - Clinica Cirurgica', nome: 'OSCE - Clínica Cirúrgica' },
+  { id: 'Avaliacao Teorica Pediatria', nome: 'Avaliação Teórica Pediatria' },
+  { id: 'Avaliacao Teorica GO', nome: 'Avaliação Teórica GO' },
+  { id: 'Avaliacao Teorica Clinica Medica', nome: 'Avaliação Teórica Clínica Médica' },
+  { id: 'Avaliacao Teorica Clinica Cirurgica', nome: 'Avaliação Teórica Clínica Cirúrgica' },
+  { id: 'Avaliacao Teorica 12', nome: 'Avaliação Teórica 12º' }
 ];
 
 function getClinicaEstilo(clinicaSlug?: string | null) {
-  if (!clinicaSlug || !CLINICA_CORES[clinicaSlug]) {
+  if (!clinicaSlug) {
     return {
       bg: 'bg-slate-500/10 dark:bg-slate-500/20',
       border: 'border-slate-500/20 dark:border-slate-500/30',
@@ -78,11 +87,54 @@ function getClinicaEstilo(clinicaSlug?: string | null) {
       bullet: 'bg-slate-500 shadow-[0_0_8px_rgba(100,116,139,0.5)]',
     };
   }
-  return CLINICA_CORES[clinicaSlug];
+
+  if (CLINICA_CORES[clinicaSlug]) {
+    return CLINICA_CORES[clinicaSlug];
+  }
+
+  if (clinicaSlug.includes('OSCE')) {
+    return {
+      bg: 'bg-cyan-500/10 dark:bg-cyan-500/20',
+      border: 'border-cyan-500/20 dark:border-cyan-500/30',
+      text: 'text-cyan-700 dark:text-cyan-300',
+      bullet: 'bg-cyan-500 shadow-[0_0_8px_rgba(6,182,212,0.5)]',
+    };
+  }
+
+  if (clinicaSlug.includes('Avaliacao') || clinicaSlug.includes('Avaliação') || clinicaSlug.includes('Teorica') || clinicaSlug.includes('Teórica')) {
+    return {
+      bg: 'bg-violet-500/10 dark:bg-violet-500/20',
+      border: 'border-violet-500/20 dark:border-violet-500/30',
+      text: 'text-violet-700 dark:text-violet-300',
+      bullet: 'bg-violet-500 shadow-[0_0_8px_rgba(139,92,246,0.5)]',
+    };
+  }
+
+  return {
+    bg: 'bg-slate-500/10 dark:bg-slate-500/20',
+    border: 'border-slate-500/20 dark:border-slate-500/30',
+    text: 'text-slate-700 dark:text-slate-300',
+    bullet: 'bg-slate-500 shadow-[0_0_8px_rgba(100,116,139,0.5)]',
+  };
 }
 
 function removerAcentos(str: string): string {
   return str.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+}
+
+function isEventoCancelado(evento: AgendaEvent): boolean {
+  if (evento.cancelada) return true;
+  if (evento.observacao && (evento.observacao.includes('[CANCELADA]') || evento.observacao.includes('[CANCELADO]'))) {
+    return true;
+  }
+  return false;
+}
+
+function getTurmaKeyFromEvento(evento: AgendaEvent): string {
+  if (evento.turma_id) return evento.turma_id;
+  const obs = evento.observacao || '';
+  if (obs.includes('[Funcionários]')) return 'funcionarios';
+  return 'acolhimento';
 }
 
 function getLocalEstilo(sala?: string | null) {
@@ -96,6 +148,16 @@ function getLocalEstilo(sala?: string | null) {
   }
 
   const normalizado = removerAcentos(sala.toLowerCase());
+
+  if (normalizado.includes('daniela') || normalizado.includes('danila')) {
+    // Sala Dra Daniela -> Fuchsia / Pink
+    return {
+      bg: 'bg-fuchsia-500/10 dark:bg-fuchsia-500/20',
+      border: 'border-fuchsia-500/20 dark:border-fuchsia-500/30',
+      text: 'text-fuchsia-700 dark:text-fuchsia-300',
+      bullet: 'bg-fuchsia-500 shadow-[0_0_8px_rgba(217,70,239,0.5)]',
+    };
+  }
 
   if (normalizado.includes('estudo')) {
     // Sala de Estudos -> Emerald (Verde)
@@ -257,6 +319,10 @@ export default function InternatoAgenda() {
   const [loading, setLoading] = useState(true);
   const [operando, setOperando] = useState(false);
 
+  // Filtros
+  const [filtroTurma, setFiltroTurma] = useState<string>('todos');
+  const [filtroStatus, setFiltroStatus] = useState<'todos' | 'ativos' | 'cancelados'>('todos');
+
   // Formulário
   const [isEditing, setIsEditing] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -269,6 +335,7 @@ export default function InternatoAgenda() {
   const [formHorario, setFormHorario] = useState('Manhã');
   const [formHorarioPersonalizado, setFormHorarioPersonalizado] = useState('');
   const [formObservacao, setFormObservacao] = useState('');
+  const [formCancelada, setFormCancelada] = useState(false);
 
   // Toast
   const [toast, setToast] = useState<{ type: 'success' | 'error' | 'info'; message: string } | null>(null);
@@ -384,17 +451,35 @@ export default function InternatoAgenda() {
     return slots;
   }, [currentYear, currentMonth]);
 
+  // Eventos Filtrados por Turma e Status
+  const agendaFiltrada = useMemo(() => {
+    return agenda.filter(evento => {
+      // Filtro por Cancelada / Status
+      const cancelado = isEventoCancelado(evento);
+      if (filtroStatus === 'ativos' && cancelado) return false;
+      if (filtroStatus === 'cancelados' && !cancelado) return false;
+
+      // Filtro por Turma
+      if (filtroTurma !== 'todos') {
+        const turmaKey = getTurmaKeyFromEvento(evento);
+        if (turmaKey !== filtroTurma) return false;
+      }
+
+      return true;
+    });
+  }, [agenda, filtroTurma, filtroStatus]);
+
   // Agrupamento dos eventos por data
   const agendaAgrupada = useMemo(() => {
     const mapa: Record<string, AgendaEvent[]> = {};
-    agenda.forEach(item => {
+    agendaFiltrada.forEach(item => {
       if (!mapa[item.data]) {
         mapa[item.data] = [];
       }
       mapa[item.data].push(item);
     });
     return mapa;
-  }, [agenda]);
+  }, [agendaFiltrada]);
 
   const eventosDoDiaSelecionado = useMemo(() => {
     return agendaAgrupada[selectedDateString] ?? [];
@@ -419,6 +504,7 @@ export default function InternatoAgenda() {
     setFormHorario('Manhã');
     setFormHorarioPersonalizado('08:00 às 12:00');
     setFormObservacao('');
+    setFormCancelada(false);
     setShowFormModal(true);
   };
 
@@ -429,7 +515,7 @@ export default function InternatoAgenda() {
     
     // Se não houver turma_id, verifica pelo texto da observação para restaurar "funcionarios" ou "acolhimento"
     if (!evento.turma_id) {
-      if (evento.observacao && evento.observacao.startsWith('[Funcionários]')) {
+      if (evento.observacao && evento.observacao.includes('[Funcionários]')) {
         setFormTurmaId('funcionarios');
       } else {
         setFormTurmaId('acolhimento');
@@ -457,14 +543,17 @@ export default function InternatoAgenda() {
       setFormHorario('Manhã');
     }
 
+    setFormCancelada(isEventoCancelado(evento));
+
     // Remove a tag interna da observação ao carregar no form se existir
     let obsLimpa = evento.observacao || '';
+    obsLimpa = obsLimpa.replace(/\[CANCELADA\]\s?/gi, '').replace(/\[CANCELADO\]\s?/gi, '');
     if (obsLimpa.startsWith('[Funcionários] ')) {
       obsLimpa = obsLimpa.replace('[Funcionários] ', '');
     } else if (obsLimpa === '[Funcionários]') {
       obsLimpa = '';
     }
-    setFormObservacao(obsLimpa);
+    setFormObservacao(obsLimpa.trim());
     setShowFormModal(true);
   };
 
@@ -486,6 +575,10 @@ export default function InternatoAgenda() {
       observacaoFinal = formObservacao ? `[Funcionários] ${formObservacao}` : '[Funcionários]';
     }
 
+    if (formCancelada) {
+      observacaoFinal = observacaoFinal ? `[CANCELADA] ${observacaoFinal}` : '[CANCELADA]';
+    }
+
     const payload = {
       data: selectedDateString,
       turma_id: isEspecial ? null : (formTurmaId || null),
@@ -493,7 +586,8 @@ export default function InternatoAgenda() {
       sala: formSala,
       professor_id: formProfessorId || null,
       horario: horarioParaSalvar,
-      observacao: observacaoFinal
+      observacao: observacaoFinal,
+      cancelada: formCancelada
     };
 
     try {
@@ -597,6 +691,62 @@ export default function InternatoAgenda() {
             Agendar Compromisso
           </button>
         )}
+      </div>
+
+      {/* Barra de Filtros */}
+      <div className="bg-card border border-border/80 rounded-xl p-3 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-3">
+        <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-muted-foreground">
+          <Filter className="h-4 w-4 text-primary" />
+          <span>Filtros da Agenda</span>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-3">
+          {/* Filtro por Turma */}
+          <div className="flex items-center gap-1.5">
+            <label className="text-xs font-semibold text-muted-foreground">Turma:</label>
+            <select
+              value={filtroTurma}
+              onChange={e => setFiltroTurma(e.target.value)}
+              className="px-2.5 py-1.5 text-xs rounded-lg border border-border bg-background text-foreground focus:ring-2 focus:ring-primary/20 outline-none"
+            >
+              <option value="todos">Todas as Turmas</option>
+              <option value="acolhimento">Acolhimento</option>
+              <option value="funcionarios">Funcionários</option>
+              {turmas.map(t => (
+                <option key={t.id} value={t.id}>
+                  {t.nome} ({t.periodo})
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Filtro por Status / Canceladas */}
+          <div className="flex items-center gap-1.5">
+            <label className="text-xs font-semibold text-muted-foreground">Status / Canceladas:</label>
+            <select
+              value={filtroStatus}
+              onChange={e => setFiltroStatus(e.target.value as any)}
+              className="px-2.5 py-1.5 text-xs rounded-lg border border-border bg-background text-foreground focus:ring-2 focus:ring-primary/20 outline-none"
+            >
+              <option value="todos">Todos (Ativos + Cancelados)</option>
+              <option value="ativos">Somente Ativos</option>
+              <option value="cancelados">Somente Canceladas 🚫</option>
+            </select>
+          </div>
+
+          {(filtroTurma !== 'todos' || filtroStatus !== 'todos') && (
+            <button
+              onClick={() => {
+                setFiltroTurma('todos');
+                setFiltroStatus('todos');
+              }}
+              className="px-2 py-1 text-[11px] font-semibold text-muted-foreground hover:text-destructive transition-colors flex items-center gap-1"
+            >
+              <X className="h-3 w-3" />
+              Limpar Filtros
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Grid Principal */}
@@ -707,16 +857,25 @@ export default function InternatoAgenda() {
                       <div className="flex-1 mt-1.5 space-y-1 pr-0.5">
                         {diaEventos.map(evento => {
                           const estilo = getLocalEstilo(evento.sala);
-                          const nomeTurmaDisplay = evento.internato_turmas?.nome || (evento.observacao && evento.observacao.startsWith('[Funcionários]') ? 'Funcionários' : 'Acolhimento');
+                          const isCancelado = isEventoCancelado(evento);
+                          const nomeTurmaDisplay = evento.internato_turmas?.nome || (
+                            evento.observacao && evento.observacao.includes('[Funcionários]')
+                              ? 'Funcionários'
+                              : 'Acolhimento'
+                          );
                           return (
                             <div
                               key={evento.id}
-                              className={`flex items-center flex-wrap gap-1 px-1 py-0.5 rounded text-[10px] font-semibold border ${estilo.bg} ${estilo.border} ${estilo.text}`}
-                              title={`${nomeTurmaDisplay} - ${evento.sala} (${evento.horario})`}
+                              className={`flex items-center flex-wrap gap-1 px-1 py-0.5 rounded text-[10px] font-semibold border ${
+                                isCancelado
+                                  ? 'bg-rose-500/20 border-rose-500/40 text-rose-700 dark:text-rose-300 line-through decoration-rose-500'
+                                  : `${estilo.bg} ${estilo.border} ${estilo.text}`
+                              }`}
+                              title={`${isCancelado ? '[CANCELADA] ' : ''}${nomeTurmaDisplay} - ${evento.sala} (${evento.horario})`}
                             >
-                              <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${estilo.bullet}`} />
+                              <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${isCancelado ? 'bg-rose-600' : estilo.bullet}`} />
                               <span className="flex-1 break-words">
-                                {nomeTurmaDisplay}
+                                {nomeTurmaDisplay} {isCancelado && '(Cancelada)'}
                               </span>
                               <span className="text-[9.5px] opacity-90 font-medium shrink-0 ml-1 border-l border-current/20 pl-1">
                                 {evento.sala}
@@ -770,13 +929,24 @@ export default function InternatoAgenda() {
             ) : (
               eventosDoDiaSelecionado.map(evento => {
                 const estilo = getLocalEstilo(evento.sala);
+                const isCancelado = isEventoCancelado(evento);
                 const clinicaNome = CLINICAS.find(c => c.id === evento.clinica)?.nome || evento.clinica || 'Não informado';
-                const isFuncionarios = !evento.internato_turmas && evento.observacao && evento.observacao.startsWith('[Funcionários]');
+                const isFuncionarios = !evento.internato_turmas && evento.observacao && evento.observacao.includes('[Funcionários]');
                 return (
                   <div
                     key={evento.id}
-                    className={`p-3 rounded-xl border flex flex-col gap-2 relative group hover:shadow-md transition-all duration-200 ${estilo.bg} ${estilo.border}`}
+                    className={`p-3 rounded-xl border flex flex-col gap-2 relative group hover:shadow-md transition-all duration-200 ${
+                      isCancelado
+                        ? 'bg-rose-500/15 dark:bg-rose-950/40 border-rose-500/40 dark:border-rose-800/60'
+                        : `${estilo.bg} ${estilo.border}`
+                    }`}
                   >
+                    {isCancelado && (
+                      <div className="bg-rose-600 text-white font-extrabold text-[10px] uppercase px-2 py-0.5 rounded-md tracking-wider shadow-sm flex items-center gap-1 w-fit">
+                        <AlertCircle className="h-3 w-3" />
+                        COMPROMISSO CANCELADO
+                      </div>
+                    )}
                     {/* Botões de Ação */}
                     {temPermissaoEscrita && (
                       <div className="absolute top-2 right-2 flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
@@ -925,6 +1095,7 @@ export default function InternatoAgenda() {
                       <option value="" disabled>Selecione</option>
                       <option value="Auditório">Auditório</option>
                       <option value="Sala de Estudo">Sala de Estudo</option>
+                      <option value="Sala Dra Daniela">Sala Dra Daniela</option>
                     </select>
                   </div>
 
@@ -1007,6 +1178,21 @@ export default function InternatoAgenda() {
                     rows={3}
                     className="w-full px-3 py-2 text-sm rounded-lg border border-border bg-background focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all resize-none"
                   />
+                </div>
+
+                {/* Checkbox Cancelada */}
+                <div className="flex items-center gap-2.5 p-3 rounded-lg border border-rose-500/30 bg-rose-500/10 text-rose-700 dark:text-rose-300">
+                  <input
+                    type="checkbox"
+                    id="formCancelada"
+                    checked={formCancelada}
+                    onChange={e => setFormCancelada(e.target.checked)}
+                    className="h-4 w-4 rounded border-rose-400 text-rose-600 focus:ring-rose-500 cursor-pointer"
+                  />
+                  <label htmlFor="formCancelada" className="text-xs font-bold cursor-pointer flex items-center gap-1.5 select-none">
+                    <AlertCircle className="h-4 w-4 text-rose-600 dark:text-rose-400 shrink-0" />
+                    Marcar este agendamento como CANCELADO
+                  </label>
                 </div>
 
                 {/* Footer Modal */}
