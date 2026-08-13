@@ -4,7 +4,7 @@ import {
   Hourglass,
   HeartPulse,
   Clock,
-  Activity,
+  ShieldAlert,
   Volume2,
   VolumeX,
   Maximize2,
@@ -236,23 +236,6 @@ export default function PainelTVPA() {
     return Math.max(0, Math.round((end - start) / 60000));
   };
 
-  const getAtendimentoTimeMinutes = (inicio: string | null, libMedica: string | null, alta: string | null): number => {
-    if (!inicio) return 0;
-    const startObj = parseLocalDate(inicio);
-    if (!startObj) return 0;
-    const start = startObj.getTime();
-
-    let end = Date.now();
-    if (libMedica) {
-      const endObj = parseLocalDate(libMedica);
-      if (endObj) end = endObj.getTime();
-    } else if (alta) {
-      const endObj = parseLocalDate(alta);
-      if (endObj) end = endObj.getTime();
-    }
-    return Math.max(0, Math.round((end - start) / 60000));
-  };
-
   const formatWaitTime = (minutes: number): string => {
     if (minutes < 60) return `${minutes} min`;
     const hours = Math.floor(minutes / 60);
@@ -277,14 +260,6 @@ export default function PainelTVPA() {
     ? Math.round(
       pacientesComTempoEspera.reduce((sum, p) => sum + getWaitTimeMinutes(p.dt_entrada, p.hr_inicio_consulta), 0) /
       pacientesComTempoEspera.length
-    )
-    : 0;
-
-  const pacientesComAtendimento = ativos.filter(p => p.hr_inicio_consulta);
-  const tempoMedioAtendimentoMinutos = pacientesComAtendimento.length > 0
-    ? Math.round(
-      pacientesComAtendimento.reduce((sum, p) => sum + getAtendimentoTimeMinutes(p.hr_inicio_consulta, p.dt_lib_medico, p.dt_alta), 0) /
-      pacientesComAtendimento.length
     )
     : 0;
 
@@ -408,18 +383,51 @@ export default function PainelTVPA() {
             </div>
           </div>
 
-          {/* Card 5: Média Atendimento */}
-          <div className="flex-1 min-h-[65px] max-h-[18vh] bg-white border border-slate-200 border-l-4 border-l-violet-500 rounded-xl p-2.5 sm:p-3 flex flex-col justify-center shadow-sm relative overflow-hidden group hover:border-violet-500/40 transition-all duration-300">
-            <div className="flex flex-col min-w-0 z-10 pr-6">
-              <span className="text-[10px] sm:text-[11px] md:text-[12px] lg:text-[14px] xl:text-[15px] font-bold text-[#851c1c] uppercase tracking-wider leading-tight">
-                Média Atendimento
+          {/* Card 5: Classificação de Risco */}
+          <div className="flex-[2] min-h-[160px] max-h-[35vh] bg-white border border-slate-200 border-l-4 border-l-purple-600 rounded-xl p-2.5 sm:p-3 md:p-3.5 flex flex-col justify-between shadow-sm relative overflow-hidden group hover:border-purple-600/40 transition-all duration-300">
+            <div className="flex items-center justify-between z-10 border-b border-slate-100 pb-1.5 mb-1">
+              <span className="text-xs sm:text-sm md:text-base lg:text-lg xl:text-xl font-black text-[#851c1c] uppercase tracking-wider leading-tight">
+                Classificação de Risco
               </span>
-              <span className="text-xl sm:text-2xl md:text-3xl lg:text-4xl xl:text-5xl font-black tracking-tight text-slate-900 mt-1 leading-none">
-                {formatWaitTime(tempoMedioAtendimentoMinutos)}
-              </span>
+              <ShieldAlert className="h-5 w-5 text-purple-600 shrink-0" />
             </div>
-            <div className="absolute right-2 bottom-2 text-violet-500/15 group-hover:text-violet-500/30 transition-colors pointer-events-none z-0">
-              <Activity className="h-8 w-8 sm:h-10 sm:w-10 md:h-12 md:w-12 lg:h-14 lg:w-14 animate-pulse" />
+            
+            <div className="flex flex-col gap-1.5 z-10 text-xs sm:text-sm md:text-base lg:text-base xl:text-lg font-bold text-slate-800">
+              <div className="flex items-center justify-between bg-red-50/80 px-2.5 py-1 rounded-lg border border-red-100">
+                <span className="flex items-center gap-2 text-red-700">
+                  <span className="h-3 w-3 sm:h-3.5 sm:w-3.5 rounded-full bg-red-500 animate-pulse shrink-0" />
+                  Vermelho
+                </span>
+                <span className="text-red-700 font-black">Emergência (Imediato)</span>
+              </div>
+              <div className="flex items-center justify-between bg-orange-50/80 px-2.5 py-1 rounded-lg border border-orange-100">
+                <span className="flex items-center gap-2 text-orange-700">
+                  <span className="h-3 w-3 sm:h-3.5 sm:w-3.5 rounded-full bg-orange-500 shrink-0" />
+                  Laranja
+                </span>
+                <span className="text-orange-700 font-black">Muito Urgente (15m)</span>
+              </div>
+              <div className="flex items-center justify-between bg-amber-50/80 px-2.5 py-1 rounded-lg border border-amber-100">
+                <span className="flex items-center gap-2 text-amber-800">
+                  <span className="h-3 w-3 sm:h-3.5 sm:w-3.5 rounded-full bg-yellow-400 shrink-0" />
+                  Amarelo
+                </span>
+                <span className="text-amber-800 font-black">Urgente (1h)</span>
+              </div>
+              <div className="flex items-center justify-between bg-emerald-50/80 px-2.5 py-1 rounded-lg border border-emerald-100">
+                <span className="flex items-center gap-2 text-emerald-800">
+                  <span className="h-3 w-3 sm:h-3.5 sm:w-3.5 rounded-full bg-emerald-500 shrink-0" />
+                  Verde
+                </span>
+                <span className="text-emerald-800 font-black">Pouco urgente (2h)</span>
+              </div>
+              <div className="flex items-center justify-between bg-blue-50/80 px-2.5 py-1 rounded-lg border border-blue-100">
+                <span className="flex items-center gap-2 text-blue-800">
+                  <span className="h-3 w-3 sm:h-3.5 sm:w-3.5 rounded-full bg-blue-500 shrink-0" />
+                  Azul
+                </span>
+                <span className="text-blue-800 font-black">Pouco urgente (4h)</span>
+              </div>
             </div>
           </div>
         </aside>
