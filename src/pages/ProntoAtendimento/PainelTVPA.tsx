@@ -14,7 +14,7 @@ import {
   Moon
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
-import { fetchPATvSettings, DEFAULT_PA_TV_SETTINGS } from '../../services/paTvService';
+import { fetchPATvSettings, DEFAULT_PA_TV_SETTINGS, parseTickerMessages } from '../../services/paTvService';
 
 interface PacientePA {
   id: string;
@@ -263,6 +263,18 @@ export default function PainelTVPA() {
     )
     : 0;
 
+  // Processamento de Frases do Letreiro Inferior
+  const tickerMessages = useMemo(() => {
+    const list = parseTickerMessages(tickerText);
+    return list.length > 0 ? list : [DEFAULT_PA_TV_SETTINGS.ticker_text];
+  }, [tickerText]);
+
+  const marqueeList = useMemo(() => {
+    const repeatCount = Math.max(2, Math.ceil(8 / tickerMessages.length));
+    const fullList = Array(repeatCount).fill(tickerMessages).flat();
+    return [...fullList, ...fullList];
+  }, [tickerMessages]);
+
   return (
     <div className="flex flex-col h-screen w-screen bg-slate-100 text-slate-900 overflow-hidden font-sans select-none">
       {/* ── CABEÇALHO SUPERIOR ── */}
@@ -383,50 +395,50 @@ export default function PainelTVPA() {
             </div>
           </div>
 
-          {/* Card 5: Classificação de Risco */}
+          {/* Card 5: Classificação do Atendimento */}
           <div className="flex-[2] min-h-[160px] max-h-[35vh] bg-white border border-slate-200 border-l-4 border-l-purple-600 rounded-xl p-2.5 sm:p-3 md:p-3.5 flex flex-col justify-between shadow-sm relative overflow-hidden group hover:border-purple-600/40 transition-all duration-300">
             <div className="flex items-center justify-between z-10 border-b border-slate-100 pb-1.5 mb-1">
-              <span className="text-xs sm:text-sm md:text-base lg:text-lg xl:text-xl font-black text-[#851c1c] uppercase tracking-wider leading-tight">
-                Classificação de Risco
+              <span className="text-[10px] sm:text-xs md:text-sm lg:text-base xl:text-lg font-black text-[#851c1c] uppercase tracking-wider leading-tight">
+                Classificação do Atendimento
               </span>
               <ShieldAlert className="h-5 w-5 text-purple-600 shrink-0" />
             </div>
-            
-            <div className="flex flex-col gap-1.5 z-10 text-xs sm:text-sm md:text-base lg:text-base xl:text-lg font-bold text-slate-800">
+
+            <div className="flex-1 flex flex-col justify-center gap-1.5 z-10 text-[10px] sm:text-xs md:text-sm lg:text-sm xl:text-base font-bold text-slate-800">
               <div className="flex items-center justify-between bg-red-50/80 px-2.5 py-1 rounded-lg border border-red-100">
                 <span className="flex items-center gap-2 text-red-700">
                   <span className="h-3 w-3 sm:h-3.5 sm:w-3.5 rounded-full bg-red-500 animate-pulse shrink-0" />
                   Vermelho
                 </span>
-                <span className="text-red-700 font-black">Emergência (Imediato)</span>
+                <span className="text-red-700 font-black">Emergência</span>
               </div>
               <div className="flex items-center justify-between bg-orange-50/80 px-2.5 py-1 rounded-lg border border-orange-100">
                 <span className="flex items-center gap-2 text-orange-700">
                   <span className="h-3 w-3 sm:h-3.5 sm:w-3.5 rounded-full bg-orange-500 shrink-0" />
                   Laranja
                 </span>
-                <span className="text-orange-700 font-black">Muito Urgente (15m)</span>
+                <span className="text-orange-700 font-black">Muito Urgente</span>
               </div>
               <div className="flex items-center justify-between bg-amber-50/80 px-2.5 py-1 rounded-lg border border-amber-100">
                 <span className="flex items-center gap-2 text-amber-800">
                   <span className="h-3 w-3 sm:h-3.5 sm:w-3.5 rounded-full bg-yellow-400 shrink-0" />
                   Amarelo
                 </span>
-                <span className="text-amber-800 font-black">Urgente (1h)</span>
+                <span className="text-amber-800 font-black">Urgente</span>
               </div>
               <div className="flex items-center justify-between bg-emerald-50/80 px-2.5 py-1 rounded-lg border border-emerald-100">
                 <span className="flex items-center gap-2 text-emerald-800">
                   <span className="h-3 w-3 sm:h-3.5 sm:w-3.5 rounded-full bg-emerald-500 shrink-0" />
                   Verde
                 </span>
-                <span className="text-emerald-800 font-black">Pouco urgente (2h)</span>
+                <span className="text-emerald-800 font-black">Pouco Urgente</span>
               </div>
               <div className="flex items-center justify-between bg-blue-50/80 px-2.5 py-1 rounded-lg border border-blue-100">
                 <span className="flex items-center gap-2 text-blue-800">
                   <span className="h-3 w-3 sm:h-3.5 sm:w-3.5 rounded-full bg-blue-500 shrink-0" />
                   Azul
                 </span>
-                <span className="text-blue-800 font-black">Pouco urgente (4h)</span>
+                <span className="text-blue-800 font-black">Não Urgente</span>
               </div>
             </div>
           </div>
@@ -434,16 +446,18 @@ export default function PainelTVPA() {
       </div>
 
       {/* ── LETREIRO DIGITAL INFERIOR (TICKER MARQUEE) ── */}
-      <footer className="h-20 bg-slate-200 dark:bg-slate-900 border-t border-slate-300 dark:border-slate-800 flex items-center shrink-0 overflow-hidden relative shadow-2xl z-20">
-        {/* Container do Marquee Animado sem badge à esquerda */}
+      <footer className="h-20 bg-[#5A1010] border-t border-[#450c0c] flex items-center shrink-0 overflow-hidden relative shadow-2xl z-20">
+        {/* Container do Marquee Animado contínuo com ponto centralizado */}
         <div className="w-full overflow-hidden relative flex items-center py-2">
           <div className="animate-marquee whitespace-nowrap flex items-center">
-            <span className="text-2xl md:text-3xl lg:text-4xl font-black tracking-wide text-slate-900 dark:text-white px-16">
-              {tickerText}
-            </span>
-            <span className="text-2xl md:text-3xl lg:text-4xl font-black tracking-wide text-slate-900 dark:text-white px-16">
-              {tickerText}
-            </span>
+            {marqueeList.map((msg, i) => (
+              <div key={i} className="inline-flex items-center gap-10 px-6 shrink-0">
+                <span className="text-2xl md:text-3xl lg:text-4xl font-black tracking-wide text-white">
+                  {msg}
+                </span>
+                <span className="h-3.5 w-3.5 rounded-full bg-white/80 shrink-0 shadow-sm" />
+              </div>
+            ))}
           </div>
         </div>
       </footer>
@@ -456,7 +470,7 @@ export default function PainelTVPA() {
         }
         .animate-marquee {
           display: inline-flex;
-          animation: marquee 40s linear infinite;
+          animation: marquee 180s linear infinite;
         }
         .animate-marquee:hover {
           animation-play-state: paused;
