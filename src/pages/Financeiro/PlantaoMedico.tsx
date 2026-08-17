@@ -5,9 +5,13 @@ import {
   ChevronLeft, ChevronRight, BarChart3, PieChart, ArrowUpRight, 
   TrendingUp, Info, Check, ChevronDown, UserCheck, DollarSign, 
   FileSpreadsheet, Award, Activity, X, Layers, Edit3, Save, Baby,
-  ClipboardList, CheckCircle2, Plus, Trash2, GraduationCap, Briefcase, Clock
+  ClipboardList, CheckCircle2, Plus, Trash2, GraduationCap, Briefcase, Clock, Mail, Send, Loader2
 } from 'lucide-react';
 import { webhookService } from '../../services/webhookService';
+import { MedicoEmailsModal } from './MedicoEmailsModal';
+import { DisparoEmailLoteModal } from './DisparoEmailLoteModal';
+import { plantaoMedicoContatosService, MedicoContato } from '../../services/plantaoMedicoContatosService';
+import { sendPlantaoMedicoEmail } from '../../services/plantaoEmailService';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { 
@@ -271,6 +275,38 @@ const PlantaoMedico: React.FC = () => {
     } catch (e) {}
     return {};
   });
+
+  // Modal de Gestão de E-mails dos Médicos e Disparo em Lote
+  const [isEmailsModalOpen, setIsEmailsModalOpen] = useState<boolean>(false);
+  const [isDisparoLoteOpen, setIsDisparoLoteOpen] = useState<boolean>(false);
+  const [contatosMedicos, setContatosMedicos] = useState<MedicoContato[]>([]);
+  const [singleSendingId, setSingleSendingId] = useState<string | null>(null);
+  const [singleSendFeedback, setSingleSendFeedback] = useState<{ id: string; success: boolean; message: string } | null>(null);
+
+  // Carregar contatos dos médicos para exibir ou sincronizar
+  const carregarContatosMedicos = useCallback(async () => {
+    try {
+      const data = await plantaoMedicoContatosService.listar();
+      setContatosMedicos(data);
+    } catch (err) {
+      console.error('Erro ao carregar contatos dos médicos:', err);
+    }
+  }, []);
+
+  useEffect(() => {
+    carregarContatosMedicos();
+  }, [carregarContatosMedicos]);
+
+  // Mapa de e-mails para consulta instantânea na interface
+  const contatosMedicosMap = useMemo(() => {
+    const map = new Map<string, string[]>();
+    contatosMedicos.forEach(c => {
+      if (c.nome_medico && c.emails && c.emails.length > 0) {
+        map.set(c.nome_medico.toUpperCase().trim(), c.emails);
+      }
+    });
+    return map;
+  }, [contatosMedicos]);
 
   const [selectedSinteticoItem, setSelectedSinteticoItem] = useState<PlantaoMedicoSintetico | null>(null);
   const [selectedItem, setSelectedItem] = useState<PlantaoMedicoItem | null>(null);
@@ -1144,6 +1180,29 @@ const PlantaoMedico: React.FC = () => {
           )}
 
           <button
+            onClick={() => setIsEmailsModalOpen(true)}
+            className="flex items-center gap-2 px-3.5 py-2 rounded-md text-xs font-semibold bg-card border border-border hover:bg-muted text-foreground transition-all shadow-sm cursor-pointer"
+            title="Gerenciar cadastro de múltiplos e-mails por médico"
+          >
+            <Mail className="h-4 w-4 text-[#8a1515] dark:text-[#f43f5e]" />
+            <span>Gerenciar E-mails</span>
+            {contatosMedicos.length > 0 && (
+              <span className="ml-1 bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400 px-1.5 py-0.5 rounded-full text-[10px] font-bold border border-emerald-300 dark:border-emerald-800">
+                {contatosMedicos.length}
+              </span>
+            )}
+          </button>
+
+          <button
+            onClick={() => setIsDisparoLoteOpen(true)}
+            className="flex items-center gap-2 px-3.5 py-2 rounded-md text-xs font-bold bg-[#8a1515] hover:bg-[#701010] text-white transition-all shadow-sm cursor-pointer"
+            title="Enviar relatórios em lote por e-mail para os médicos"
+          >
+            <Send className="h-4 w-4" />
+            <span>Disparar E-mails</span>
+          </button>
+
+          <button
             onClick={() => fetchPlantaos(true, true)}
             disabled={loading}
             className="flex items-center justify-center rounded-md text-sm font-semibold bg-card border border-border text-foreground hover:bg-muted h-10 w-10 transition-all shadow-sm cursor-pointer"
@@ -1921,13 +1980,82 @@ const PlantaoMedico: React.FC = () => {
                         )}
                       </td>
                       <td className="py-3 px-4 text-center">
-                        <button
-                          onClick={() => handleOpenSinteticoModal(item)}
-                          className="p-1.5 text-muted-foreground hover:text-[#8a1515] hover:bg-[#8a1515]/10 rounded-md transition-colors cursor-pointer"
-                          title="Lançar Produção Médica / Editar Pagamento"
-                        >
-                          <Edit3 className="h-4 w-4" />
-                        </button>
+                        <div className="flex items-center justify-center gap-1">
+                          {(() => {
+                            const emails = contatosMedicosMap.get(item.MEDICO.toUpperCase().trim()) || [];
+                            const isSending = singleSendingId === item.id;
+                            const temEmail = emails.length > 0;
+
+                            const handleDispararUnico = async () => {
+                              if (!temEmail) {
+                                alert(`O Dr(a). ${item.MEDICO} ainda não possui e-mail cadastrado. Clique em 'Gerenciar E-mails' para cadastrar.`);
+                                return;
+                              }
+                              if (!confirm(`Deseja enviar o demonstrativo em PDF para Dr(a). ${item.MEDICO} (${emails.join(', ')})?`)) return;
+
+                              setSingleSendingId(item.id);
+                              const basePlantao = item.ITEMS.reduce((acc, p) => acc + p.VALOR, 0);
+                              const prodVal = item.valorProducaoTotal || 0;
+                              const formatPer = (p: string) => p.split('-').reverse().join('/');
+                              const periodoStr = `${formatPer(periodFrom)} a ${formatPer(periodTo)}`;
+
+                              try {
+                                const res = await sendPlantaoMedicoEmail({
+                                  to: emails,
+                                  nomeMedico: item.MEDICO,
+                                  periodoReferencia: periodoStr,
+                                  resumo: {
+                                    totalPlantoes: item.QTD_PLANTOES,
+                                    valorPlantoes: basePlantao,
+                                    valorProducao: prodVal,
+                                    valorTotalGeral: item.VALOR_TOTAL,
+                                    valorPago: item.valorPago || 0,
+                                    valorPendente: item.valorPendente || 0,
+                                    status: item.status
+                                  },
+                                  sinteticoItem: item
+                                });
+
+                                if (res.success) {
+                                  alert(`Demonstrativo enviado com sucesso para ${emails.join(', ')}!`);
+                                } else {
+                                  alert(`Erro no envio: ${res.error}`);
+                                }
+                              } catch (err: any) {
+                                alert(`Erro: ${err.message || 'Falha ao enviar'}`);
+                              } finally {
+                                setSingleSendingId(null);
+                              }
+                            };
+
+                            return (
+                              <button
+                                onClick={handleDispararUnico}
+                                disabled={isSending}
+                                className={`p-1.5 rounded-md transition-colors cursor-pointer ${
+                                  temEmail 
+                                    ? 'text-muted-foreground hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/40' 
+                                    : 'text-muted-foreground/40 hover:text-amber-600'
+                                }`}
+                                title={temEmail ? `Enviar relatório por e-mail (${emails.join(', ')})` : 'Sem e-mail cadastrado (Clique para gerenciar)'}
+                              >
+                                {isSending ? (
+                                  <Loader2 className="h-4 w-4 animate-spin text-emerald-600" />
+                                ) : (
+                                  <Mail className="h-4 w-4" />
+                                )}
+                              </button>
+                            );
+                          })()}
+
+                          <button
+                            onClick={() => handleOpenSinteticoModal(item)}
+                            className="p-1.5 text-muted-foreground hover:text-[#8a1515] hover:bg-[#8a1515]/10 rounded-md transition-colors cursor-pointer"
+                            title="Lançar Produção Médica / Editar Pagamento"
+                          >
+                            <Edit3 className="h-4 w-4" />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))
@@ -2429,6 +2557,26 @@ const PlantaoMedico: React.FC = () => {
           </div>
         )}
       </AnimatePresence>
+
+      {/* Modal de Gestão de E-mails dos Médicos */}
+      <MedicoEmailsModal
+        isOpen={isEmailsModalOpen}
+        onClose={() => setIsEmailsModalOpen(false)}
+        medicosDisponiveis={medicosDisponiveis}
+        onContatosUpdated={carregarContatosMedicos}
+      />
+
+      {/* Modal de Disparo de E-mails em Lote */}
+      <DisparoEmailLoteModal
+        isOpen={isDisparoLoteOpen}
+        onClose={() => setIsDisparoLoteOpen(false)}
+        plantaosSinteticos={plantaosSinteticos}
+        contatosMedicos={contatosMedicos}
+        periodoReferencia={(() => {
+          const formatPer = (p: string) => p.split('-').reverse().join('/');
+          return `${formatPer(periodFrom)} a ${formatPer(periodTo)}`;
+        })()}
+      />
     </div>
   );
 };

@@ -15,6 +15,12 @@ export interface SmtpSettings {
   smtp_from_name: string;
   smtp_from_email: string;
   smtp_secure: 'tls' | 'ssl' | 'none';
+
+  // Configurações SMTP do Financeiro (Contas a Pagar / Plantões)
+  smtp_financeiro_user?: string;
+  smtp_financeiro_pass?: string;
+  smtp_financeiro_from_name?: string;
+  smtp_financeiro_from_email?: string;
 }
 
 const SMTP_KEYS: (keyof SmtpSettings)[] = [
@@ -25,6 +31,10 @@ const SMTP_KEYS: (keyof SmtpSettings)[] = [
   'smtp_from_name',
   'smtp_from_email',
   'smtp_secure',
+  'smtp_financeiro_user',
+  'smtp_financeiro_pass',
+  'smtp_financeiro_from_name',
+  'smtp_financeiro_from_email',
 ];
 
 const DEFAULTS: SmtpSettings = {
@@ -35,6 +45,10 @@ const DEFAULTS: SmtpSettings = {
   smtp_from_name: 'Hospital Santa Casa',
   smtp_from_email: '',
   smtp_secure: 'tls',
+  smtp_financeiro_user: 'contasapagar@santacasaaraguari.org.br',
+  smtp_financeiro_pass: 'Santac@s@123',
+  smtp_financeiro_from_name: 'Santa Casa de Araguari - Financeiro',
+  smtp_financeiro_from_email: 'contasapagar@santacasaaraguari.org.br',
 };
 
 // ─────────────────────────────────────────────────────────────

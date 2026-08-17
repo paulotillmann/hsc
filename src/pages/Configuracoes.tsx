@@ -396,11 +396,16 @@ const Configuracoes: React.FC = () => {
   const [settings, setSettings] = useState<SmtpSettings>({
     smtp_host: '', smtp_port: '587', smtp_user: '', smtp_pass: '',
     smtp_from_name: 'Hospital Santa Casa', smtp_from_email: '', smtp_secure: 'tls',
+    smtp_financeiro_user: 'contasapagar@santacasaaraguari.org.br',
+    smtp_financeiro_pass: 'Santac@s@123',
+    smtp_financeiro_from_name: 'Santa Casa de Araguari - Financeiro',
+    smtp_financeiro_from_email: 'contasapagar@santacasaaraguari.org.br',
   });
   const [smtpLoading, setSmtpLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [showFinanceiroPassword, setShowFinanceiroPassword] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -706,6 +711,66 @@ const Configuracoes: React.FC = () => {
                       placeholder="noreply@santacasaaraguari.org.br"
                       className="w-full bg-background border border-border rounded-md pl-9 pr-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary transition-all"
                     />
+                  </div>
+                </div>
+              </div>
+
+              {/* ── CONTA SECUNDÁRIA: SETOR FINANCEIRO ── */}
+              <div className="mt-8 pt-6 border-t-2 border-border/80 space-y-4 bg-muted/20 p-5 rounded-xl border">
+                <div className="flex items-center gap-2.5">
+                  <div className="h-8 w-8 rounded-lg bg-[#8a1515]/10 text-[#8a1515] dark:text-[#f43f5e] flex items-center justify-center font-bold">
+                    <Mail className="h-4 w-4" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold text-foreground">Conta SMTP do Setor Financeiro / Plantões</h3>
+                    <p className="text-xs text-muted-foreground">Credenciais utilizadas para envio de demonstrativos de plantões médicos e avisos do financeiro</p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
+                  <div>
+                    <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider block mb-1.5">Usuário de Autenticação (Financeiro)</label>
+                    <input type="text" value={settings.smtp_financeiro_user || ''}
+                      onChange={e => handleSmtpChange('smtp_financeiro_user', e.target.value)}
+                      placeholder="contasapagar@santacasaaraguari.org.br"
+                      className="w-full bg-background border border-border rounded-md px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#8a1515] transition-all"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider block mb-1.5">Senha (Financeiro)</label>
+                    <div className="relative">
+                      <input type={showFinanceiroPassword ? 'text' : 'password'} value={settings.smtp_financeiro_pass || ''}
+                        onChange={e => handleSmtpChange('smtp_financeiro_pass', e.target.value)}
+                        placeholder="••••••••"
+                        className="w-full bg-background border border-border rounded-md px-3 py-2.5 pr-10 text-sm focus:outline-none focus:ring-2 focus:ring-[#8a1515] transition-all"
+                      />
+                      <button type="button" onClick={() => setShowFinanceiroPassword(!showFinanceiroPassword)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors cursor-pointer">
+                        {showFinanceiroPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider block mb-1.5">Nome do Remetente (Financeiro)</label>
+                    <input type="text" value={settings.smtp_financeiro_from_name || ''}
+                      onChange={e => handleSmtpChange('smtp_financeiro_from_name', e.target.value)}
+                      placeholder="Santa Casa de Araguari - Financeiro"
+                      className="w-full bg-background border border-border rounded-md px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#8a1515] transition-all"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider block mb-1.5">E-mail do Remetente (Financeiro)</label>
+                    <div className="relative">
+                      <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+                      <input type="email" value={settings.smtp_financeiro_from_email || ''}
+                        onChange={e => handleSmtpChange('smtp_financeiro_from_email', e.target.value)}
+                        placeholder="contasapagar@santacasaaraguari.org.br"
+                        className="w-full bg-background border border-border rounded-md pl-9 pr-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#8a1515] transition-all"
+                      />
+                    </div>
                   </div>
                 </div>
               </div>
