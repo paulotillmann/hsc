@@ -438,7 +438,7 @@ export default function PainelTVPA() {
                   <span className="h-3 w-3 sm:h-3.5 sm:w-3.5 rounded-full bg-blue-500 shrink-0" />
                   Azul
                 </span>
-                <span className="text-blue-800 font-black">Não Urgente</span>
+                <span className="text-blue-800 font-black">Sem Urgência</span>
               </div>
             </div>
           </div>
