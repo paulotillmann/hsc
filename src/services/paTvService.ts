@@ -5,6 +5,25 @@ export interface PATvSettings {
   ticker_text: string;
 }
 
+export function parseTickerMessages(rawText: string | null | undefined): string[] {
+  if (!rawText) return [];
+  try {
+    if (rawText.trim().startsWith('[') && rawText.trim().endsWith(']')) {
+      const parsed = JSON.parse(rawText);
+      if (Array.isArray(parsed)) {
+        return parsed.map((s: any) => String(s).trim()).filter(Boolean);
+      }
+    }
+  } catch {}
+  const lines = rawText.split(/\r?\n/).map((s) => s.trim()).filter(Boolean);
+  if (lines.length > 0) return lines;
+  return [rawText.trim()].filter(Boolean);
+}
+
+export function formatTickerMessages(messages: string[]): string {
+  return messages.map((m) => m.trim()).filter(Boolean).join('\n');
+}
+
 export const DEFAULT_PA_TV_SETTINGS: PATvSettings = {
   video_url: 'https://www.youtube.com/watch?v=uaGeDkNoSHk',
   ticker_text: 'Bem-vindo ao Pronto Atendimento do Hospital Santa Casa. Por gentileza, mantenha seus documentos em mãos. Para dúvidas ou esclarecimentos, procure nossa recepção.',

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { X, Tv, Video, MessageSquare, Save, Loader2, CheckCircle2, AlertCircle } from 'lucide-react';
-import { fetchPATvSettings, savePATvSettings } from '../../services/paTvService';
+import { X, Tv, Video, MessageSquare, Save, Loader2, CheckCircle2, AlertCircle, Plus, Trash2 } from 'lucide-react';
+import { fetchPATvSettings, savePATvSettings, parseTickerMessages, formatTickerMessages } from '../../services/paTvService';
 import { useAuth } from '../../contexts/AuthContext';
 
 interface ConfigPATVModalProps {
@@ -11,7 +11,7 @@ interface ConfigPATVModalProps {
 export const ConfigPATVModal: React.FC<ConfigPATVModalProps> = ({ isOpen, onClose }) => {
   const { user } = useAuth();
   const [videoUrl, setVideoUrl] = useState('');
-  const [tickerText, setTickerText] = useState('');
+  const [messages, setMessages] = useState<string[]>(['']);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
@@ -27,8 +27,9 @@ export const ConfigPATVModal: React.FC<ConfigPATVModalProps> = ({ isOpen, onClos
     setMessage(null);
     try {
       const config = await fetchPATvSettings();
-      setVideoUrl(config.video_url);
-      setTickerText(config.ticker_text);
+      setVideoUrl(config.video_url || '');
+      const parsed = parseTickerMessages(config.ticker_text);
+      setMessages(parsed.length > 0 ? parsed : ['']);
     } catch (err) {
       console.error('Erro ao carregar configurações do Painel TV PA:', err);
     } finally {
@@ -36,12 +37,39 @@ export const ConfigPATVModal: React.FC<ConfigPATVModalProps> = ({ isOpen, onClos
     }
   };
 
+  const handleAddMessage = () => {
+    setMessages((prev) => [...prev, '']);
+  };
+
+  const handleRemoveMessage = (index: number) => {
+    setMessages((prev) => {
+      const updated = prev.filter((_, i) => i !== index);
+      return updated.length > 0 ? updated : [''];
+    });
+  };
+
+  const handleMessageChange = (index: number, val: string) => {
+    setMessages((prev) => {
+      const updated = [...prev];
+      updated[index] = val;
+      return updated;
+    });
+  };
+
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaving(true);
     setMessage(null);
 
-    const res = await savePATvSettings(videoUrl.trim(), tickerText.trim(), user?.id);
+    const validMessages = messages.map((m) => m.trim()).filter(Boolean);
+    if (validMessages.length === 0) {
+      setMessage({ type: 'error', text: 'Adicione pelo menos uma frase para o letreiro digital.' });
+      setSaving(false);
+      return;
+    }
+
+    const formattedTicker = formatTickerMessages(validMessages);
+    const res = await savePATvSettings(videoUrl.trim(), formattedTicker, user?.id);
 
     if (res.success) {
       setMessage({ type: 'success', text: 'Configurações do Painel TV salvas com sucesso!' });
@@ -58,9 +86,9 @@ export const ConfigPATVModal: React.FC<ConfigPATVModalProps> = ({ isOpen, onClos
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-      <div className="bg-card text-card-foreground border border-border w-full max-w-xl rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+      <div className="bg-card text-card-foreground border border-border w-full max-w-2xl rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
         {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b border-border bg-muted/40">
+        <div className="flex items-center justify-between p-6 border-b border-border bg-muted/40 shrink-0">
           <div className="flex items-center gap-3">
             <div className="p-2.5 bg-primary/10 rounded-xl text-primary">
               <Tv className="h-6 w-6" />
@@ -68,7 +96,7 @@ export const ConfigPATVModal: React.FC<ConfigPATVModalProps> = ({ isOpen, onClos
             <div>
               <h2 className="text-xl font-bold tracking-tight">Configurar Painel TV (PA)</h2>
               <p className="text-xs text-muted-foreground">
-                Ajuste o vídeo institucional e o letreiro informativo exibidos nos monitores do PA
+                Ajuste o vídeo institucional e as frases do letreiro exibidos nos monitores do PA
               </p>
             </div>
           </div>
@@ -125,29 +153,63 @@ export const ConfigPATVModal: React.FC<ConfigPATVModalProps> = ({ isOpen, onClos
                 </p>
               </div>
 
-              {/* Frase em Loop */}
-              <div className="space-y-2">
-                <label className="text-sm font-semibold flex items-center gap-2 text-foreground">
-                  <MessageSquare className="h-4 w-4 text-primary" />
-                  Frase em Loop (Letreiro Inferior)
-                </label>
-                <textarea
-                  value={tickerText}
-                  onChange={(e) => setTickerText(e.target.value)}
-                  rows={4}
-                  placeholder="Digite a mensagem que ficará rodando na parte inferior da tela do PA..."
-                  className="w-full px-4 py-2.5 rounded-xl border border-input bg-background text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary/40 transition-all resize-none"
-                  required
-                />
-                <p className="text-xs text-muted-foreground">
-                  Esta mensagem ficará deslizando continuamente da direita para a esquerda no rodapé da TV dos pacientes.
-                </p>
+              {/* Frases do Letreiro em Loop */}
+              <div className="space-y-3 pt-2 border-t border-border">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <label className="text-sm font-semibold flex items-center gap-2 text-foreground">
+                      <MessageSquare className="h-4 w-4 text-primary" />
+                      Frases do Letreiro Inferior
+                    </label>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Adicione quantas frases desejar. Elas serão exibidas de forma contínua, separadas por um ponto central (•).
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleAddMessage}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg bg-primary/10 text-primary hover:bg-primary/20 transition-all shadow-sm shrink-0"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    Adicionar Frase
+                  </button>
+                </div>
+
+                <div className="space-y-2.5 max-h-[300px] overflow-y-auto pr-1">
+                  {messages.map((msg, idx) => (
+                    <div
+                      key={idx}
+                      className="flex items-start gap-2.5 p-2.5 bg-muted/30 border border-border rounded-xl group hover:border-primary/30 transition-all"
+                    >
+                      <span className="text-xs font-bold text-muted-foreground mt-2 shrink-0 w-6 text-center">
+                        #{idx + 1}
+                      </span>
+                      <textarea
+                        value={msg}
+                        onChange={(e) => handleMessageChange(idx, e.target.value)}
+                        rows={2}
+                        placeholder={`Digite a frase ${idx + 1}...`}
+                        className="flex-1 px-3 py-2 rounded-lg border border-input bg-background text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary/40 transition-all resize-none"
+                        required={idx === 0}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveMessage(idx)}
+                        disabled={messages.length === 1 && idx === 0}
+                        title="Remover Frase"
+                        className="p-2 text-muted-foreground hover:text-red-500 hover:bg-red-500/10 rounded-lg transition-colors mt-0.5 disabled:opacity-30 disabled:hover:text-muted-foreground disabled:hover:bg-transparent"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
               </div>
             </>
           )}
 
           {/* Footer */}
-          <div className="flex items-center justify-end gap-3 pt-4 border-t border-border">
+          <div className="flex items-center justify-end gap-3 pt-4 border-t border-border shrink-0">
             <button
               type="button"
               onClick={onClose}
