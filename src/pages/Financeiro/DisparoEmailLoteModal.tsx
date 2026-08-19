@@ -1,11 +1,12 @@
 import React, { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
-  Send, Mail, CheckCircle2, AlertCircle, Loader2, X, Users, 
+  Send, Mail, MailCheck, CheckCircle2, AlertCircle, Loader2, X, Users, 
   FileText, ArrowRight, ShieldCheck, CheckSquare, Square
 } from 'lucide-react';
 import { PlantaoMedicoSintetico } from './PlantaoMedico';
 import { MedicoContato } from '../../services/plantaoMedicoContatosService';
+import { plantaoMedicoProducoesService } from '../../services/plantaoMedicoProducoesService';
 import { sendPlantaoMedicoEmail } from '../../services/plantaoEmailService';
 
 interface DisparoEmailLoteModalProps {
@@ -14,6 +15,9 @@ interface DisparoEmailLoteModalProps {
   plantaosSinteticos: PlantaoMedicoSintetico[];
   contatosMedicos: MedicoContato[];
   periodoReferencia: string;
+  periodoDe?: string;
+  periodoAte?: string;
+  onEmailsDisparados?: () => void;
 }
 
 export const DisparoEmailLoteModal: React.FC<DisparoEmailLoteModalProps> = ({
@@ -21,7 +25,10 @@ export const DisparoEmailLoteModal: React.FC<DisparoEmailLoteModalProps> = ({
   onClose,
   plantaosSinteticos,
   contatosMedicos,
-  periodoReferencia
+  periodoReferencia,
+  periodoDe,
+  periodoAte,
+  onEmailsDisparados
 }) => {
   // Mapa de e-mails por médico
   const contatosMap = useMemo(() => {
@@ -112,6 +119,21 @@ export const DisparoEmailLoteModal: React.FC<DisparoEmailLoteModalProps> = ({
         });
 
         if (res.success) {
+          if (periodoDe && periodoAte) {
+            try {
+              await plantaoMedicoProducoesService.registrarEnvioEmail({
+                medico: item.MEDICO,
+                especialidade: item.ESPECIALIDADE,
+                tipo_plantao: item.TIPO_PLANTAO,
+                periodo_de: periodoDe,
+                periodo_ate: periodoAte,
+                destinatarios: emails
+              });
+            } catch (errDb) {
+              console.warn('Erro ao registrar envio no Supabase (Lote):', errDb);
+            }
+          }
+
           setLogs(prev => [...prev, {
             medico: item.MEDICO,
             success: true,
@@ -136,6 +158,7 @@ export const DisparoEmailLoteModal: React.FC<DisparoEmailLoteModalProps> = ({
     }
 
     setDisparando(false);
+    onEmailsDisparados?.();
   };
 
   if (!isOpen) return null;
@@ -254,7 +277,15 @@ export const DisparoEmailLoteModal: React.FC<DisparoEmailLoteModalProps> = ({
                       </button>
 
                       <div className="min-w-0">
-                        <div className="font-bold text-foreground truncate">{item.MEDICO}</div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-foreground truncate">{item.MEDICO}</span>
+                          {item.emailEnviado && (
+                            <span className="inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                              <MailCheck className="h-3 w-3" />
+                              Já enviado
+                            </span>
+                          )}
+                        </div>
                         <div className="text-[11px] text-muted-foreground truncate">
                           {temEmail ? emails.join(', ') : '⚠️ Nenhum e-mail cadastrado'}
                         </div>
