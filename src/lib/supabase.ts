@@ -30,6 +30,7 @@ export type Database = {
           email: string | null;
           role: 'admin' | 'colaborador';
           avatar_url: string | null;
+          exempt_session_timeout?: boolean;
           created_at: string;
           updated_at: string;
         };
@@ -41,6 +42,7 @@ export type Database = {
           email?: string | null;
           role?: 'admin' | 'colaborador';
           avatar_url?: string | null;
+          exempt_session_timeout?: boolean;
         };
         Update: {
           full_name?: string | null;
@@ -49,6 +51,7 @@ export type Database = {
           email?: string | null;
           role?: 'admin' | 'colaborador';
           avatar_url?: string | null;
+          exempt_session_timeout?: boolean;
         };
       };
       informes: {

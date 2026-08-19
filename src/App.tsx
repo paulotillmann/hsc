@@ -1,6 +1,7 @@
 import React, { useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
+import SessionTimeoutManager from './components/SessionTimeoutManager';
 import PrivateRoute from './components/PrivateRoute';
 import DynamicRoute from './components/DynamicRoute';
 import Login from './pages/Login';
@@ -19,6 +20,7 @@ import ProntoAtendimento from './pages/ProntoAtendimento';
 import PainelTVPA from './pages/ProntoAtendimento/PainelTVPA';
 import EscutaLanding from './pages/EscutaSantaCasa/EscutaLanding';
 import NovaDenuncia from './pages/EscutaSantaCasa/NovaDenuncia';
+
 const App: React.FC = () => {
   // Configuração Global de Tema
   useEffect(() => {
@@ -30,6 +32,7 @@ const App: React.FC = () => {
 
   return (
     <AuthProvider>
+      <SessionTimeoutManager />
       <BrowserRouter>
         <Routes>
           {/* Rota pública: Login */}

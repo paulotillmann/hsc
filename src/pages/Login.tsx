@@ -56,6 +56,15 @@ const Login: React.FC = () => {
 
   useEffect(() => {
     setIsDark(document.documentElement.classList.contains('dark'));
+
+    const logoutReason = sessionStorage.getItem('hsc_logout_reason');
+    if (logoutReason === 'inactivity') {
+      setError('Sua sessão expirou por inatividade (30 minutos). Por favor, realize o login novamente.');
+      sessionStorage.removeItem('hsc_logout_reason');
+    } else if (logoutReason === 'forced') {
+      setError('Sua sessão foi encerrada por um administrador.');
+      sessionStorage.removeItem('hsc_logout_reason');
+    }
   }, []);
 
   const toggleTheme = () => {

@@ -1,10 +1,18 @@
 // src/contexts/AuthContext.tsx
 // Contexto global de autenticação via Supabase Auth com suporte a RBAC dinâmico
 
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useState, useRef } from 'react';
 import { Session, User } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
 import { Permissions, Role, Module } from '../types/permissions';
+
+export interface OnlineUser {
+  id: string;
+  email: string | null;
+  full_name: string | null;
+  avatar_url: string | null;
+  online_at: string;
+}
 
 interface Profile {
   id: string;
@@ -19,6 +27,7 @@ interface Profile {
   roles: Role | null;
   is_blocked: boolean;
   setor_usuarios?: string | null;
+  exempt_session_timeout?: boolean;
 }
 
 interface AuthContextType {
@@ -30,6 +39,8 @@ interface AuthContextType {
   loading: boolean;
   profileLoaded: boolean;
   defaultModuleSlug: string | null;
+  activeUsers: OnlineUser[];
+  terminateUserSessions: (userIds: string[]) => Promise<void>;
   signIn: (email: string, password: string) => Promise<{ error: string | null }>;
   signUp: (email: string, password: string, fullName: string, phone: string, avatarUrl?: string) => Promise<{ error: string | null }>;
   signOut: () => Promise<void>;
@@ -238,6 +249,25 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           return;
         }
 
+        // Verificação de fechamento do navegador (para usuários sem exceção de TV/Painéis)
+        const isExempt = !!data.exempt_session_timeout;
+        const isBrowserSessionActive = sessionStorage.getItem('hsc_browser_session_active') === '1';
+
+        if (!isExempt && !isBrowserSessionActive) {
+          console.info('[AuthContext] Sessão encerrada: navegador foi fechado e usuário não possui exceção de persistência.');
+          await supabase.auth.signOut();
+          setSession(null);
+          setUser(null);
+          setProfile(null);
+          setPermissions(null);
+          setUserModules([]);
+          setProfileLoaded(true);
+          return;
+        }
+
+        // Mantém a flag de sessão ativa no navegador
+        sessionStorage.setItem('hsc_browser_session_active', '1');
+
         setProfile(data as Profile);
 
         const role = data.roles as Role | null;
@@ -347,6 +377,98 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, [user?.id]);
 
+  // ── 3. Presença em tempo real e sinalização de encerramento remoto de sessão ─
+  const presenceChannelRef = useRef<any>(null);
+  const [activeUsers, setActiveUsers] = useState<OnlineUser[]>([]);
+
+  useEffect(() => {
+    if (!user?.id || !profileLoaded || !profile) {
+      setActiveUsers([]);
+      if (presenceChannelRef.current) {
+        supabase.removeChannel(presenceChannelRef.current);
+        presenceChannelRef.current = null;
+      }
+      return;
+    }
+
+    const channel = supabase.channel('global-user-presence', {
+      config: {
+        presence: {
+          key: user.id,
+        },
+      },
+    });
+
+    presenceChannelRef.current = channel;
+
+    channel
+      .on('presence', { event: 'sync' }, () => {
+        const state = channel.presenceState();
+        const onlineList: OnlineUser[] = [];
+        const seenIds = new Set<string>();
+
+        Object.keys(state).forEach((key) => {
+          const presences = state[key] as any[];
+          if (presences && presences.length > 0) {
+            const item = presences[0] as OnlineUser;
+            if (item && item.id && !seenIds.has(item.id)) {
+              seenIds.add(item.id);
+              onlineList.push(item);
+            }
+          }
+        });
+
+        // Ordena por nome alfabeticamente
+        onlineList.sort((a, b) => (a.full_name || a.email || '').localeCompare(b.full_name || b.email || ''));
+        setActiveUsers(onlineList);
+      })
+      .on('broadcast', { event: 'FORCE_LOGOUT' }, (payload) => {
+        const targetUserIds = payload?.payload?.targetUserIds as string[] | undefined;
+        if (targetUserIds && targetUserIds.includes(user.id)) {
+          console.warn('[AuthContext] Sessão encerrada remotamente pelo administrador.');
+          sessionStorage.setItem('hsc_logout_reason', 'forced');
+          signOut();
+        }
+      })
+      .subscribe(async (status) => {
+        if (status === 'SUBSCRIBED') {
+          await channel.track({
+            id: user.id,
+            email: user.email ?? profile.email ?? null,
+            full_name: profile.full_name ?? user.email ?? 'Usuário',
+            avatar_url: profile.avatar_url ?? null,
+            online_at: new Date().toISOString(),
+          });
+        }
+      });
+
+    return () => {
+      if (presenceChannelRef.current) {
+        supabase.removeChannel(presenceChannelRef.current);
+        presenceChannelRef.current = null;
+      }
+    };
+  }, [user?.id, profileLoaded, profile?.full_name, profile?.avatar_url]);
+
+  const terminateUserSessions = async (userIds: string[]) => {
+    if (!presenceChannelRef.current || userIds.length === 0) return;
+
+    await presenceChannelRef.current.send({
+      type: 'broadcast',
+      event: 'FORCE_LOGOUT',
+      payload: { targetUserIds: userIds },
+    });
+
+    // Remove imediatamente do estado local
+    setActiveUsers(prev => prev.filter(u => !userIds.includes(u.id)));
+
+    // Se o próprio usuário atual estiver na lista
+    if (user?.id && userIds.includes(user.id)) {
+      sessionStorage.setItem('hsc_logout_reason', 'forced');
+      await signOut();
+    }
+  };
+
   // ── Auth actions ────────────────────────────────────────────────────────────
   const signIn = async (email: string, password: string): Promise<{ error: string | null }> => {
     const { data, error } = await supabase.auth.signInWithPassword({ email, password });
@@ -379,6 +501,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         console.error('[AuthContext] Exceção ao verificar bloqueio no signIn:', err);
       }
     }
+
+    // Registra sessão ativa no navegador e timestamp de atividade
+    sessionStorage.setItem('hsc_browser_session_active', '1');
+    localStorage.setItem('hsc_last_activity', Date.now().toString());
 
     return { error: null };
   };
@@ -414,6 +540,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setPermissions(null);
     setUserModules([]);
     setProfileLoaded(false);
+
+    // Limpa marcadores de controle de sessão
+    sessionStorage.removeItem('hsc_browser_session_active');
+    localStorage.removeItem('hsc_last_activity');
 
     // Limpa o cache de pendências e outros caches de sessão por segurança
     try {
@@ -467,7 +597,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   return (
     <AuthContext.Provider value={{
       session, user, profile, permissions, userModules, loading, profileLoaded,
-      defaultModuleSlug,
+      defaultModuleSlug, activeUsers, terminateUserSessions,
       signIn, signUp, signOut, resetPassword, updatePassword, refreshProfile, isAdmin,
     }}>
       {children}
