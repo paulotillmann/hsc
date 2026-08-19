@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   Save, Send, Eye, EyeOff, CheckCircle2, AlertCircle, Loader2,
   Server, Mail, Shield, Users, Plus, Pencil, Trash2, X, Check, Layout,
-  Lock, Unlock, ChevronLeft, ChevronRight, Search, Tv
+  Lock, Unlock, ChevronLeft, ChevronRight, Search, Tv, Clock
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import {
@@ -17,9 +17,10 @@ import {
 import { Role } from '../types/permissions';
 import { fetchModulesWithRoles, ModuleWithRoles } from '../services/modulesService';
 import ModulesManager from '../components/configuracoes/ModulesManager';
+import SessionManager from '../components/configuracoes/SessionManager';
 
 // ── Tabs ─────────────────────────────────────────────────────────────────
-type Tab = 'smtp' | 'perfis' | 'usuarios' | 'modulos';
+type Tab = 'smtp' | 'perfis' | 'usuarios' | 'modulos' | 'sessao';
 
 // ── Permission flags label map ────────────────────────────────────────────
 const PERM_LABELS: { key: keyof Role; label: string; desc: string }[] = [
@@ -598,6 +599,7 @@ const Configuracoes: React.FC = () => {
     { id: 'perfis',   label: 'Perfis',        icon: <Shield className="h-4 w-4" /> },
     { id: 'modulos',  label: 'Módulos',       icon: <Layout className="h-4 w-4" /> },
     { id: 'usuarios', label: 'Usuários',      icon: <Users className="h-4 w-4" /> },
+    { id: 'sessao',   label: 'Sessão & Segurança', icon: <Clock className="h-4 w-4" /> },
   ];
 
   return (
@@ -1016,6 +1018,11 @@ const Configuracoes: React.FC = () => {
       {/* ── TAB: MÓDULOS ── */}
       {activeTab === 'modulos' && (
         <ModulesManager roles={roles} showToast={showToast} />
+      )}
+
+      {/* ── TAB: SESSÃO & SEGURANÇA ── */}
+      {activeTab === 'sessao' && (
+        <SessionManager showToast={showToast} />
       )}
 
       {/* ── Role Modal ── */}
