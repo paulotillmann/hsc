@@ -96,12 +96,13 @@ export interface UserProfile {
   roles: { name: string; slug: string } | null;
   is_blocked: boolean;
   setor_usuarios: string | null;
+  exempt_session_timeout?: boolean;
 }
 
 export async function fetchUsers(): Promise<UserProfile[]> {
   const { data, error } = await supabase
     .from('profiles')
-    .select('id, full_name, email, cpf, role, role_id, avatar_url, created_at, default_module_slug, is_blocked, setor_usuarios, roles(name, slug)')
+    .select('id, full_name, email, cpf, role, role_id, avatar_url, created_at, default_module_slug, is_blocked, setor_usuarios, exempt_session_timeout, roles(name, slug)')
     .order('full_name', { ascending: true });
 
   if (error) throw new Error(error.message);
@@ -169,7 +170,7 @@ export async function updateUserBlockedStatus(
 
 export async function updateUserProfile(
   userId: string,
-  updates: Partial<Pick<UserProfile, 'full_name' | 'cpf' | 'role_id' | 'default_module_slug' | 'setor_usuarios'>>
+  updates: Partial<Pick<UserProfile, 'full_name' | 'cpf' | 'role_id' | 'default_module_slug' | 'setor_usuarios' | 'exempt_session_timeout'>>
 ): Promise<{ success: boolean; error?: string }> {
   const { data, error } = await supabase
     .from('profiles')

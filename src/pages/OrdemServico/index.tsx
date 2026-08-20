@@ -22,9 +22,12 @@ import {
   Clock,
   ArrowLeft,
   Sun,
-  Moon
+  Moon,
+  Users
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
+import { useAuth } from '../../contexts/AuthContext';
+import ActiveUsersModal from '../../components/ordemServico/ActiveUsersModal';
 import { VisaoGeralCard } from '../../components/recepcao/VisaoGeralCard';
 
 interface OrdemServicoItem {
@@ -120,6 +123,10 @@ export default function OrdemServico() {
     return date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
   };
 
+
+  // Presença em tempo real e usuários ativos
+  const { activeUsers } = useAuth();
+  const [isActiveUsersModalOpen, setIsActiveUsersModalOpen] = useState(false);
 
   // Filtros
   const [searchTerm, setSearchTerm] = useState('');
@@ -994,6 +1001,38 @@ export default function OrdemServico() {
 
           {/* Filtros da página ao lado do título */}
           <div className="flex flex-col sm:flex-row items-center gap-3 w-full lg:w-auto">
+            {/* Card de Usuários Ativos no padrão Visão Geral */}
+            <div
+              onClick={() => setIsActiveUsersModalOpen(true)}
+              className="relative overflow-hidden bg-card border border-border/80 rounded-xl px-3.5 py-1 flex items-center gap-3 min-h-[42px] hover:border-emerald-500/60 hover:shadow-md hover:shadow-emerald-500/5 transition-all duration-300 group cursor-pointer select-none shrink-0"
+              title="Clique para ver usuários conectados e gerenciar sessões"
+            >
+              {/* Background Watermark Icon */}
+              <div className="absolute right-1 -bottom-2 text-slate-100 dark:text-white/5 group-hover:text-emerald-500/10 dark:group-hover:text-emerald-500/15 group-hover:scale-110 transition-all duration-500 pointer-events-none">
+                <Users className="w-12 h-12 stroke-[1.2]" />
+              </div>
+
+              <div className="flex flex-col relative z-10">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
+                    Usuários Ativos
+                  </span>
+                  <span className="relative flex h-2 w-2">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                  </span>
+                </div>
+                <div className="flex items-baseline gap-1.5 mt-0.5">
+                  <span className="text-base font-black text-foreground tracking-tight leading-none">
+                    {activeUsers.length}
+                  </span>
+                  <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400">
+                    online
+                  </span>
+                </div>
+              </div>
+            </div>
+
             {/* Avatares dos Executores */}
             <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap bg-muted/40 border border-border/60 px-2.5 py-1 rounded-xl">
               <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider pl-0.5 select-none">Executores:</span>
@@ -1445,6 +1484,12 @@ export default function OrdemServico() {
           </div>
         </div>
       )}
+
+      {/* Modal de Usuários Ativos e Encerramento de Sessões */}
+      <ActiveUsersModal
+        isOpen={isActiveUsersModalOpen}
+        onClose={() => setIsActiveUsersModalOpen(false)}
+      />
     </div>
   );
 }

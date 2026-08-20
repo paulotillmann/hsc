@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   Save, Send, Eye, EyeOff, CheckCircle2, AlertCircle, Loader2,
   Server, Mail, Shield, Users, Plus, Pencil, Trash2, X, Check, Layout,
-  Lock, Unlock, ChevronLeft, ChevronRight, Search
+  Lock, Unlock, ChevronLeft, ChevronRight, Search, Tv, Clock
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import {
@@ -17,9 +17,10 @@ import {
 import { Role } from '../types/permissions';
 import { fetchModulesWithRoles, ModuleWithRoles } from '../services/modulesService';
 import ModulesManager from '../components/configuracoes/ModulesManager';
+import SessionManager from '../components/configuracoes/SessionManager';
 
 // ── Tabs ─────────────────────────────────────────────────────────────────
-type Tab = 'smtp' | 'perfis' | 'usuarios' | 'modulos';
+type Tab = 'smtp' | 'perfis' | 'usuarios' | 'modulos' | 'sessao';
 
 // ── Permission flags label map ────────────────────────────────────────────
 const PERM_LABELS: { key: keyof Role; label: string; desc: string }[] = [
@@ -162,7 +163,7 @@ interface EditUserModalProps {
   modules: ModuleWithRoles[];
   sectors: Sector[];
   pacientesSetores: string[];
-  onSave: (updates: Partial<Pick<UserProfile, 'full_name' | 'cpf' | 'role_id' | 'default_module_slug' | 'setor_usuarios'>>, sectorIds: string[]) => void;
+  onSave: (updates: Partial<Pick<UserProfile, 'full_name' | 'cpf' | 'role_id' | 'default_module_slug' | 'setor_usuarios' | 'exempt_session_timeout'>>, sectorIds: string[]) => void;
   onClose: () => void;
   saving: boolean;
 }
@@ -174,6 +175,7 @@ const EditUserModal: React.FC<EditUserModalProps> = ({ userProfile, roles, modul
     role_id: userProfile.role_id || '',
     default_module_slug: userProfile.default_module_slug || '',
     setor_usuarios: userProfile.setor_usuarios || '',
+    exempt_session_timeout: !!userProfile.exempt_session_timeout,
   });
   const [selectedSectors, setSelectedSectors] = useState<string[]>([]);
   const [loadingSectors, setLoadingSectors] = useState(true);
@@ -200,6 +202,7 @@ const EditUserModal: React.FC<EditUserModalProps> = ({ userProfile, roles, modul
       role_id: form.role_id || null,
       default_module_slug: form.default_module_slug || null,
       setor_usuarios: form.setor_usuarios || null,
+      exempt_session_timeout: form.exempt_session_timeout,
     }, selectedSectors);
   };
 
@@ -304,6 +307,26 @@ const EditUserModal: React.FC<EditUserModalProps> = ({ userProfile, roles, modul
                 ))
               )}
             </div>
+          </div>
+
+          <div className="p-3 bg-muted/40 border border-border rounded-lg">
+            <label className="flex items-start gap-3 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={form.exempt_session_timeout}
+                onChange={e => setForm(p => ({ ...p, exempt_session_timeout: e.target.checked }))}
+                className="mt-0.5 rounded border-border h-4 w-4"
+                style={{ accentColor: '#8E1C1C', color: '#8E1C1C' }}
+              />
+              <div className="text-xs">
+                <span className="font-semibold text-foreground block">
+                  Manter sessão ativa permanentemente (TVs / Painéis / Totens)
+                </span>
+                <span className="text-muted-foreground block mt-0.5 leading-relaxed">
+                  Impede logout automático por 30min de inatividade e mantém o login salvo mesmo se o navegador for fechado.
+                </span>
+              </div>
+            </label>
           </div>
 
           <div className="flex gap-2 pt-1 mt-4">
@@ -542,7 +565,7 @@ const Configuracoes: React.FC = () => {
     if (result.success) await loadUsers();
   };
 
-  const handleSaveUserEdit = async (updates: Partial<Pick<UserProfile, 'full_name' | 'cpf' | 'role_id' | 'default_module_slug' | 'setor_usuarios'>>, sectorIds: string[]) => {
+  const handleSaveUserEdit = async (updates: Partial<Pick<UserProfile, 'full_name' | 'cpf' | 'role_id' | 'default_module_slug' | 'setor_usuarios' | 'exempt_session_timeout'>>, sectorIds: string[]) => {
     if (!userEditModal) return;
     setUserEditSaving(true);
     const result = await updateUserProfile(userEditModal.id, updates);
@@ -581,6 +604,7 @@ const Configuracoes: React.FC = () => {
     { id: 'perfis',   label: 'Perfis',        icon: <Shield className="h-4 w-4" /> },
     { id: 'modulos',  label: 'Módulos',       icon: <Layout className="h-4 w-4" /> },
     { id: 'usuarios', label: 'Usuários',      icon: <Users className="h-4 w-4" /> },
+    { id: 'sessao',   label: 'Sessão & Segurança', icon: <Clock className="h-4 w-4" /> },
   ];
 
   return (
@@ -952,7 +976,14 @@ const Configuracoes: React.FC = () => {
                             }
                           </div>
                           <div className="min-w-0">
-                            <p className="font-medium text-foreground truncate">{u.full_name || '—'}</p>
+                            <div className="flex items-center gap-2">
+                              <p className="font-medium text-foreground truncate">{u.full_name || '—'}</p>
+                              {u.exempt_session_timeout && (
+                                <span className="inline-flex items-center gap-1 text-[10px] font-semibold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 px-1.5 py-0.2 rounded" title="Sessão 24/7 ativa (Sem timeout)">
+                                  <Tv className="h-3 w-3" /> TV/Painel
+                                </span>
+                              )}
+                            </div>
                             <p className="text-xs text-muted-foreground truncate">{u.email}</p>
                           </div>
                         </div>
@@ -1052,6 +1083,11 @@ const Configuracoes: React.FC = () => {
       {/* ── TAB: MÓDULOS ── */}
       {activeTab === 'modulos' && (
         <ModulesManager roles={roles} showToast={showToast} />
+      )}
+
+      {/* ── TAB: SESSÃO & SEGURANÇA ── */}
+      {activeTab === 'sessao' && (
+        <SessionManager showToast={showToast} />
       )}
 
       {/* ── Role Modal ── */}

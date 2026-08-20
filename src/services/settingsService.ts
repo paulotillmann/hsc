@@ -142,3 +142,55 @@ export async function sendTestEmail(
   }
 }
 
+// ─────────────────────────────────────────────────────────────
+// CONFIGURAÇÕES DE SESSÃO & TIMEOUT
+// ─────────────────────────────────────────────────────────────
+
+export interface SessionSettings {
+  inactivity_timeout_minutes: number;
+}
+
+export async function fetchSessionSettings(): Promise<SessionSettings> {
+  try {
+    const { data, error } = await supabase
+      .from('app_settings')
+      .select('key, value')
+      .eq('key', 'session_inactivity_timeout_minutes')
+      .maybeSingle();
+
+    if (error || !data) {
+      return { inactivity_timeout_minutes: 30 };
+    }
+
+    const minutes = parseInt(data.value, 10);
+    return { inactivity_timeout_minutes: isNaN(minutes) || minutes <= 0 ? 30 : minutes };
+  } catch {
+    return { inactivity_timeout_minutes: 30 };
+  }
+}
+
+export async function saveSessionSettings(
+  timeoutMinutes: number,
+  userId: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const { error } = await supabase
+      .from('app_settings')
+      .upsert({
+        key: 'session_inactivity_timeout_minutes',
+        value: timeoutMinutes.toString(),
+        updated_at: new Date().toISOString(),
+        updated_by: userId,
+      }, { onConflict: 'key' });
+
+    if (error) {
+      console.error('[Settings] Erro ao salvar timeout de sessão:', error.message);
+      return { success: false, error: error.message };
+    }
+
+    return { success: true };
+  } catch (err: any) {
+    return { success: false, error: err.message };
+  }
+}
+
