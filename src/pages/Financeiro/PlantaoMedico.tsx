@@ -5,12 +5,13 @@ import {
   ChevronLeft, ChevronRight, BarChart3, PieChart, ArrowUpRight, 
   TrendingUp, Info, Check, ChevronDown, UserCheck, DollarSign, 
   FileSpreadsheet, Award, Activity, X, Layers, Edit3, Save, Baby,
-  ClipboardList, CheckCircle2, Plus, Trash2, GraduationCap, Briefcase, Clock, Mail, Send, Loader2
+  ClipboardList, CheckCircle2, Plus, Trash2, GraduationCap, Briefcase, Clock, Mail, MailCheck, Send, Loader2
 } from 'lucide-react';
 import { webhookService } from '../../services/webhookService';
 import { MedicoEmailsModal } from './MedicoEmailsModal';
 import { DisparoEmailLoteModal } from './DisparoEmailLoteModal';
 import { plantaoMedicoContatosService, MedicoContato } from '../../services/plantaoMedicoContatosService';
+import { plantaoMedicoProducoesService, PlantaoMedicoProducaoDB } from '../../services/plantaoMedicoProducoesService';
 import { sendPlantaoMedicoEmail } from '../../services/plantaoEmailService';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -50,6 +51,9 @@ export interface PlantaoMedicoSintetico {
   valorPago?: number;
   valorPendente?: number;
   status: 'Pago' | 'Pendente' | 'Parcial';
+  emailEnviado?: boolean;
+  emailEnviadoEm?: string;
+  emailEnviadoPara?: string[];
   ITEMS: PlantaoMedicoItem[];
 }
 
@@ -80,6 +84,13 @@ const formatCompactCurrency = (value: number) => {
     notation: 'compact',
     compactDisplay: 'short'
   }).format(value);
+};
+
+const getSyntheticKey = (medico: string, especialidade: string, tipoPlantao: string): string => {
+  const m = (medico || '').trim().toUpperCase();
+  const e = (especialidade || '').trim().toUpperCase();
+  const t = (tipoPlantao || '').trim().toUpperCase();
+  return `${m}|||${e}|||${t}`;
 };
 
 const parseTasyDate = (dateStr: string | null): Date | null => {
@@ -136,6 +147,24 @@ const formatDate = (dateStr: string | null) => {
     return `${day}/${month}/${year}`;
   }
   return `${day}/${month}/${year} ${hour}:${minute}`;
+};
+
+const formatDateTime = (isoDateStr?: string | null): string => {
+  if (!isoDateStr) return '-';
+  try {
+    const d = new Date(isoDateStr);
+    if (isNaN(d.getTime())) return String(isoDateStr);
+    return d.toLocaleString('pt-BR', {
+      timeZone: 'America/Sao_Paulo',
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  } catch {
+    return String(isoDateStr);
+  }
 };
 
 const COLORS = ['#8a1515', '#10b981', '#f59e0b', '#ec4899', '#8b5cf6', '#06b6d4', '#34d399', '#f87171'];
@@ -268,6 +297,10 @@ const PlantaoMedico: React.FC = () => {
   const [sortFieldSintetico, setSortFieldSintetico] = useState<keyof PlantaoMedicoSintetico>('VALOR_TOTAL');
   const [sortAscSintetico, setSortAscSintetico] = useState<boolean>(false);
   // Armazenamento de edições de produção e valor pago para a visão Sintética
+  const [dbProducoesMap, setDbProducoesMap] = useState<Record<string, PlantaoMedicoProducaoDB>>({});
+  const [loadingProducoes, setLoadingProducoes] = useState<boolean>(false);
+  const [isSavingProducao, setIsSavingProducao] = useState<boolean>(false);
+
   const [syntheticEdits, setSyntheticEdits] = useState<Record<string, { producoes?: ProducaoItem[]; status?: 'Pago' | 'Pendente' | 'Parcial'; valorPago?: number }>>(() => {
     try {
       const cached = getStorageItem('hsc_plantao_medico_synthetic_edits');
@@ -275,6 +308,29 @@ const PlantaoMedico: React.FC = () => {
     } catch (e) {}
     return {};
   });
+
+  // Carregar produções salvas do Supabase para o período ativo
+  const carregarProducoesSupabase = useCallback(async (from: string, to: string) => {
+    if (!from || !to) return;
+    try {
+      setLoadingProducoes(true);
+      const lista = await plantaoMedicoProducoesService.listarPorPeriodo(from, to);
+      const map: Record<string, PlantaoMedicoProducaoDB> = {};
+      lista.forEach(item => {
+        const k = getSyntheticKey(item.medico, item.especialidade, item.tipo_plantao);
+        map[k] = item;
+      });
+      setDbProducoesMap(map);
+    } catch (err) {
+      console.error('Erro ao carregar produções do Supabase:', err);
+    } finally {
+      setLoadingProducoes(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    carregarProducoesSupabase(periodFrom, periodTo);
+  }, [carregarProducoesSupabase, periodFrom, periodTo]);
 
   // Modal de Gestão de E-mails dos Médicos e Disparo em Lote
   const [isEmailsModalOpen, setIsEmailsModalOpen] = useState<boolean>(false);
@@ -358,54 +414,92 @@ const PlantaoMedico: React.FC = () => {
     }));
   };
 
-  const handleSaveSinteticoProducao = () => {
+  const handleSaveSinteticoProducao = async () => {
     if (!selectedSinteticoItem) return;
+    setIsSavingProducao(true);
 
-    const validProducoes: ProducaoItem[] = editProducoesList.map(p => {
-      const cleanStr = String(p.valorProducao).replace(/[R$\s]/g, '').replace(/\./g, '').replace(',', '.');
-      const numVal = parseFloat(cleanStr);
-      return {
-        id: p.id,
-        tipoProducao: p.tipoProducao,
-        valorProducao: isNaN(numVal) ? 0 : Math.max(0, numVal)
-      };
-    });
+    try {
+      const validProducoes: ProducaoItem[] = editProducoesList.map(p => {
+        const cleanStr = String(p.valorProducao).replace(/[R$\s]/g, '').replace(/\./g, '').replace(',', '.');
+        const numVal = parseFloat(cleanStr);
+        return {
+          id: p.id,
+          tipoProducao: p.tipoProducao,
+          valorProducao: isNaN(numVal) ? 0 : Math.max(0, numVal)
+        };
+      });
 
-    const cleanValorPagoStr = String(editValorPago).replace(/[R$\s]/g, '').replace(/\./g, '').replace(',', '.');
-    const parsedValorPago = parseFloat(cleanValorPagoStr);
-    const validValorPago = isNaN(parsedValorPago) ? 0 : Math.max(0, parsedValorPago);
+      const cleanValorPagoStr = String(editValorPago).replace(/[R$\s]/g, '').replace(/\./g, '').replace(',', '.');
+      const parsedValorPago = parseFloat(cleanValorPagoStr);
+      const validValorPago = isNaN(parsedValorPago) ? 0 : Math.max(0, parsedValorPago);
 
-    // Calcular o total final esperado (Base Plantões + Produções)
-    const basePlantaoTotal = selectedSinteticoItem.ITEMS.reduce((acc, p) => acc + p.VALOR, 0);
-    const prodTotal = validProducoes.reduce((acc, p) => acc + (p.valorProducao || 0), 0);
-    const totalEsperado = basePlantaoTotal + prodTotal;
+      // Calcular o total final esperado (Base Plantões + Produções)
+      const basePlantaoTotal = selectedSinteticoItem.ITEMS.reduce((acc, p) => acc + p.VALOR, 0);
+      const prodTotal = validProducoes.reduce((acc, p) => acc + (p.valorProducao || 0), 0);
+      const totalEsperado = basePlantaoTotal + prodTotal;
 
-    let finalStatus: 'Pago' | 'Pendente' | 'Parcial' = editStatus;
-    if (validValorPago >= totalEsperado && totalEsperado > 0) {
-      finalStatus = 'Pago';
-    } else if (validValorPago > 0 && validValorPago < totalEsperado) {
-      finalStatus = 'Parcial';
-    } else if (validValorPago === 0) {
-      finalStatus = 'Pendente';
-    }
-
-    const updatedEdits = {
-      ...syntheticEdits,
-      [selectedSinteticoItem.id]: {
-        producoes: validProducoes,
-        status: finalStatus,
-        valorPago: validValorPago
+      let finalStatus: 'Pago' | 'Pendente' | 'Parcial' = editStatus;
+      if (validValorPago >= totalEsperado && totalEsperado > 0) {
+        finalStatus = 'Pago';
+      } else if (validValorPago > 0 && validValorPago < totalEsperado) {
+        finalStatus = 'Parcial';
+      } else if (validValorPago === 0) {
+        finalStatus = 'Pendente';
       }
-    };
 
-    setSyntheticEdits(updatedEdits);
-    setStorageItem('hsc_plantao_medico_synthetic_edits', JSON.stringify(updatedEdits));
+      const itemKey = getSyntheticKey(
+        selectedSinteticoItem.MEDICO,
+        selectedSinteticoItem.ESPECIALIDADE,
+        selectedSinteticoItem.TIPO_PLANTAO
+      );
 
-    setSaveSuccessMessage(true);
-    setTimeout(() => {
-      setSaveSuccessMessage(false);
-      setSelectedSinteticoItem(null);
-    }, 600);
+      // 1. Salvar no Supabase de forma persistente
+      const saved = await plantaoMedicoProducoesService.salvarProducao({
+        medico: selectedSinteticoItem.MEDICO,
+        especialidade: selectedSinteticoItem.ESPECIALIDADE,
+        tipo_plantao: selectedSinteticoItem.TIPO_PLANTAO,
+        periodo_de: periodFrom,
+        periodo_ate: periodTo,
+        producoes: validProducoes,
+        valor_pago: validValorPago,
+        status: finalStatus
+      });
+
+      // 2. Atualizar estado em memória do Supabase
+      setDbProducoesMap(prev => ({
+        ...prev,
+        [itemKey]: saved
+      }));
+
+      // 3. Atualizar fallback em cache
+      const updatedEdits = {
+        ...syntheticEdits,
+        [itemKey]: {
+          producoes: validProducoes,
+          status: finalStatus,
+          valorPago: validValorPago
+        },
+        [selectedSinteticoItem.id]: {
+          producoes: validProducoes,
+          status: finalStatus,
+          valorPago: validValorPago
+        }
+      };
+
+      setSyntheticEdits(updatedEdits);
+      setStorageItem('hsc_plantao_medico_synthetic_edits', JSON.stringify(updatedEdits));
+
+      setSaveSuccessMessage(true);
+      setTimeout(() => {
+        setSaveSuccessMessage(false);
+        setSelectedSinteticoItem(null);
+      }, 600);
+    } catch (err) {
+      console.error('Erro ao salvar produção no Supabase:', err);
+      alert('Erro ao salvar os lançamentos no banco de dados. Verifique a conexão e tente novamente.');
+    } finally {
+      setIsSavingProducao(false);
+    }
   };
 
   // Fechar dropdowns ao clicar fora
@@ -737,7 +831,7 @@ const PlantaoMedico: React.FC = () => {
     }>();
 
     plantaosFiltrados.forEach(item => {
-      const key = `${item.MEDICO.toLowerCase().trim()}|||${item.ESPECIALIDADE.toLowerCase().trim()}|||${item.TIPO_PLANTAO.toLowerCase().trim()}`;
+      const key = getSyntheticKey(item.MEDICO, item.ESPECIALIDADE, item.TIPO_PLANTAO);
       
       const existing = map.get(key);
       if (existing) {
@@ -756,16 +850,18 @@ const PlantaoMedico: React.FC = () => {
       }
     });
 
-    let filteredResult = Array.from(map.entries()).map(([key, data], idx) => {
-      const syntheticId = `sintetico-${idx}-${key}`;
-      const edit = syntheticEdits[syntheticId] || syntheticEdits[key];
-      const producoesList: ProducaoItem[] = edit?.producoes || [];
+    let filteredResult = Array.from(map.entries()).map(([key, data]) => {
+      const syntheticId = `sintetico-${key}`;
+      const dbItem = dbProducoesMap[key];
+      const localEdit = syntheticEdits[key] || syntheticEdits[syntheticId];
+
+      const producoesList: ProducaoItem[] = dbItem?.producoes || localEdit?.producoes || [];
       const valProducaoTotal = producoesList.reduce((acc, p) => acc + (p.valorProducao || 0), 0);
       const valPlantaoBase = data.valorTotal;
       const finalValorTotal = valPlantaoBase + valProducaoTotal;
 
-      let computedStatus: 'Pago' | 'Pendente' | 'Parcial' = edit?.status || 'Pendente';
-      let valPago = edit?.valorPago;
+      let computedStatus: 'Pago' | 'Pendente' | 'Parcial' = (dbItem?.status as any) || localEdit?.status || 'Pendente';
+      let valPago = dbItem?.valor_pago !== undefined ? dbItem.valor_pago : localEdit?.valorPago;
       if (valPago === undefined) {
         valPago = computedStatus === 'Pago' ? finalValorTotal : 0;
       }
@@ -793,6 +889,9 @@ const PlantaoMedico: React.FC = () => {
         valorPago: valPago,
         valorPendente: valPendenteCalculado,
         status: computedStatus,
+        emailEnviado: dbItem?.email_enviado || false,
+        emailEnviadoEm: dbItem?.email_enviado_em,
+        emailEnviadoPara: dbItem?.email_enviado_para || [],
         ITEMS: data.items
       };
     });
@@ -822,7 +921,7 @@ const PlantaoMedico: React.FC = () => {
     });
 
     return filteredResult;
-  }, [plantaosFiltrados, sortFieldSintetico, sortAscSintetico, syntheticEdits, statusFilter]);
+  }, [plantaosFiltrados, sortFieldSintetico, sortAscSintetico, dbProducoesMap, syntheticEdits, statusFilter]);
 
   // KPIs
   const kpis = useMemo(() => {
@@ -1985,13 +2084,19 @@ const PlantaoMedico: React.FC = () => {
                             const emails = contatosMedicosMap.get(item.MEDICO.toUpperCase().trim()) || [];
                             const isSending = singleSendingId === item.id;
                             const temEmail = emails.length > 0;
+                            const isEnviado = !!item.emailEnviado;
 
                             const handleDispararUnico = async () => {
                               if (!temEmail) {
                                 alert(`O Dr(a). ${item.MEDICO} ainda não possui e-mail cadastrado. Clique em 'Gerenciar E-mails' para cadastrar.`);
                                 return;
                               }
-                              if (!confirm(`Deseja enviar o demonstrativo em PDF para Dr(a). ${item.MEDICO} (${emails.join(', ')})?`)) return;
+
+                              const confirmMsg = isEnviado
+                                ? `Este demonstrativo já foi enviado para Dr(a). ${item.MEDICO} em ${formatDateTime(item.emailEnviadoEm)} (${emails.join(', ')}).\n\nDeseja enviar novamente?`
+                                : `Deseja enviar o demonstrativo em PDF para Dr(a). ${item.MEDICO} (${emails.join(', ')})?`;
+
+                              if (!confirm(confirmMsg)) return;
 
                               setSingleSendingId(item.id);
                               const basePlantao = item.ITEMS.reduce((acc, p) => acc + p.VALOR, 0);
@@ -2017,6 +2122,25 @@ const PlantaoMedico: React.FC = () => {
                                 });
 
                                 if (res.success) {
+                                  // Registrar envio no banco de dados Supabase
+                                  try {
+                                    const updated = await plantaoMedicoProducoesService.registrarEnvioEmail({
+                                      medico: item.MEDICO,
+                                      especialidade: item.ESPECIALIDADE,
+                                      tipo_plantao: item.TIPO_PLANTAO,
+                                      periodo_de: periodFrom,
+                                      periodo_ate: periodTo,
+                                      destinatarios: emails
+                                    });
+                                    const itemKey = getSyntheticKey(item.MEDICO, item.ESPECIALIDADE, item.TIPO_PLANTAO);
+                                    setDbProducoesMap(prev => ({
+                                      ...prev,
+                                      [itemKey]: updated
+                                    }));
+                                  } catch (dbErr) {
+                                    console.error('Erro ao registrar envio no Supabase:', dbErr);
+                                  }
+
                                   alert(`Demonstrativo enviado com sucesso para ${emails.join(', ')}!`);
                                 } else {
                                   alert(`Erro no envio: ${res.error}`);
@@ -2028,19 +2152,31 @@ const PlantaoMedico: React.FC = () => {
                               }
                             };
 
+                            let btnClasses = 'text-muted-foreground/30 hover:text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-950/40';
+                            let btnTitle = 'Sem e-mail cadastrado (Clique para gerenciar)';
+
+                            if (isEnviado) {
+                              btnClasses = 'bg-emerald-50 text-emerald-600 border border-emerald-300 hover:bg-emerald-100 dark:bg-emerald-950/60 dark:text-emerald-400 dark:border-emerald-700/60 dark:hover:bg-emerald-900/60 shadow-xs';
+                              const destinatariosTexto = item.emailEnviadoPara && item.emailEnviadoPara.length > 0 
+                                ? item.emailEnviadoPara.join(', ') 
+                                : emails.join(', ');
+                              btnTitle = `✓ E-mail já enviado no período em ${formatDateTime(item.emailEnviadoEm)}\nDestinatário(s): ${destinatariosTexto}\n(Clique para reenviar se desejar)`;
+                            } else if (temEmail) {
+                              btnClasses = 'text-muted-foreground hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/40';
+                              btnTitle = `Enviar demonstrativo por e-mail (${emails.join(', ')})`;
+                            }
+
                             return (
                               <button
                                 onClick={handleDispararUnico}
                                 disabled={isSending}
-                                className={`p-1.5 rounded-md transition-colors cursor-pointer ${
-                                  temEmail 
-                                    ? 'text-muted-foreground hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/40' 
-                                    : 'text-muted-foreground/40 hover:text-amber-600'
-                                }`}
-                                title={temEmail ? `Enviar relatório por e-mail (${emails.join(', ')})` : 'Sem e-mail cadastrado (Clique para gerenciar)'}
+                                className={`p-1.5 rounded-md transition-all cursor-pointer ${btnClasses}`}
+                                title={btnTitle}
                               >
                                 {isSending ? (
-                                  <Loader2 className="h-4 w-4 animate-spin text-emerald-600" />
+                                  <Loader2 className="h-4 w-4 animate-spin text-emerald-600 dark:text-emerald-400" />
+                                ) : isEnviado ? (
+                                  <MailCheck className="h-4 w-4" />
                                 ) : (
                                   <Mail className="h-4 w-4" />
                                 )}
@@ -2473,11 +2609,21 @@ const PlantaoMedico: React.FC = () => {
                     </button>
                     <button
                       type="button"
+                      disabled={isSavingProducao}
                       onClick={handleSaveSinteticoProducao}
-                      className="flex items-center gap-1.5 bg-[#8a1515] hover:bg-[#6b1010] text-white px-4 py-2 rounded-lg text-xs font-bold transition-all shadow-sm active:scale-95 cursor-pointer"
+                      className="flex items-center gap-1.5 bg-[#8a1515] hover:bg-[#6b1010] text-white px-4 py-2 rounded-lg text-xs font-bold transition-all shadow-sm active:scale-95 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                      <Save className="h-4 w-4" />
-                      <span>Salvar Produções</span>
+                      {isSavingProducao ? (
+                        <>
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                          <span>Salvando no Supabase...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Save className="h-4 w-4" />
+                          <span>Salvar Produções</span>
+                        </>
+                      )}
                     </button>
                   </div>
                 </div>
@@ -2576,6 +2722,9 @@ const PlantaoMedico: React.FC = () => {
           const formatPer = (p: string) => p.split('-').reverse().join('/');
           return `${formatPer(periodFrom)} a ${formatPer(periodTo)}`;
         })()}
+        periodoDe={periodFrom}
+        periodoAte={periodTo}
+        onEmailsDisparados={() => carregarProducoesSupabase(periodFrom, periodTo)}
       />
     </div>
   );
