@@ -10,8 +10,10 @@ import {
 import { webhookService } from '../../services/webhookService';
 import { MedicoEmailsModal } from './MedicoEmailsModal';
 import { DisparoEmailLoteModal } from './DisparoEmailLoteModal';
+import { PlantaoMedicoTiposModal, getTipoColorClass } from './PlantaoMedicoTiposModal';
 import { plantaoMedicoContatosService, MedicoContato } from '../../services/plantaoMedicoContatosService';
 import { plantaoMedicoProducoesService, PlantaoMedicoProducaoDB } from '../../services/plantaoMedicoProducoesService';
+import { plantaoMedicoTiposProducaoService, PlantaoMedicoTipoProducao, DEFAULT_TIPOS_PRODUCAO } from '../../services/plantaoMedicoTiposProducaoService';
 import { sendPlantaoMedicoEmail } from '../../services/plantaoEmailService';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -335,9 +337,39 @@ const PlantaoMedico: React.FC = () => {
   // Modal de Gestão de E-mails dos Médicos e Disparo em Lote
   const [isEmailsModalOpen, setIsEmailsModalOpen] = useState<boolean>(false);
   const [isDisparoLoteOpen, setIsDisparoLoteOpen] = useState<boolean>(false);
+  const [isTiposModalOpen, setIsTiposModalOpen] = useState<boolean>(false);
+  const [tiposProducaoList, setTiposProducaoList] = useState<PlantaoMedicoTipoProducao[]>(DEFAULT_TIPOS_PRODUCAO);
   const [contatosMedicos, setContatosMedicos] = useState<MedicoContato[]>([]);
   const [singleSendingId, setSingleSendingId] = useState<string | null>(null);
   const [singleSendFeedback, setSingleSendFeedback] = useState<{ id: string; success: boolean; message: string } | null>(null);
+
+  // Carregar tipos de produção do Supabase
+  const carregarTiposProducao = useCallback(async () => {
+    try {
+      const data = await plantaoMedicoTiposProducaoService.listar(false);
+      setTiposProducaoList(data);
+    } catch (err) {
+      console.error('Erro ao carregar tipos de produção:', err);
+    }
+  }, []);
+
+  useEffect(() => {
+    carregarTiposProducao();
+  }, [carregarTiposProducao]);
+
+  const tiposProducaoAtivos = useMemo(() => {
+    return tiposProducaoList.filter(t => t.ativo !== false);
+  }, [tiposProducaoList]);
+
+  const tiposColorMap = useMemo(() => {
+    const map = new Map<string, string>();
+    tiposProducaoList.forEach(t => {
+      if (t.nome) {
+        map.set(t.nome.toLowerCase().trim(), t.cor || 'blue');
+      }
+    });
+    return map;
+  }, [tiposProducaoList]);
 
   // Carregar contatos dos médicos para exibir ou sincronizar
   const carregarContatosMedicos = useCallback(async () => {
@@ -377,27 +409,29 @@ const PlantaoMedico: React.FC = () => {
     setSelectedSinteticoItem(item);
     setEditStatus(item.status || 'Pendente');
     setEditValorPago(item.valorPago !== undefined ? String(item.valorPago) : (item.status === 'Pago' ? String(item.VALOR_TOTAL) : '0'));
+    const defaultTipo = tiposProducaoAtivos[0]?.nome || 'Procedimento';
     if (item.producoes && item.producoes.length > 0) {
       setEditProducoesList(
         item.producoes.map((p, i) => ({
           id: p.id || `prod-${i}`,
-          tipoProducao: p.tipoProducao || 'Procedimento',
+          tipoProducao: p.tipoProducao || defaultTipo,
           valorProducao: String(p.valorProducao || 0)
         }))
       );
     } else {
       // Iniciar com 1 item padrão
       setEditProducoesList([
-        { id: `prod-${Date.now()}-0`, tipoProducao: 'Procedimento', valorProducao: '0' }
+        { id: `prod-${Date.now()}-0`, tipoProducao: defaultTipo, valorProducao: '0' }
       ]);
     }
     setSaveSuccessMessage(false);
   };
 
   const handleAddProducaoRow = () => {
+    const defaultTipo = tiposProducaoAtivos[0]?.nome || 'Procedimento';
     setEditProducoesList(prev => [
       ...prev,
-      { id: `prod-${Date.now()}-${prev.length}`, tipoProducao: 'Consulta', valorProducao: '0' }
+      { id: `prod-${Date.now()}-${prev.length}`, tipoProducao: defaultTipo, valorProducao: '0' }
     ]);
   };
 
@@ -1279,6 +1313,20 @@ const PlantaoMedico: React.FC = () => {
           )}
 
           <button
+            onClick={() => setIsTiposModalOpen(true)}
+            className="flex items-center gap-2 px-3.5 py-2 rounded-md text-xs font-semibold bg-card border border-border hover:bg-muted text-foreground transition-all shadow-sm cursor-pointer"
+            title="Gerenciar tipos e modalidades de produção médica"
+          >
+            <Layers className="h-4 w-4 text-[#8a1515] dark:text-[#f43f5e]" />
+            <span>Tipos de Produção</span>
+            {tiposProducaoAtivos.length > 0 && (
+              <span className="ml-1 bg-rose-100 dark:bg-rose-950/60 text-rose-700 dark:text-rose-400 px-1.5 py-0.5 rounded-full text-[10px] font-bold border border-rose-300 dark:border-rose-800">
+                {tiposProducaoAtivos.length}
+              </span>
+            )}
+          </button>
+
+          <button
             onClick={() => setIsEmailsModalOpen(true)}
             className="flex items-center gap-2 px-3.5 py-2 rounded-md text-xs font-semibold bg-card border border-border hover:bg-muted text-foreground transition-all shadow-sm cursor-pointer"
             title="Gerenciar cadastro de múltiplos e-mails por médico"
@@ -2009,32 +2057,27 @@ const PlantaoMedico: React.FC = () => {
                       <td className="py-3 px-4 text-center whitespace-nowrap">
                         {item.producoes && item.producoes.length > 0 ? (
                           <div className="flex flex-wrap justify-center gap-1">
-                            {item.producoes.map((p, pIdx) => (
-                              <span key={p.id || pIdx} className={`inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full border ${
-                                p.tipoProducao === 'Procedimento'
-                                  ? 'bg-blue-500/10 text-blue-600 border-blue-500/20 dark:text-blue-400'
-                                  : p.tipoProducao === 'Consulta'
-                                  ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20 dark:text-emerald-400'
-                                  : p.tipoProducao === 'Parto'
-                                  ? 'bg-purple-500/10 text-purple-600 border-purple-500/20 dark:text-purple-400'
-                                  : p.tipoProducao === 'Aula'
-                                  ? 'bg-cyan-500/10 text-cyan-600 border-cyan-500/20 dark:text-cyan-400'
-                                  : p.tipoProducao === 'CC'
-                                  ? 'bg-rose-500/10 text-rose-600 border-rose-500/20 dark:text-rose-400'
-                                  : p.tipoProducao === 'Coordenação'
-                                  ? 'bg-amber-500/10 text-amber-600 border-amber-500/20 dark:text-amber-400'
-                                  : 'bg-slate-500/10 text-slate-600 border-slate-500/20 dark:text-slate-400'
-                              }`}>
-                                {p.tipoProducao === 'Procedimento' && <ClipboardList className="h-3 w-3" />}
-                                {p.tipoProducao === 'Consulta' && <Stethoscope className="h-3 w-3" />}
-                                {p.tipoProducao === 'Parto' && <Baby className="h-3 w-3" />}
-                                {p.tipoProducao === 'Aula' && <GraduationCap className="h-3 w-3" />}
-                                {p.tipoProducao === 'CC' && <Activity className="h-3 w-3" />}
-                                {p.tipoProducao === 'Coordenação' && <Briefcase className="h-3 w-3" />}
-                                {p.tipoProducao}
-                                {p.valorProducao > 0 && ` (${formatCurrency(p.valorProducao)})`}
-                              </span>
-                            ))}
+                            {item.producoes.map((p, pIdx) => {
+                              const tipoCor = tiposColorMap.get((p.tipoProducao || '').toLowerCase().trim());
+                              return (
+                                <span
+                                  key={p.id || pIdx}
+                                  className={`inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full border ${getTipoColorClass(tipoCor)}`}
+                                >
+                                  {p.tipoProducao === 'Procedimento' && <ClipboardList className="h-3 w-3" />}
+                                  {p.tipoProducao === 'Consulta' && <Stethoscope className="h-3 w-3" />}
+                                  {p.tipoProducao === 'Parto' && <Baby className="h-3 w-3" />}
+                                  {p.tipoProducao === 'Aula' && <GraduationCap className="h-3 w-3" />}
+                                  {p.tipoProducao === 'CC' && <Activity className="h-3 w-3" />}
+                                  {p.tipoProducao === 'Coordenação' && <Briefcase className="h-3 w-3" />}
+                                  {!['Procedimento', 'Consulta', 'Parto', 'Aula', 'CC', 'Coordenação'].includes(p.tipoProducao) && (
+                                    <Layers className="h-3 w-3" />
+                                  )}
+                                  {p.tipoProducao}
+                                  {p.valorProducao > 0 && ` (${formatCurrency(p.valorProducao)})`}
+                                </span>
+                              );
+                            })}
                           </div>
                         ) : (
                           <span className="text-muted-foreground/60 text-xs italic">Não informado</span>
@@ -2509,12 +2552,11 @@ const PlantaoMedico: React.FC = () => {
                               onChange={(e) => handleUpdateProducaoRow(prodRow.id, 'tipoProducao', e.target.value)}
                               className="w-full bg-background border border-border focus:border-[#8a1515] rounded-lg px-2.5 py-1.5 text-xs font-semibold text-foreground outline-none cursor-pointer"
                             >
-                              <option value="Procedimento">1 - Procedimento (Exames/Cirurgias)</option>
-                              <option value="Consulta">2 - Consulta (Atendimento clínico)</option>
-                              <option value="Parto">3 - Parto (Procedimento obstétrico)</option>
-                              <option value="Aula">4 - Aula</option>
-                              <option value="CC">5 - CC (Centro Cirúrgico)</option>
-                              <option value="Coordenação">6 - Coordenação</option>
+                              {tiposProducaoAtivos.map((t, idx) => (
+                                <option key={t.id || t.nome} value={t.nome}>
+                                  {idx + 1} - {t.nome}{t.descricao ? ` (${t.descricao})` : ''}
+                                </option>
+                              ))}
                             </select>
                           </div>
 
@@ -2703,6 +2745,13 @@ const PlantaoMedico: React.FC = () => {
           </div>
         )}
       </AnimatePresence>
+
+      {/* Modal de Gestão de Tipos de Produção Médica */}
+      <PlantaoMedicoTiposModal
+        isOpen={isTiposModalOpen}
+        onClose={() => setIsTiposModalOpen(false)}
+        onTiposUpdated={carregarTiposProducao}
+      />
 
       {/* Modal de Gestão de E-mails dos Médicos */}
       <MedicoEmailsModal
