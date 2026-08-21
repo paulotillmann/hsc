@@ -249,25 +249,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           return;
         }
 
-        // Verificação de fechamento do navegador (para usuários sem exceção de TV/Painéis)
-        const isExempt = !!data.exempt_session_timeout;
-        const isBrowserSessionActive = sessionStorage.getItem('hsc_browser_session_active') === '1';
-
-        if (!isExempt && !isBrowserSessionActive) {
-          console.info('[AuthContext] Sessão encerrada: navegador foi fechado e usuário não possui exceção de persistência.');
-          await supabase.auth.signOut();
-          setSession(null);
-          setUser(null);
-          setProfile(null);
-          setPermissions(null);
-          setUserModules([]);
-          setProfileLoaded(true);
-          return;
-        }
-
-        // Mantém a flag de sessão ativa no navegador
-        sessionStorage.setItem('hsc_browser_session_active', '1');
-
         setProfile(data as Profile);
 
         const role = data.roles as Role | null;
@@ -502,8 +483,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     }
 
-    // Registra sessão ativa no navegador e timestamp de atividade
-    sessionStorage.setItem('hsc_browser_session_active', '1');
+    // Registra timestamp de atividade inicial
     localStorage.setItem('hsc_last_activity', Date.now().toString());
 
     return { error: null };
@@ -541,8 +521,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setUserModules([]);
     setProfileLoaded(false);
 
-    // Limpa marcadores de controle de sessão
-    sessionStorage.removeItem('hsc_browser_session_active');
+    // Limpa timestamp de atividade
     localStorage.removeItem('hsc_last_activity');
 
     // Limpa o cache de pendências e outros caches de sessão por segurança
