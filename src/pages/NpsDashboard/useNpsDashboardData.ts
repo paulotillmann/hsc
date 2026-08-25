@@ -67,12 +67,16 @@ export const useNpsDashboardData = ({
     const now = new Date();
     let startDate = new Date();
     let endDate = new Date(now);
+    endDate.setHours(23, 59, 59, 999);
+
     let prevStartDate = new Date();
     let prevEndDate = new Date();
 
     switch (period) {
       case 'today':
         startDate.setHours(0, 0, 0, 0);
+        endDate.setHours(23, 59, 59, 999);
+
         prevStartDate.setDate(startDate.getDate() - 1);
         prevStartDate.setHours(0, 0, 0, 0);
         prevEndDate.setDate(startDate.getDate() - 1);
@@ -94,6 +98,7 @@ export const useNpsDashboardData = ({
       case '7d':
         startDate.setDate(now.getDate() - 7);
         startDate.setHours(0, 0, 0, 0);
+        endDate.setHours(23, 59, 59, 999);
 
         prevStartDate.setDate(now.getDate() - 14);
         prevStartDate.setHours(0, 0, 0, 0);
@@ -104,6 +109,7 @@ export const useNpsDashboardData = ({
       case '30d':
         startDate.setDate(now.getDate() - 30);
         startDate.setHours(0, 0, 0, 0);
+        endDate.setHours(23, 59, 59, 999);
 
         prevStartDate.setDate(now.getDate() - 60);
         prevStartDate.setHours(0, 0, 0, 0);
@@ -113,6 +119,7 @@ export const useNpsDashboardData = ({
 
       case 'this_month':
         startDate = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0);
+        endDate.setHours(23, 59, 59, 999);
 
         prevStartDate = new Date(now.getFullYear(), now.getMonth() - 1, 1, 0, 0, 0);
         prevEndDate = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59);
@@ -128,6 +135,7 @@ export const useNpsDashboardData = ({
 
       case 'this_year':
         startDate = new Date(now.getFullYear(), 0, 1, 0, 0, 0);
+        endDate.setHours(23, 59, 59, 999);
 
         prevStartDate = new Date(now.getFullYear() - 1, 0, 1, 0, 0, 0);
         prevEndDate = new Date(now.getFullYear() - 1, 11, 31, 23, 59, 59);
@@ -446,7 +454,7 @@ export const useNpsDashboardData = ({
               id: `${q.id}-${optName}`,
               title: `${optName}`,
               scorePct: pct,
-              subtitle: `Escolha em Motivo (${optCount} citações)`,
+              subtitle: `${q.title.length > 35 ? q.title.slice(0, 32) + '...' : q.title} (${optCount} citações)`,
               totalResponses: optCount
             });
           });
