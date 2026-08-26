@@ -2152,6 +2152,7 @@ const PlantaoMedico: React.FC = () => {
                                   to: emails,
                                   nomeMedico: item.MEDICO,
                                   periodoReferencia: periodoStr,
+                                  tipoPlantao: item.TIPO_PLANTAO,
                                   resumo: {
                                     totalPlantoes: item.QTD_PLANTOES,
                                     valorPlantoes: basePlantao,
@@ -2159,7 +2160,8 @@ const PlantaoMedico: React.FC = () => {
                                     valorTotalGeral: item.VALOR_TOTAL,
                                     valorPago: item.valorPago || 0,
                                     valorPendente: item.valorPendente || 0,
-                                    status: item.status
+                                    status: item.status,
+                                    tipoPlantao: item.TIPO_PLANTAO
                                   },
                                   sinteticoItem: item
                                 });
