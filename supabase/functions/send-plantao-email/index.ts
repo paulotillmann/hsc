@@ -31,6 +31,7 @@ interface SendPlantaoEmailPayload {
   to: string | string[];
   nomeMedico: string;
   periodoReferencia: string; // Ex: '01/07/2026 a 31/07/2026' ou 'Julho/2026'
+  tipoPlantao?: string;
   resumo: {
     totalPlantoes: number;
     valorPlantoes: number;
@@ -39,6 +40,7 @@ interface SendPlantaoEmailPayload {
     valorPago?: number;
     valorPendente?: number;
     status?: string;
+    tipoPlantao?: string;
   };
   itens?: PlantaoItemDto[];
   producoes?: ProducaoItemDto[];
@@ -271,6 +273,11 @@ function buildPlantaoEmailHtml(payload: SendPlantaoEmailPayload): string {
                       📊 Resumo do Período
                     </div>
                     <table width="100%" cellpadding="4" cellspacing="0" style="font-size:13px;color:#334155;">
+                      ${(payload.tipoPlantao || payload.resumo?.tipoPlantao) ? `
+                      <tr>
+                        <td>Tipo de Plantão:</td>
+                        <td align="right" style="font-weight:700;color:#0f172a;">${payload.tipoPlantao || payload.resumo?.tipoPlantao}</td>
+                      </tr>` : ''}
                       <tr>
                         <td>Total de Plantões:</td>
                         <td align="right" style="font-weight:700;color:#0f172a;">${payload.resumo.totalPlantoes} plantão(ões)</td>

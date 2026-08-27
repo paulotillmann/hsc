@@ -7,6 +7,7 @@ export interface SendPlantaoMedicoEmailParams {
   to: string[];
   nomeMedico: string;
   periodoReferencia: string;
+  tipoPlantao?: string;
   resumo: {
     totalPlantoes: number;
     valorPlantoes: number;
@@ -15,6 +16,7 @@ export interface SendPlantaoMedicoEmailParams {
     valorPago?: number;
     valorPendente?: number;
     status?: string;
+    tipoPlantao?: string;
   };
   sinteticoItem: PlantaoMedicoSintetico;
 }
@@ -217,11 +219,21 @@ export async function sendPlantaoMedicoEmail(
     );
 
     // 2. Prepara o payload para a Edge Function
+    const tipoPlantao = params.tipoPlantao || params.resumo.tipoPlantao || params.sinteticoItem?.TIPO_PLANTAO || (
+      params.sinteticoItem?.ITEMS?.length > 0
+        ? Array.from(new Set(params.sinteticoItem.ITEMS.map(i => i.TIPO_PLANTAO).filter(Boolean))).join(', ')
+        : undefined
+    );
+
     const payload = {
       to: params.to,
       nomeMedico: params.nomeMedico,
       periodoReferencia: params.periodoReferencia,
-      resumo: params.resumo,
+      tipoPlantao: tipoPlantao,
+      resumo: {
+        ...params.resumo,
+        tipoPlantao: tipoPlantao
+      },
       pdfBase64: pdfBase64,
       pdfFilename: `Demonstrativo_Plantao_${params.nomeMedico.replace(/\s+/g, '_')}_${params.periodoReferencia.replace(/\//g, '-')}.pdf`
     };
