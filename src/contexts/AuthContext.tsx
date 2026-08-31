@@ -188,6 +188,17 @@ const getDefaultModules = (isAdmin: boolean): Module[] => {
         updated_at: new Date().toISOString(),
       },
       {
+        id: 'm-usuarios-tasy',
+        name: 'Usuários Tasy',
+        slug: 'usuarios-tasy',
+        icon: 'Users',
+        is_active: true,
+        sort_order: 40,
+        is_system: false,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      },
+      {
         id: 'm-configuracoes',
         name: 'Configurações',
         slug: 'configuracoes',
@@ -281,7 +292,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               .filter((m: Module) => m && m.is_active)
               .sort((a: Module, b: Module) => a.sort_order - b.sort_order);
 
-            if (modules.length === 0) {
+            if (isAdmin) {
+              // Para administradores, mescla os módulos do banco com todos os módulos padrão do sistema
+              const defaultMods = getDefaultModules(true);
+              const existingSlugs = new Set(modules.map((m: Module) => m.slug));
+              const merged = [...modules];
+              defaultMods.forEach(dm => {
+                if (!existingSlugs.has(dm.slug)) {
+                  merged.push(dm);
+                }
+              });
+              setUserModules(merged);
+            } else if (modules.length === 0) {
               // Se a tabela modules estiver totalmente vazia no banco, usamos o fallback para admin.
               // Caso contrário, se há módulos cadastrados mas nenhuma permissão vinculada, mantemos vazia.
               const { count, error: countError } = await supabase
