@@ -441,26 +441,44 @@ const UsuariosTasy: React.FC = () => {
     return { total, topSetor, mediaFormatada, totalSetores: Object.keys(setorCounts).length };
   }, [usuarios, snapshotHeader]);
 
-  // Dados para Gráficos
-  const chartSetores = useMemo(() => {
-    const counts: Record<string, number> = {};
-    usuarios.forEach(u => {
-      if (u.setor) {
-        counts[u.setor] = (counts[u.setor] || 0) + 1;
-      }
-    });
-    return Object.entries(counts)
-      .map(([name, count]) => ({ name, count }))
-      .sort((a, b) => b.count - a.count)
-      .slice(0, 10);
-  }, [usuarios]);
-
+  // Dados para Gráfico de Rosca (Top Setores + Demais com Percentuais)
   const chartDonutSetores = useMemo(() => {
-    return chartSetores.slice(0, 5).map((item) => ({
-      name: item.name.length > 18 ? item.name.substring(0, 15) + '...' : item.name,
-      value: item.count
-    }));
-  }, [chartSetores]);
+    const counts: Record<string, number> = {};
+    const total = usuarios.length;
+    if (total === 0) return [];
+
+    usuarios.forEach(u => {
+      const s = u.setor || 'Não Informado';
+      counts[s] = (counts[s] || 0) + 1;
+    });
+
+    const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]);
+    const topSectors = sorted.slice(0, 6);
+    const otherSectors = sorted.slice(6);
+
+    const items = topSectors.map(([name, count], index) => {
+      const percent = Number(((count / total) * 100).toFixed(1));
+      return {
+        name,
+        value: count,
+        percent,
+        color: COLORS[index % COLORS.length]
+      };
+    });
+
+    if (otherSectors.length > 0) {
+      const othersTotal = otherSectors.reduce((acc, curr) => acc + curr[1], 0);
+      const percent = Number(((othersTotal / total) * 100).toFixed(1));
+      items.push({
+        name: `Outros (${otherSectors.length} setores)`,
+        value: othersTotal,
+        percent,
+        color: '#94a3b8'
+      });
+    }
+
+    return items;
+  }, [usuarios]);
 
   // Copiar campo para a área de transferência
   const copyToClipboard = (text: string, field: string) => {
@@ -749,108 +767,123 @@ const UsuariosTasy: React.FC = () => {
         </div>
       </div>
 
-      {/* ── GRÁFICOS ANALÍTICOS ────────────────────────────────────────────── */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Gráfico de Barras: Setores */}
-        <div className="lg:col-span-2 rounded-2xl border border-border/60 bg-card p-6 shadow-sm">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h2 className="text-base font-bold text-foreground font-sans">Ranking de Usuários por Setor</h2>
-              <p className="text-xs text-muted-foreground font-sans">Top 10 setores com maior quantidade de colaboradores logados</p>
-            </div>
-            <Building2 className="h-4 w-4 text-muted-foreground opacity-60" />
+      {/* ── GRÁFICO ANALÍTICO: DONUT COM TOTAL CENTRALIZADO E LEGENDAS LATERAIS ── */}
+      <div className="rounded-2xl border border-border/60 bg-card p-6 shadow-sm space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-b border-border/40 pb-4">
+          <div>
+            <h2 className="text-base font-bold text-foreground font-sans">Distribuição de Conexões por Setor</h2>
+            <p className="text-xs text-muted-foreground font-sans">Proporção de colaboradores e sessões simultâneas ativas no ERP Tasy</p>
           </div>
-
-          <div className="h-[240px] w-full">
-            {chartSetores.length > 0 ? (
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={chartSetores} margin={{ top: 10, right: 10, left: -20, bottom: 40 }}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} opacity={0.15} />
-                  <XAxis 
-                    dataKey="name" 
-                    tick={{ fontSize: 10, fill: 'currentColor' }} 
-                    interval={0}
-                    angle={-25}
-                    textAnchor="end"
-                    className="text-muted-foreground"
-                  />
-                  <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: 'currentColor' }} className="text-muted-foreground" />
-                  <RechartsTooltip 
-                    contentStyle={{ 
-                      backgroundColor: 'rgba(15, 23, 42, 0.95)', 
-                      border: '1px solid rgba(255,255,255,0.1)', 
-                      borderRadius: '8px', 
-                      color: '#fff',
-                      fontSize: '12px'
-                    }} 
-                    cursor={{ fill: 'rgba(2, 132, 199, 0.1)' }}
-                  />
-                  <Bar dataKey="count" name="Usuários Ativos" fill="#0284c7" radius={[6, 6, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            ) : (
-              <div className="h-full flex items-center justify-center text-muted-foreground text-xs">
-                Nenhum dado para exibir no gráfico
-              </div>
-            )}
+          <div className="flex items-center gap-2">
+            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold bg-sky-500/10 text-sky-700 dark:text-sky-300 border border-sky-500/20">
+              <Layers className="h-3.5 w-3.5" />
+              {kpis.totalSetores} setores ativos
+            </span>
           </div>
         </div>
 
-        {/* Gráfico de Rosca: Distribuição */}
-        <div className="rounded-2xl border border-border/60 bg-card p-6 shadow-sm flex flex-col justify-between">
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <h2 className="text-base font-bold text-foreground font-sans">Top Setores</h2>
-              <Layers className="h-4 w-4 text-muted-foreground opacity-60" />
-            </div>
-            <p className="text-xs text-muted-foreground font-sans mb-4">Proporção dos principais setores</p>
-
-            <div className="h-[150px] w-full relative">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center pt-2">
+          {/* Lado Esquerdo: Rosca com Total Centralizado */}
+          <div className="lg:col-span-5 flex flex-col items-center justify-center">
+            <div className="h-[280px] w-full relative flex items-center justify-center">
               {chartDonutSetores.length > 0 ? (
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie
-                      data={chartDonutSetores}
-                      cx="50%"
-                      cy="50%"
-                      innerRadius={45}
-                      outerRadius={65}
-                      paddingAngle={4}
-                      dataKey="value"
-                    >
-                      {chartDonutSetores.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                      ))}
-                    </Pie>
-                    <RechartsTooltip 
-                      contentStyle={{ 
-                        backgroundColor: 'rgba(15, 23, 42, 0.95)', 
-                        border: '1px solid rgba(255,255,255,0.1)', 
-                        borderRadius: '8px', 
-                        color: '#fff',
-                        fontSize: '12px'
-                      }} 
-                    />
-                  </PieChart>
-                </ResponsiveContainer>
+                <>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={chartDonutSetores}
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={72}
+                        outerRadius={105}
+                        paddingAngle={3}
+                        dataKey="value"
+                      >
+                        {chartDonutSetores.map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={entry.color} />
+                        ))}
+                      </Pie>
+                      <RechartsTooltip 
+                        content={({ active, payload }) => {
+                          if (active && payload && payload.length) {
+                            const data = payload[0].payload;
+                            return (
+                              <div className="bg-slate-900/95 border border-slate-700/60 backdrop-blur-md px-3.5 py-2.5 rounded-xl shadow-xl text-white text-xs space-y-1">
+                                <div className="flex items-center gap-2">
+                                  <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: data.color }}></span>
+                                  <p className="font-bold text-slate-100">{data.name}</p>
+                                </div>
+                                <div className="flex items-center justify-between gap-4 text-slate-300">
+                                  <span>Conexões:</span>
+                                  <span className="font-bold text-white font-mono">{data.value} usuários</span>
+                                </div>
+                                <div className="flex items-center justify-between gap-4 text-slate-400 text-[11px]">
+                                  <span>Representatividade:</span>
+                                  <span className="font-semibold text-sky-400">{data.percent}%</span>
+                                </div>
+                              </div>
+                            );
+                          }
+                          return null;
+                        }}
+                      />
+                    </PieChart>
+                  </ResponsiveContainer>
+                  
+                  {/* Total Centralizado */}
+                  <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none select-none">
+                    <span className="text-3xl font-extrabold tracking-tight text-foreground font-sans leading-none">
+                      {kpis.total}
+                    </span>
+                    <span className="text-xs text-muted-foreground uppercase tracking-wider font-semibold font-sans mt-1">
+                      Conexões Ativas
+                    </span>
+                  </div>
+                </>
               ) : (
-                <div className="h-full flex items-center justify-center text-muted-foreground text-xs">
-                  Sem dados
+                <div className="h-full flex items-center justify-center text-muted-foreground text-xs font-sans">
+                  Sem conexões ativas no momento
                 </div>
               )}
             </div>
           </div>
 
-          <div className="mt-2 space-y-1.5">
-            {chartDonutSetores.map((item, idx) => (
-              <div key={idx} className="flex items-center justify-between text-xs">
-                <div className="flex items-center gap-1.5 min-w-0">
-                  <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: COLORS[idx % COLORS.length] }}></span>
-                  <span className="text-muted-foreground truncate font-sans">{item.name}</span>
+          {/* Lado Direito: Legendas Laterais com Barras de Progresso e Percentuais */}
+          <div className="lg:col-span-7 flex flex-col justify-center space-y-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {chartDonutSetores.map((item, idx) => (
+                <div 
+                  key={idx} 
+                  className="p-3 rounded-xl border border-border/50 bg-background/40 hover:bg-muted/40 transition-colors space-y-1.5"
+                >
+                  <div className="flex items-center justify-between gap-2 text-xs">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: item.color }}></span>
+                      <span className="font-semibold text-foreground truncate font-sans" title={item.name}>
+                        {item.name}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1.5 font-mono flex-shrink-0">
+                      <span className="font-bold text-foreground">{item.value}</span>
+                      <span className="text-[11px] font-semibold text-muted-foreground font-sans">
+                        ({item.percent}%)
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Barra de Progresso Visual */}
+                  <div className="w-full h-1.5 rounded-full bg-muted overflow-hidden">
+                    <div 
+                      className="h-full rounded-full transition-all duration-500" 
+                      style={{ 
+                        width: `${Math.max(item.percent, 3)}%`, 
+                        backgroundColor: item.color 
+                      }}
+                    />
+                  </div>
                 </div>
-                <span className="font-semibold text-foreground ml-2">{item.value}</span>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
         </div>
       </div>
