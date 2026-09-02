@@ -19,7 +19,8 @@ import {
   Timer,
   Calendar,
   AlertTriangle,
-  RotateCcw
+  RotateCcw,
+  TrendingUp
 } from 'lucide-react';
 import { 
   ResponsiveContainer, 
@@ -51,48 +52,97 @@ export interface UsuarioTasy {
 
 const CACHE_KEY = 'hsc_tasy_users_cache';
 const CACHE_TIME_KEY = 'hsc_tasy_users_cache_time';
+const PEAK_KEY_PREFIX = 'hsc_tasy_peak_concurrent_';
 
 const COLORS = [
   '#0284c7', '#0d9488', '#8b5cf6', '#f59e0b', '#ec4899', 
   '#10b981', '#6366f1', '#f43f5e', '#14b8a6', '#eab308'
 ];
 
-// Helper para calcular duração entre horários "HH:MM"
-function calculateDuration(inicioStr: string, fimStr: string): { formatada: string; minutos: number } {
-  if (!inicioStr || !fimStr || inicioStr === '-' || fimStr === '-') {
-    return { formatada: '-', minutos: 0 };
-  }
-
+// Retorna a chave da data de hoje no fuso oficial de Brasília (YYYY-MM-DD)
+function getTodayDateKey(): string {
   try {
-    const p1 = inicioStr.split(':');
-    const p2 = fimStr.split(':');
-    if (p1.length < 2 || p2.length < 2) return { formatada: '-', minutos: 0 };
-
-    const h1 = parseInt(p1[0], 10);
-    const m1 = parseInt(p1[1], 10);
-    const h2 = parseInt(p2[0], 10);
-    const m2 = parseInt(p2[1], 10);
-
-    if (isNaN(h1) || isNaN(m1) || isNaN(h2) || isNaN(m2)) {
-      return { formatada: '-', minutos: 0 };
-    }
-
-    let totalMinutos = (h2 * 60 + m2) - (h1 * 60 + m1);
-    if (totalMinutos < 0) {
-      // Virada de meia-noite
-      totalMinutos += 24 * 60;
-    }
-
-    const horas = Math.floor(totalMinutos / 60);
-    const minutos = totalMinutos % 60;
-
-    if (horas === 0) {
-      return { formatada: `${minutos}min`, minutos: totalMinutos };
-    }
-    return { formatada: `${horas}h ${minutos.toString().padStart(2, '0')}m`, minutos: totalMinutos };
+    const now = new Date();
+    const formatter = new Intl.DateTimeFormat('pt-BR', {
+      timeZone: 'America/Sao_Paulo',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit'
+    });
+    const parts = formatter.formatToParts(now);
+    const day = parts.find(p => p.type === 'day')?.value || '01';
+    const month = parts.find(p => p.type === 'month')?.value || '01';
+    const year = parts.find(p => p.type === 'year')?.value || '2026';
+    return `${year}-${month}-${day}`;
   } catch {
+    return new Date().toISOString().split('T')[0];
+  }
+}
+
+// Helper para extrair minutos do dia a partir de "HH:MM" ou "DD/MM/YYYY HH:MM:SS"
+function getMinutesFromTimeStr(timeStr: string): number | null {
+  if (!timeStr || timeStr === '-') return null;
+  try {
+    const parts = timeStr.trim().split(' ');
+    const timePart = parts.length > 1 ? parts[parts.length - 1] : parts[0];
+    const timeElements = timePart.split(':');
+    if (timeElements.length < 2) return null;
+
+    const h = parseInt(timeElements[0], 10);
+    const m = parseInt(timeElements[1], 10);
+    if (isNaN(h) || isNaN(m)) return null;
+    return h * 60 + m;
+  } catch {
+    return null;
+  }
+}
+
+// Retorna os minutos do momento atual no fuso oficial de Brasília (America/Sao_Paulo)
+function getBrasiliaCurrentMinutes(): number {
+  try {
+    const now = new Date();
+    const formatter = new Intl.DateTimeFormat('pt-BR', {
+      timeZone: 'America/Sao_Paulo',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false
+    });
+    const parts = formatter.format(now).split(':');
+    const h = parseInt(parts[0], 10);
+    const m = parseInt(parts[1], 10);
+    if (!isNaN(h) && !isNaN(m)) {
+      return h * 60 + m;
+    }
+    return now.getHours() * 60 + now.getMinutes();
+  } catch {
+    const now = new Date();
+    return now.getHours() * 60 + now.getMinutes();
+  }
+}
+
+// Helper para calcular duração real entre o Início e o Sysdate (Horário de Brasília)
+function calculateDuration(inicioStr: string): { formatada: string; minutos: number } {
+  const minInicio = getMinutesFromTimeStr(inicioStr);
+  if (minInicio === null) {
     return { formatada: '-', minutos: 0 };
   }
+
+  // Sysdate no horário oficial de Brasília
+  const minRef = getBrasiliaCurrentMinutes();
+
+  let totalMinutos = minRef - minInicio;
+  if (totalMinutos < 0) {
+    // Virada de meia-noite (ex: logou às 23:30 e agora são 01:15)
+    totalMinutos += 24 * 60;
+  }
+
+  const horas = Math.floor(totalMinutos / 60);
+  const minutos = totalMinutos % 60;
+
+  if (horas === 0) {
+    return { formatada: `${minutos}min`, minutos: totalMinutos };
+  }
+  return { formatada: `${horas}h ${minutos.toString().padStart(2, '0')}m`, minutos: totalMinutos };
 }
 
 const UsuariosTasy: React.FC = () => {
@@ -129,9 +179,9 @@ const UsuariosTasy: React.FC = () => {
   const [selectedSetor, setSelectedSetor] = useState<string>('TODOS');
   const [selectedDuracao, setSelectedDuracao] = useState<string>('TODOS');
 
-  // Auto-refresh (segundos)
-  const [refreshInterval, setRefreshInterval] = useState<number>(30);
-  const [secondsUntilRefresh, setSecondsUntilRefresh] = useState<number>(30);
+  // Auto-refresh (segundos) - Padrão 5 minutos
+  const [refreshInterval, setRefreshInterval] = useState<number>(300);
+  const [secondsUntilRefresh, setSecondsUntilRefresh] = useState<number>(300);
 
   // Paginação & Ordenação
   const [currentPage, setCurrentPage] = useState<number>(1);
@@ -142,6 +192,18 @@ const UsuariosTasy: React.FC = () => {
   // Modal de Detalhes
   const [selectedUser, setSelectedUser] = useState<UsuarioTasy | null>(null);
   const [copiedField, setCopiedField] = useState<string | null>(null);
+
+  // Pico simultâneo de conexões do dia
+  const [peakToday, setPeakToday] = useState<{ count: number; time: string }>(() => {
+    try {
+      const todayKey = getTodayDateKey();
+      const stored = localStorage.getItem(PEAK_KEY_PREFIX + todayKey);
+      if (stored) {
+        return JSON.parse(stored);
+      }
+    } catch {}
+    return { count: 0, time: '-' };
+  });
 
   // Normalização blindada do retorno
   const normalizeData = (rawList: any[]): { list: UsuarioTasy[]; headerInfo: { hora: string | null; quant: number | null } } => {
@@ -180,7 +242,8 @@ const UsuariosTasy: React.FC = () => {
       const inicio = (rawInicio || '-').toString().trim();
       const fim = (rawFim || '-').toString().trim();
 
-      const { formatada: duracaoFormatada, minutos: duracaoMinutos } = calculateDuration(inicio, fim);
+      // Calcula o tempo conectado comparando o Início com o Sysdate (Horário oficial de Brasília)
+      const { formatada: duracaoFormatada, minutos: duracaoMinutos } = calculateDuration(inicio);
 
       list.push({
         login,
@@ -217,8 +280,35 @@ const UsuariosTasy: React.FC = () => {
         setUsuarios(list);
         setSnapshotHeader(headerInfo);
         
-        const nowTime = new Date().toLocaleTimeString('pt-BR');
+        const nowTime = new Date().toLocaleTimeString('pt-BR', {
+          timeZone: 'America/Sao_Paulo',
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit'
+        });
         setLastSyncTime(nowTime);
+        
+        // Atualiza e persiste o pico de conexões do dia
+        const totalConexoes = headerInfo.quant || list.length;
+        if (totalConexoes > 0) {
+          const todayKey = getTodayDateKey();
+          const shortTime = new Date().toLocaleTimeString('pt-BR', {
+            timeZone: 'America/Sao_Paulo',
+            hour: '2-digit',
+            minute: '2-digit'
+          });
+
+          setPeakToday(prev => {
+            if (totalConexoes >= prev.count) {
+              const newPeak = { count: totalConexoes, time: shortTime };
+              try {
+                localStorage.setItem(PEAK_KEY_PREFIX + todayKey, JSON.stringify(newPeak));
+              } catch {}
+              return newPeak;
+            }
+            return prev;
+          });
+        }
         
         try {
           sessionStorage.setItem(CACHE_KEY, JSON.stringify(list));
@@ -383,7 +473,7 @@ const UsuariosTasy: React.FC = () => {
   const exportCSV = () => {
     if (filteredUsuarios.length === 0) return;
 
-    const headers = ['Login', 'Nome Completo', 'Setor', 'Hora Inicio', 'Ultima Atividade', 'Tempo Conectado'];
+    const headers = ['Login', 'Nome Completo', 'Setor', 'Hora Inicio', 'Timeout / Expiracao', 'Tempo Conectado'];
     const rows = filteredUsuarios.map(u => [
       `"${u.login}"`,
       `"${u.nome}"`,
@@ -433,7 +523,7 @@ const UsuariosTasy: React.FC = () => {
 
     autoTable(doc, {
       startY: 32,
-      head: [['Login', 'Colaborador', 'Setor / Unidade', 'Início', 'Última Ativ.', 'Tempo Conectado']],
+      head: [['Login', 'Colaborador', 'Setor / Unidade', 'Início', 'Timeout / Exp.', 'Tempo Conectado']],
       body: tableData,
       theme: 'grid',
       headStyles: {
@@ -474,14 +564,8 @@ const UsuariosTasy: React.FC = () => {
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
                   Conexões Reais Tasy
                 </span>
-                {snapshotHeader.hora && (
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-medium bg-muted text-muted-foreground border border-border/40">
-                    <Calendar className="h-3 w-3" />
-                    Snapshot: {snapshotHeader.hora}
-                  </span>
-                )}
                 {lastSyncTime && (
-                  <span className="text-[11px] text-muted-foreground">
+                  <span className="text-[11px] text-muted-foreground font-sans">
                     • Sincronizado às {lastSyncTime}
                   </span>
                 )}
@@ -515,8 +599,10 @@ const UsuariosTasy: React.FC = () => {
               <option value={300}>Auto: a cada 5 min</option>
             </select>
             {refreshInterval > 0 && (
-              <span className="font-mono text-sky-600 dark:text-sky-400 font-semibold w-4 text-center">
-                {secondsUntilRefresh}s
+              <span className="font-mono text-sky-600 dark:text-sky-400 font-semibold min-w-[32px] text-center">
+                {secondsUntilRefresh >= 60 
+                  ? `${Math.floor(secondsUntilRefresh / 60)}:${(secondsUntilRefresh % 60).toString().padStart(2, '0')}`
+                  : `${secondsUntilRefresh}s`}
               </span>
             )}
           </div>
@@ -591,9 +677,9 @@ const UsuariosTasy: React.FC = () => {
             </span>
             <span className="text-xs text-muted-foreground font-sans">sessões ativas</span>
           </div>
-          <div className="mt-3 flex items-center gap-1.5 text-[11px] text-emerald-600 dark:text-emerald-400 font-medium">
-            <Activity className="h-3.5 w-3.5" />
-            <span>{snapshotHeader.hora ? `Snapshot às ${snapshotHeader.hora}` : 'Sessões ativas no Tasy'}</span>
+          <div className="mt-3 flex items-center gap-1.5 text-[11px] text-muted-foreground font-medium">
+            <Activity className="h-3.5 w-3.5 text-sky-500" />
+            <span>Sessões simultâneas ativas</span>
           </div>
         </div>
 
@@ -640,25 +726,25 @@ const UsuariosTasy: React.FC = () => {
           </div>
         </div>
 
-        {/* Total de Setores Ativos */}
+        {/* Pico Simultâneo do Dia */}
         <div className="relative overflow-hidden rounded-2xl border border-border/60 bg-gradient-to-br from-card to-card/50 p-5 shadow-sm hover:shadow-md transition-all">
           <div className="flex items-center justify-between">
             <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider font-sans">
-              Setores Conectados
+              Pico Simultâneo Hoje
             </p>
             <div className="p-2 rounded-lg bg-amber-500/10 text-amber-500">
-              <Layers className="h-4 w-4" />
+              <TrendingUp className="h-4 w-4" />
             </div>
           </div>
           <div className="mt-3 flex items-baseline gap-2">
             <span className="text-3xl font-extrabold tracking-tight text-foreground font-sans">
-              {kpis.totalSetores}
+              {peakToday.count > 0 ? peakToday.count : kpis.total}
             </span>
-            <span className="text-xs text-muted-foreground font-sans">unidades / postos</span>
+            <span className="text-xs text-muted-foreground font-sans">sessões máximas</span>
           </div>
-          <div className="mt-3 flex items-center gap-1.5 text-[11px] text-amber-600 dark:text-amber-400 font-medium">
-            <Building2 className="h-3.5 w-3.5" />
-            <span>Distribuição hospitalar</span>
+          <div className="mt-3 flex items-center gap-1.5 text-[11px] text-muted-foreground font-medium">
+            <TrendingUp className="h-3.5 w-3.5 text-amber-500" />
+            <span>{peakToday.time !== '-' ? `Registrado às ${peakToday.time}` : 'Recorde de conexões hoje'}</span>
           </div>
         </div>
       </div>
@@ -867,8 +953,8 @@ const UsuariosTasy: React.FC = () => {
                 <th className="p-4 cursor-pointer hover:text-foreground select-none text-center" onClick={() => handleSort('inicio')}>
                   Início {sortField === 'inicio' && (sortAsc ? '↑' : '↓')}
                 </th>
-                <th className="p-4 cursor-pointer hover:text-foreground select-none text-center" onClick={() => handleSort('fim')}>
-                  Última Atividade {sortField === 'fim' && (sortAsc ? '↑' : '↓')}
+                <th className="p-4 cursor-pointer hover:text-foreground select-none text-center" onClick={() => handleSort('fim')} title="Limite de inatividade / Horário programado de timeout">
+                  Timeout / Expiração {sortField === 'fim' && (sortAsc ? '↑' : '↓')}
                 </th>
                 <th className="p-4 cursor-pointer hover:text-foreground select-none" onClick={() => handleSort('duracaoMinutos')}>
                   Tempo Conectado {sortField === 'duracaoMinutos' && (sortAsc ? '↑' : '↓')}
@@ -949,9 +1035,9 @@ const UsuariosTasy: React.FC = () => {
                       </span>
                     </td>
 
-                    {/* Fim / Última Atividade */}
+                    {/* Fim / Timeout */}
                     <td className="p-4 text-center">
-                      <span className="font-mono text-xs text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20 font-medium">
+                      <span className="font-mono text-xs text-amber-600 dark:text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20 font-medium" title="Horário limite de timeout por inatividade">
                         {user.fim}
                       </span>
                     </td>
@@ -1086,12 +1172,12 @@ const UsuariosTasy: React.FC = () => {
               </div>
 
               <div className="p-3.5 rounded-xl bg-muted/40 border border-border/50 space-y-1">
-                <span className="text-muted-foreground text-[11px] block">Última Atividade Registrada</span>
-                <span className="font-mono text-emerald-600 dark:text-emerald-400 font-semibold block text-sm">{selectedUser.fim}</span>
+                <span className="text-muted-foreground text-[11px] block">Limite de Inatividade (Timeout Tasy)</span>
+                <span className="font-mono text-amber-600 dark:text-amber-400 font-semibold block text-sm">{selectedUser.fim}</span>
               </div>
 
               <div className="col-span-2 p-3.5 rounded-xl bg-sky-500/10 border border-sky-500/20 space-y-1">
-                <span className="text-sky-700 dark:text-sky-300 text-[11px] block font-medium">Tempo Total Logado</span>
+                <span className="text-sky-700 dark:text-sky-300 text-[11px] block font-medium">Tempo Conectado (Desde o Início)</span>
                 <span className="font-mono font-bold text-sky-800 dark:text-sky-200 text-base block">{selectedUser.duracaoFormatada}</span>
               </div>
             </div>

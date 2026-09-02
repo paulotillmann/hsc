@@ -709,7 +709,7 @@ const Sidebar: React.FC = () => {
         })()}
 
         {userModules
-          .filter(m => m.slug !== 'configuracoes' && m.slug !== 'pacientes-internados' && m.slug !== 'centro-cirurgico' && m.slug !== 'pronto-atendimento' && m.slug !== 'plantao-ti' && m.slug !== 'ordem-servico' && m.slug !== 'dashboard' && m.slug !== 'holerites' && m.slug !== 'informes' && m.slug !== 'notificacoes' && m.slug !== 'taxa-ocupacao' && m.slug !== 'internato-secretaria' && m.slug !== 'internato-notas' && m.slug !== 'internato-agenda' && m.slug !== 'equipamentos' && m.slug !== 'custos-ti' && m.slug !== 'gestao-novidades') // Configurações fica na área inferior, e assistenciais, TI, RH, notificações, taxas, internato e conecta_saude ficam agrupados
+          .filter(m => m.slug !== 'configuracoes' && m.slug !== 'pacientes-internados' && m.slug !== 'centro-cirurgico' && m.slug !== 'pronto-atendimento' && m.slug !== 'plantao-ti' && m.slug !== 'ordem-servico' && m.slug !== 'dashboard' && m.slug !== 'holerites' && m.slug !== 'informes' && m.slug !== 'notificacoes' && m.slug !== 'taxa-ocupacao' && m.slug !== 'internato-secretaria' && m.slug !== 'internato-notas' && m.slug !== 'internato-agenda' && m.slug !== 'equipamentos' && m.slug !== 'custos-ti' && m.slug !== 'usuarios-tasy' && m.slug !== 'gestao-novidades') // Configurações fica na área inferior, e assistenciais, TI, RH, notificações, taxas, internato e conecta_saude ficam agrupados
           .map(module => {
 
             if (module.slug === 'recepcao') {
