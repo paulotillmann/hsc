@@ -1006,7 +1006,7 @@ const UsuariosTasy: React.FC = () => {
 
               <div className="h-[240px] w-full pt-2">
                 <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={historicoSlots} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                  <AreaChart data={historicoSlots} margin={{ top: 32, right: 15, left: -20, bottom: 0 }}>
                     <defs>
                       <linearGradient id="colorQuant" x1="0" y1="0" x2="0" y2="1">
                         <stop offset="5%" stopColor="#6366f1" stopOpacity={0.4}/>
@@ -1057,6 +1057,46 @@ const UsuariosTasy: React.FC = () => {
                       strokeWidth={2.5}
                       fillOpacity={1} 
                       fill="url(#colorQuant)" 
+                      dot={(props: any) => {
+                        const { cx, cy, payload, index } = props;
+                        if (!payload || !payload.isPeak || payload.quant === 0) {
+                          return <React.Fragment key={`dot-${index}`} />;
+                        }
+
+                        return (
+                          <g key={`peak-dot-${index}`}>
+                            {/* Halo pulsante */}
+                            <circle cx={cx} cy={cy} r={14} fill="#f59e0b" opacity={0.3} />
+                            {/* Ponto central */}
+                            <circle cx={cx} cy={cy} r={6} fill="#f59e0b" stroke="#ffffff" strokeWidth={2} />
+                            {/* Pin / Badge acima do ponto com ícone de fogo e valor */}
+                            <g transform={`translate(${cx}, ${cy - 24})`}>
+                              <rect
+                                x="-32"
+                                y="-12"
+                                width="64"
+                                height="20"
+                                rx="10"
+                                fill="#f59e0b"
+                                stroke="#ffffff"
+                                strokeWidth="1.5"
+                              />
+                              <text
+                                x="0"
+                                y="2"
+                                fill="#ffffff"
+                                textAnchor="middle"
+                                fontSize="10"
+                                fontWeight="bold"
+                                fontFamily="sans-serif"
+                              >
+                                🔥 {payload.quant}
+                              </text>
+                            </g>
+                          </g>
+                        );
+                      }}
+                      activeDot={{ r: 6, fill: '#6366f1', stroke: '#ffffff', strokeWidth: 2 }}
                     />
                   </AreaChart>
                 </ResponsiveContainer>
