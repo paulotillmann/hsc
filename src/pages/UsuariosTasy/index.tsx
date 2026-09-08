@@ -865,17 +865,26 @@ const UsuariosTasy: React.FC = () => {
           const percentOcupacao = Math.min(Math.round((ativas / totalLicencas) * 100), 100);
           const livres = Math.max(totalLicencas - ativas, 0);
 
-          const statusColor = percentOcupacao >= 90
-            ? 'text-rose-500 bg-rose-500/10 border-rose-500/20'
-            : percentOcupacao >= 75
-              ? 'text-amber-500 bg-amber-500/10 border-amber-500/20'
-              : 'text-indigo-500 bg-indigo-500/10 border-indigo-500/20';
+          // Esquema de cores: < 50% Verde | 50% a 90% Amarelo/Âmbar | > 90% Vermelho
+          const isCritical = percentOcupacao > 90;
+          const isWarning = percentOcupacao >= 50 && percentOcupacao <= 90;
 
-          const barColor = percentOcupacao >= 90
-            ? 'bg-rose-500'
-            : percentOcupacao >= 75
-              ? 'bg-amber-500'
-              : 'bg-indigo-500';
+          const statusColor = isCritical
+            ? 'text-rose-500 bg-rose-500/10 border-rose-500/20' 
+            : isWarning 
+              ? 'text-amber-500 bg-amber-500/10 border-amber-500/20' 
+              : 'text-emerald-500 bg-emerald-500/10 border-emerald-500/20';
+
+          const barColor = isCritical
+            ? 'bg-rose-500' 
+            : isWarning 
+              ? 'bg-amber-500' 
+              : 'bg-emerald-500';
+
+          // Ângulo do ponteiro do velocímetro (-90deg a +90deg)
+          const needleAngle = (percentOcupacao / 100) * 180 - 90;
+          // Arco preenchido (comprimento do semi-círculo de raio 14 = ~44px)
+          const arcLength = (percentOcupacao / 100) * 44;
 
           return (
             <div className="relative overflow-hidden rounded-2xl border border-border/60 bg-gradient-to-br from-card to-card/50 p-5 shadow-sm hover:shadow-md transition-all">
@@ -883,11 +892,52 @@ const UsuariosTasy: React.FC = () => {
                 <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider font-sans">
                   Ocupação de Licenças
                 </p>
-                <div className={`p-2 rounded-lg border ${statusColor}`}>
-                  <Gauge className="h-4 w-4" />
+                <div 
+                  className={`p-1.5 rounded-lg border ${statusColor} flex items-center justify-center`} 
+                  title={`Velocímetro em tempo real: ${percentOcupacao}% de uso`}
+                >
+                  {/* Velocímetro Dinâmico SVG */}
+                  <svg viewBox="0 0 40 24" className="w-6 h-4 overflow-visible">
+                    {/* Arco de Fundo Cinza */}
+                    <path 
+                      d="M 6 20 A 14 14 0 0 1 34 20" 
+                      fill="none" 
+                      stroke="currentColor" 
+                      strokeWidth="3" 
+                      opacity="0.2" 
+                      strokeLinecap="round" 
+                    />
+                    {/* Arco Preenchido Dinâmico com a Porcentagem */}
+                    <path 
+                      d="M 6 20 A 14 14 0 0 1 34 20" 
+                      fill="none" 
+                      stroke="currentColor" 
+                      strokeWidth="3" 
+                      strokeDasharray={`${arcLength} 100`}
+                      strokeLinecap="round" 
+                      className="transition-all duration-700 ease-out"
+                    />
+                    {/* Ponteiro Giratório Dinâmico */}
+                    <line 
+                      x1="20" 
+                      y1="20" 
+                      x2="20" 
+                      y2="7" 
+                      stroke="currentColor" 
+                      strokeWidth="2.2" 
+                      strokeLinecap="round"
+                      style={{ 
+                        transformOrigin: '20px 20px', 
+                        transform: `rotate(${needleAngle}deg)`,
+                        transition: 'transform 0.8s cubic-bezier(0.4, 0, 0.2, 1)'
+                      }} 
+                    />
+                    {/* Hub Central */}
+                    <circle cx="20" cy="20" r="2.5" fill="currentColor" />
+                  </svg>
                 </div>
               </div>
-
+              
               <div className="mt-3 flex items-baseline gap-2">
                 <span className="text-3xl font-extrabold tracking-tight text-foreground font-sans">
                   {percentOcupacao}%
@@ -899,7 +949,7 @@ const UsuariosTasy: React.FC = () => {
 
               {/* Barra de Progresso de Ocupação */}
               <div className="mt-2.5 w-full h-1.5 rounded-full bg-muted overflow-hidden">
-                <div
+                <div 
                   className={`h-full rounded-full transition-all duration-500 ${barColor}`}
                   style={{ width: `${percentOcupacao}%` }}
                 />
