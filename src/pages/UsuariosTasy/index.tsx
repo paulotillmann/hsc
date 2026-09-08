@@ -20,7 +20,11 @@ import {
   Calendar,
   AlertTriangle,
   RotateCcw,
-  TrendingUp
+  TrendingUp,
+  History,
+  BarChart3,
+  Flame,
+  Sparkles
 } from 'lucide-react';
 import { 
   ResponsiveContainer, 
@@ -32,7 +36,9 @@ import {
   PieChart, 
   Pie, 
   Cell, 
-  CartesianGrid 
+  CartesianGrid,
+  AreaChart,
+  Area
 } from 'recharts';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -50,9 +56,35 @@ export interface UsuarioTasy {
   [key: string]: any;
 }
 
+export interface SlotHistorico {
+  diaMes: string;
+  hora: string;
+  quant: number;
+  isPeak?: boolean;
+  isCurrent?: boolean;
+}
+
 const CACHE_KEY = 'hsc_tasy_users_cache';
 const CACHE_TIME_KEY = 'hsc_tasy_users_cache_time';
+const CACHE_HISTORICO_KEY = 'hsc_tasy_historico_slots_cache';
 const PEAK_KEY_PREFIX = 'hsc_tasy_peak_concurrent_';
+
+const MESES_ABREV = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+
+function formatDiaMesExtenso(diaMesStr: string): string {
+  if (!diaMesStr) return '-';
+  const clean = diaMesStr.trim();
+  if (clean.includes('/')) {
+    const parts = clean.split('/');
+    if (parts.length === 2) {
+      const mNum = parseInt(parts[1], 10);
+      if (!isNaN(mNum) && mNum >= 1 && mNum <= 12) {
+        return `${parts[0].padStart(2, '0')}/${MESES_ABREV[mNum - 1]}`;
+      }
+    }
+  }
+  return clean;
+}
 
 const COLORS = [
   '#0284c7', '#0d9488', '#8b5cf6', '#f59e0b', '#ec4899', 
@@ -247,19 +279,30 @@ const UsuariosTasy: React.FC = () => {
     return { count: 0, time: '-' };
   });
 
+  // Histórico de Conexões por Intervalo de 10 em 10 minutos (Padrão Tasy)
+  const [historicoSlots, setHistoricoSlots] = useState<SlotHistorico[]>(() => {
+    try {
+      const cached = sessionStorage.getItem(CACHE_HISTORICO_KEY);
+      if (cached) return JSON.parse(cached);
+    } catch {}
+    return [];
+  });
+
   // Normalização blindada do retorno
   const normalizeData = (rawList: any[]): { 
     list: UsuarioTasy[]; 
-    headerInfo: { hora: string | null; quant: number | null; picoQtd?: number | null; picoHora?: string | null } 
+    headerInfo: { hora: string | null; quant: number | null; picoQtd?: number | null; picoHora?: string | null };
+    slots: SlotHistorico[];
   } => {
     if (!Array.isArray(rawList) || rawList.length === 0) {
-      return { list: [], headerInfo: { hora: null, quant: 0 } };
+      return { list: [], headerInfo: { hora: null, quant: 0 }, slots: [] };
     }
 
     let snapshotHora: string | null = null;
     let quantTotal: number | null = null;
     let picoQtd: number | null = null;
     let picoHora: string | null = null;
+    let parsedSlots: SlotHistorico[] = [];
 
     const first = rawList[0];
     if (first) {
@@ -272,6 +315,35 @@ const UsuariosTasy: React.FC = () => {
 
       if (itemFirst.PICO_HORA) picoHora = String(itemFirst.PICO_HORA).trim();
       else if (itemFirst.pico_hora) picoHora = String(itemFirst.pico_hora).trim();
+
+      // 1. Parser de HISTORICO_SLOTS (formato string concatenada: "08/09 08:40=123;08/09 08:50=128;...")
+      const rawHistoricoStr = itemFirst.HISTORICO_SLOTS || itemFirst.historico_slots;
+      if (rawHistoricoStr && typeof rawHistoricoStr === 'string') {
+        const entries = rawHistoricoStr.split(';').filter(Boolean);
+        parsedSlots = entries.map(entry => {
+          const [dtHora, countStr] = entry.split('=');
+          const [dt, hr] = (dtHora || '').trim().split(' ');
+          const count = parseInt(countStr, 10) || 0;
+          return {
+            diaMes: formatDiaMesExtenso(dt || ''),
+            hora: hr || '-',
+            quant: count
+          };
+        });
+      } else if (itemFirst.HISTORICO_JSON || itemFirst.historico_json) {
+        // 2. Parser caso venha em formato JSON array
+        try {
+          const rawJson = itemFirst.HISTORICO_JSON || itemFirst.historico_json;
+          const arr = typeof rawJson === 'string' ? JSON.parse(rawJson) : rawJson;
+          if (Array.isArray(arr)) {
+            parsedSlots = arr.map(item => ({
+              diaMes: formatDiaMesExtenso(item.data || item.diaMes || item['Dia/Mês'] || ''),
+              hora: item.hora || item.hour || '-',
+              quant: Number(item.quant || item.count || item.value || 0)
+            }));
+          }
+        } catch {}
+      }
     }
 
     const list: UsuarioTasy[] = [];
@@ -312,6 +384,16 @@ const UsuariosTasy: React.FC = () => {
       });
     });
 
+    // Identifica pico e slot atual no histórico
+    if (parsedSlots.length > 0) {
+      let maxVal = Math.max(...parsedSlots.map(s => s.quant));
+      parsedSlots = parsedSlots.map((s, idx) => ({
+        ...s,
+        isPeak: s.quant === maxVal && maxVal > 0,
+        isCurrent: idx === parsedSlots.length - 1
+      }));
+    }
+
     return { 
       list, 
       headerInfo: { 
@@ -319,7 +401,8 @@ const UsuariosTasy: React.FC = () => {
         quant: quantTotal || list.length,
         picoQtd,
         picoHora
-      } 
+      },
+      slots: parsedSlots
     };
   };
 
@@ -336,11 +419,18 @@ const UsuariosTasy: React.FC = () => {
       console.log('[UsuariosTasy] Resposta recebida:', Array.isArray(data) ? `${data.length} itens` : typeof data);
       
       if (Array.isArray(data) && data.length > 0) {
-        const { list, headerInfo } = normalizeData(data);
-        console.log(`[UsuariosTasy] ${list.length} usuários normalizados com sucesso.`);
+        const { list, headerInfo, slots } = normalizeData(data);
+        console.log(`[UsuariosTasy] ${list.length} usuários e ${slots.length} intervalos de 10 min normalizados.`);
         
         setUsuarios(list);
         setSnapshotHeader(headerInfo);
+        
+        if (slots.length > 0) {
+          setHistoricoSlots(slots);
+          try {
+            sessionStorage.setItem(CACHE_HISTORICO_KEY, JSON.stringify(slots));
+          } catch {}
+        }
         
         const nowTime = new Date().toLocaleTimeString('pt-BR', {
           timeZone: 'America/Sao_Paulo',
@@ -959,6 +1049,201 @@ const UsuariosTasy: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* ── HISTÓRICO DE CONEXÕES POR INTERVALO (10 EM 10 MIN - PADRÃO TASY) ── */}
+      <div className="rounded-2xl border border-border/60 bg-card p-6 shadow-sm space-y-5">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-border/40 pb-4">
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 rounded-xl bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20">
+              <History className="h-5 w-5" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <h2 className="text-base font-bold text-foreground font-sans">
+                  Histórico de Conexões por Intervalo (10 em 10 min)
+                </h2>
+                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20">
+                  <BarChart3 className="h-3 w-3" />
+                  Padrão Relatório Tasy
+                </span>
+              </div>
+              <p className="text-xs text-muted-foreground font-sans mt-0.5">
+                Fotografia histórica das conexões ativas calculadas em janelas discretas de 10 minutos ao longo do dia
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 flex-wrap">
+            {historicoSlots.length > 0 && (
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold bg-amber-500/10 text-amber-700 dark:text-amber-300 border border-amber-500/20">
+                <Flame className="h-3.5 w-3.5 text-amber-500" />
+                Pico: {peakToday.count > 0 ? `${peakToday.count} sessões (${peakToday.time})` : `${Math.max(...historicoSlots.map(s => s.quant))} sessões`}
+              </span>
+            )}
+            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold bg-muted text-muted-foreground border border-border">
+              <Clock className="h-3.5 w-3.5" />
+              {historicoSlots.length} intervalos hoje
+            </span>
+          </div>
+        </div>
+
+        {historicoSlots.length > 0 ? (
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+            {/* Lado Esquerdo: Gráfico de Tendência ao Longo do Dia */}
+            <div className="lg:col-span-7 space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold text-muted-foreground font-sans uppercase tracking-wider">
+                  Curva de Conexões no Dia (10 em 10 min)
+                </span>
+                <span className="text-[11px] text-muted-foreground font-mono">
+                  00:00 → {historicoSlots[historicoSlots.length - 1]?.hora || 'Agora'}
+                </span>
+              </div>
+
+              <div className="h-[240px] w-full pt-2">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={historicoSlots} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                    <defs>
+                      <linearGradient id="colorQuant" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#6366f1" stopOpacity={0.4}/>
+                        <stop offset="95%" stopColor="#6366f1" stopOpacity={0.0}/>
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" opacity={0.15} vertical={false} />
+                    <XAxis 
+                      dataKey="hora" 
+                      tick={{ fontSize: 10 }}
+                      interval="preserveStartEnd"
+                      minTickGap={20}
+                    />
+                    <YAxis 
+                      tick={{ fontSize: 10 }}
+                      domain={[0, 'auto']}
+                    />
+                    <RechartsTooltip 
+                      content={({ active, payload }) => {
+                        if (active && payload && payload.length) {
+                          const data = payload[0].payload as SlotHistorico;
+                          return (
+                            <div className="bg-slate-900/95 border border-slate-700/60 backdrop-blur-md px-3.5 py-2.5 rounded-xl shadow-xl text-white text-xs space-y-1">
+                              <div className="flex items-center gap-2">
+                                <Calendar className="h-3.5 w-3.5 text-indigo-400" />
+                                <p className="font-bold text-slate-100">{data.diaMes} às {data.hora}</p>
+                              </div>
+                              <div className="flex items-center justify-between gap-4 text-slate-300">
+                                <span>Conexões Ativas:</span>
+                                <span className="font-bold text-indigo-400 font-mono text-sm">{data.quant} usuários</span>
+                              </div>
+                              {data.isPeak && (
+                                <div className="inline-flex items-center gap-1 text-[11px] text-amber-300 font-semibold mt-0.5">
+                                  <Flame className="h-3 w-3 text-amber-400" />
+                                  Maior pico do dia!
+                                </div>
+                              )}
+                            </div>
+                          );
+                        }
+                        return null;
+                      }}
+                    />
+                    <Area 
+                      type="monotone" 
+                      dataKey="quant" 
+                      stroke="#6366f1" 
+                      strokeWidth={2.5}
+                      fillOpacity={1} 
+                      fill="url(#colorQuant)" 
+                    />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+
+            {/* Lado Direito: Tabela Idêntica ao Relatório do Tasy */}
+            <div className="lg:col-span-5 flex flex-col space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold text-muted-foreground font-sans uppercase tracking-wider">
+                  Tabela Oficial de Intervalos
+                </span>
+                <span className="text-[11px] text-muted-foreground">
+                  Mais recentes no topo
+                </span>
+              </div>
+
+              <div className="border border-border/60 rounded-xl overflow-hidden bg-background/40 max-h-[255px] overflow-y-auto custom-scrollbar shadow-inner">
+                <table className="w-full text-xs font-sans text-left border-collapse">
+                  <thead className="sticky top-0 z-10 bg-muted/90 backdrop-blur-sm text-muted-foreground font-semibold uppercase tracking-wider text-[10px] border-b border-border">
+                    <tr>
+                      <th className="py-2.5 px-3">Dia/Mês</th>
+                      <th className="py-2.5 px-3">Hora</th>
+                      <th className="py-2.5 px-3 text-right">Quant.</th>
+                      <th className="py-2.5 px-3 text-center">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border/40">
+                    {[...historicoSlots].reverse().map((slot, idx) => {
+                      const maxQuant = Math.max(...historicoSlots.map(s => s.quant), 1);
+                      const percentOfMax = Math.round((slot.quant / maxQuant) * 100);
+
+                      return (
+                        <tr 
+                          key={idx}
+                          className={`transition-colors hover:bg-muted/50 ${
+                            slot.isPeak 
+                              ? 'bg-amber-500/10 font-medium' 
+                              : slot.isCurrent 
+                                ? 'bg-sky-500/5' 
+                                : ''
+                          }`}
+                        >
+                          <td className="py-2 px-3 text-foreground font-mono">
+                            {slot.diaMes}
+                          </td>
+                          <td className="py-2 px-3 font-mono font-bold text-foreground">
+                            {slot.hora}
+                          </td>
+                          <td className="py-2 px-3 text-right font-mono font-extrabold text-foreground text-sm">
+                            {slot.quant}
+                          </td>
+                          <td className="py-2 px-3 text-center">
+                            {slot.isPeak ? (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-500/30">
+                                <Flame className="h-2.5 w-2.5" />
+                                Pico
+                              </span>
+                            ) : slot.isCurrent ? (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30">
+                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                                Atual
+                              </span>
+                            ) : (
+                              <div className="w-16 mx-auto bg-muted rounded-full h-1.5 overflow-hidden" title={`${percentOfMax}% do pico`}>
+                                <div 
+                                  className="bg-indigo-500/70 h-full rounded-full" 
+                                  style={{ width: `${percentOfMax}%` }}
+                                />
+                              </div>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="flex flex-col items-center justify-center p-8 rounded-xl border border-dashed border-border/80 bg-background/30 text-center space-y-2">
+            <History className="h-8 w-8 text-muted-foreground/60" />
+            <p className="text-sm font-semibold text-foreground">Aguardando dados dos intervalos de 10 em 10 minutos</p>
+            <p className="text-xs text-muted-foreground max-w-md">
+              Assim que o script atualizado do Oracle for executado no n8n, a linha do tempo e a tabela oficial do Tasy aparecerão aqui automaticamente.
+            </p>
+          </div>
+        )}
+      </div>
+
 
       {/* ── FILTROS E BUSCA ────────────────────────────────────────────────── */}
       <div className="rounded-2xl border border-border/60 bg-card p-4 shadow-sm space-y-3">
