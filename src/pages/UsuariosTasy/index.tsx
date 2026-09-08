@@ -24,7 +24,8 @@ import {
   History,
   BarChart3,
   Flame,
-  Sparkles
+  Sparkles,
+  Gauge
 } from 'lucide-react';
 import { 
   ResponsiveContainer, 
@@ -861,26 +862,60 @@ const UsuariosTasy: React.FC = () => {
           </div>
         </div>
 
-        {/* Setor com Mais Usuários */}
-        <div className="relative overflow-hidden rounded-2xl border border-border/60 bg-gradient-to-br from-card to-card/50 p-5 shadow-sm hover:shadow-md transition-all">
-          <div className="flex items-center justify-between">
-            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider font-sans">
-              Setor com Mais Sessões
-            </p>
-            <div className="p-2 rounded-lg bg-purple-500/10 text-purple-500">
-              <Building2 className="h-4 w-4" />
+        {/* Capacidade / Ocupação de Licenças Tasy (Total: 150) */}
+        {(() => {
+          const totalLicencas = 150;
+          const ativas = kpis.total;
+          const percentOcupacao = Math.min(Math.round((ativas / totalLicencas) * 100), 100);
+          const livres = Math.max(totalLicencas - ativas, 0);
+
+          const statusColor = percentOcupacao >= 90 
+            ? 'text-rose-500 bg-rose-500/10 border-rose-500/20' 
+            : percentOcupacao >= 75 
+              ? 'text-amber-500 bg-amber-500/10 border-amber-500/20' 
+              : 'text-indigo-500 bg-indigo-500/10 border-indigo-500/20';
+
+          const barColor = percentOcupacao >= 90 
+            ? 'bg-rose-500' 
+            : percentOcupacao >= 75 
+              ? 'bg-amber-500' 
+              : 'bg-indigo-500';
+
+          return (
+            <div className="relative overflow-hidden rounded-2xl border border-border/60 bg-gradient-to-br from-card to-card/50 p-5 shadow-sm hover:shadow-md transition-all">
+              <div className="flex items-center justify-between">
+                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider font-sans">
+                  Ocupação de Licenças
+                </p>
+                <div className={`p-2 rounded-lg border ${statusColor}`}>
+                  <Gauge className="h-4 w-4" />
+                </div>
+              </div>
+              
+              <div className="mt-3 flex items-baseline gap-2">
+                <span className="text-3xl font-extrabold tracking-tight text-foreground font-sans">
+                  {percentOcupacao}%
+                </span>
+                <span className="text-xs text-muted-foreground font-sans">
+                  ({ativas} de {totalLicencas})
+                </span>
+              </div>
+
+              {/* Barra de Progresso de Ocupação */}
+              <div className="mt-2.5 w-full h-1.5 rounded-full bg-muted overflow-hidden">
+                <div 
+                  className={`h-full rounded-full transition-all duration-500 ${barColor}`}
+                  style={{ width: `${percentOcupacao}%` }}
+                />
+              </div>
+
+              <div className="mt-2.5 flex items-center justify-between text-[11px] text-muted-foreground font-medium">
+                <span>{livres} licenças disponíveis</span>
+                <span className="font-semibold text-foreground/80 font-mono">150 contratadas</span>
+              </div>
             </div>
-          </div>
-          <div className="mt-3">
-            <span className="text-lg font-bold tracking-tight text-foreground font-sans block truncate" title={kpis.topSetor}>
-              {kpis.topSetor}
-            </span>
-          </div>
-          <div className="mt-4 flex items-center gap-1.5 text-[11px] text-muted-foreground font-medium">
-            <Layers className="h-3.5 w-3.5 text-purple-500" />
-            <span>Maior concentração de acessos</span>
-          </div>
-        </div>
+          );
+        })()}
 
         {/* Média de Tempo Conectado */}
         <div className="relative overflow-hidden rounded-2xl border border-border/60 bg-gradient-to-br from-card to-card/50 p-5 shadow-sm hover:shadow-md transition-all">
