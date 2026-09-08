@@ -79,11 +79,33 @@ function getTodayDateKey(): string {
   }
 }
 
-// Helper para extrair minutos do dia a partir de "HH:MM" ou "DD/MM/YYYY HH:MM:SS"
-function getMinutesFromTimeStr(timeStr: string): number | null {
-  if (!timeStr || timeStr === '-') return null;
+// Helper para extrair minutos do dia a partir de "HH:MM", "DD/MM/YYYY HH:MM:SS", ISO ou timestamp
+function getMinutesFromTimeStr(timeVal: any): number | null {
+  if (!timeVal || timeVal === '-') return null;
   try {
-    const parts = timeStr.trim().split(' ');
+    if (typeof timeVal === 'object' && timeVal instanceof Date) {
+      return timeVal.getHours() * 60 + timeVal.getMinutes();
+    }
+
+    const str = String(timeVal).trim();
+
+    // Se for formato ISO ex: "2026-09-08T10:30:00" ou contiver "T"
+    if (str.includes('T')) {
+      const d = new Date(str);
+      if (!isNaN(d.getTime())) {
+        const formatter = new Intl.DateTimeFormat('pt-BR', {
+          timeZone: 'America/Sao_Paulo',
+          hour: '2-digit',
+          minute: '2-digit',
+          hour12: false
+        });
+        const [h, m] = formatter.format(d).split(':').map(Number);
+        return h * 60 + m;
+      }
+    }
+
+    // Se for "DD/MM/YYYY HH:MM:SS" ou "HH:MM:SS"
+    const parts = str.split(' ');
     const timePart = parts.length > 1 ? parts[parts.length - 1] : parts[0];
     const timeElements = timePart.split(':');
     if (timeElements.length < 2) return null;
@@ -94,6 +116,26 @@ function getMinutesFromTimeStr(timeStr: string): number | null {
     return h * 60 + m;
   } catch {
     return null;
+  }
+}
+
+// Helper para formatar a data/hora de exibição amigável
+function formatTimeDisplay(timeVal: any): string {
+  if (!timeVal || timeVal === '-') return '-';
+  try {
+    if (typeof timeVal === 'object' && timeVal instanceof Date) {
+      return timeVal.toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit' });
+    }
+    const str = String(timeVal).trim();
+    if (str.includes('T')) {
+      const d = new Date(str);
+      if (!isNaN(d.getTime())) {
+        return d.toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      }
+    }
+    return str;
+  } catch {
+    return String(timeVal);
   }
 }
 
@@ -206,18 +248,30 @@ const UsuariosTasy: React.FC = () => {
   });
 
   // Normalização blindada do retorno
-  const normalizeData = (rawList: any[]): { list: UsuarioTasy[]; headerInfo: { hora: string | null; quant: number | null } } => {
+  const normalizeData = (rawList: any[]): { 
+    list: UsuarioTasy[]; 
+    headerInfo: { hora: string | null; quant: number | null; picoQtd?: number | null; picoHora?: string | null } 
+  } => {
     if (!Array.isArray(rawList) || rawList.length === 0) {
       return { list: [], headerInfo: { hora: null, quant: 0 } };
     }
 
     let snapshotHora: string | null = null;
     let quantTotal: number | null = null;
+    let picoQtd: number | null = null;
+    let picoHora: string | null = null;
 
     const first = rawList[0];
     if (first) {
-      if (first['Dia/Mês Hora']) snapshotHora = String(first['Dia/Mês Hora']).trim();
-      if (first['Quant.'] !== undefined && first['Quant.'] !== null) quantTotal = Number(first['Quant.']);
+      const itemFirst = first.json && typeof first.json === 'object' ? first.json : first;
+      if (itemFirst['Dia/Mês Hora']) snapshotHora = String(itemFirst['Dia/Mês Hora']).trim();
+      if (itemFirst['Quant.'] !== undefined && itemFirst['Quant.'] !== null) quantTotal = Number(itemFirst['Quant.']);
+      
+      if (itemFirst.PICO_QTD !== undefined && itemFirst.PICO_QTD !== null) picoQtd = Number(itemFirst.PICO_QTD);
+      else if (itemFirst.pico_qtd !== undefined && itemFirst.pico_qtd !== null) picoQtd = Number(itemFirst.pico_qtd);
+
+      if (itemFirst.PICO_HORA) picoHora = String(itemFirst.PICO_HORA).trim();
+      else if (itemFirst.pico_hora) picoHora = String(itemFirst.pico_hora).trim();
     }
 
     const list: UsuarioTasy[] = [];
@@ -227,11 +281,11 @@ const UsuariosTasy: React.FC = () => {
       
       const item = raw.json && typeof raw.json === 'object' ? raw.json : raw;
 
-      const rawNome = item.NOME || item.nome || item.NM_USUARIO || item.nm_usuario || item.name;
-      const rawLogin = item.LOGIN || item.login || item.CD_USUARIO || item.cd_usuario || item.usuario || item.user;
-      const rawSetor = item.DS_SETOR || item.ds_setor || item.setor || item.departamento || item.unidade || item.posto;
-      const rawInicio = item['Início'] || item.inicio || item.INICIO || item.hr_inicio || item.dt_inicio;
-      const rawFim = item['Fim'] || item.fim || item.FIM || item.hr_fim || item.dt_fim;
+      const rawNome = item.NM_SUBJECT || item.nm_subject || item.NOME || item.nome || item.NM_USUARIO || item.nm_usuario || item.name;
+      const rawLogin = item.DS_LOGIN || item.ds_login || item.LOGIN || item.login || item.CD_USUARIO || item.cd_usuario || item.usuario || item.user;
+      const rawSetor = item.DS_SETOR || item.ds_setor || item.setor || item.departamento || item.unidade || item.posto || item.NM_SETOR || item.nm_setor;
+      const rawInicio = item.DT_CREATION || item.dt_creation || item['Início'] || item.inicio || item.INICIO || item.hr_inicio || item.dt_inicio;
+      const rawFim = item.DT_EXPIRATION || item.dt_expiration || item['Fim'] || item.fim || item.FIM || item.hr_fim || item.dt_fim;
 
       // Pula somente registros vazios que não tenham nem nome nem login
       if (!rawNome && !rawLogin) return;
@@ -239,11 +293,11 @@ const UsuariosTasy: React.FC = () => {
       const nome = (rawNome || rawLogin || `Usuário ${idx + 1}`).toString().trim();
       const login = (rawLogin || '-').toString().trim();
       const setor = (rawSetor || 'Não Informado').toString().trim();
-      const inicio = (rawInicio || '-').toString().trim();
-      const fim = (rawFim || '-').toString().trim();
+      const inicio = formatTimeDisplay(rawInicio);
+      const fim = formatTimeDisplay(rawFim);
 
       // Calcula o tempo conectado comparando o Início com o Sysdate (Horário oficial de Brasília)
-      const { formatada: duracaoFormatada, minutos: duracaoMinutos } = calculateDuration(inicio);
+      const { formatada: duracaoFormatada, minutos: duracaoMinutos } = calculateDuration(rawInicio);
 
       list.push({
         login,
@@ -258,7 +312,15 @@ const UsuariosTasy: React.FC = () => {
       });
     });
 
-    return { list, headerInfo: { hora: snapshotHora, quant: quantTotal || list.length } };
+    return { 
+      list, 
+      headerInfo: { 
+        hora: snapshotHora, 
+        quant: quantTotal || list.length,
+        picoQtd,
+        picoHora
+      } 
+    };
   };
 
   const loadData = useCallback(async (isSilent = false) => {
@@ -289,25 +351,35 @@ const UsuariosTasy: React.FC = () => {
         setLastSyncTime(nowTime);
         
         // Atualiza e persiste o pico de conexões do dia
-        const totalConexoes = headerInfo.quant || list.length;
-        if (totalConexoes > 0) {
-          const todayKey = getTodayDateKey();
-          const shortTime = new Date().toLocaleTimeString('pt-BR', {
-            timeZone: 'America/Sao_Paulo',
-            hour: '2-digit',
-            minute: '2-digit'
-          });
+        const todayKey = getTodayDateKey();
+        if (headerInfo.picoQtd && headerInfo.picoQtd > 0) {
+          // Se o banco calculou o pico exato do dia no Tasy
+          const dbPeak = { count: headerInfo.picoQtd, time: headerInfo.picoHora || '-' };
+          setPeakToday(dbPeak);
+          try {
+            localStorage.setItem(PEAK_KEY_PREFIX + todayKey, JSON.stringify(dbPeak));
+          } catch {}
+        } else {
+          // Fallback para monitoramento contínuo em tempo real
+          const totalConexoes = headerInfo.quant || list.length;
+          if (totalConexoes > 0) {
+            const shortTime = new Date().toLocaleTimeString('pt-BR', {
+              timeZone: 'America/Sao_Paulo',
+              hour: '2-digit',
+              minute: '2-digit'
+            });
 
-          setPeakToday(prev => {
-            if (totalConexoes >= prev.count) {
-              const newPeak = { count: totalConexoes, time: shortTime };
-              try {
-                localStorage.setItem(PEAK_KEY_PREFIX + todayKey, JSON.stringify(newPeak));
-              } catch {}
-              return newPeak;
-            }
-            return prev;
-          });
+            setPeakToday(prev => {
+              if (totalConexoes >= prev.count) {
+                const newPeak = { count: totalConexoes, time: shortTime };
+                try {
+                  localStorage.setItem(PEAK_KEY_PREFIX + todayKey, JSON.stringify(newPeak));
+                } catch {}
+                return newPeak;
+              }
+              return prev;
+            });
+          }
         }
         
         try {
