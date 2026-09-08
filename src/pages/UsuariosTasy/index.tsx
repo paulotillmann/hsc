@@ -739,10 +739,6 @@ const UsuariosTasy: React.FC = () => {
                 <h1 className="text-2xl font-bold tracking-tight text-foreground font-sans">
                   Usuários Ativos no Tasy
                 </h1>
-                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                  Conexões Reais Tasy
-                </span>
                 {lastSyncTime && (
                   <span className="text-[11px] text-muted-foreground font-sans">
                     • Sincronizado às {lastSyncTime}
@@ -974,10 +970,6 @@ const UsuariosTasy: React.FC = () => {
                 <h2 className="text-base font-bold text-foreground font-sans">
                   Histórico de Conexões por Intervalo (10 em 10 min)
                 </h2>
-                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20">
-                  <BarChart3 className="h-3 w-3" />
-                  Padrão Relatório Tasy
-                </span>
               </div>
               <p className="text-xs text-muted-foreground font-sans mt-0.5">
                 Fotografia histórica das conexões ativas calculadas em janelas discretas de 10 minutos ao longo do dia
