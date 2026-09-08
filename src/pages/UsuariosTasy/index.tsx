@@ -61,7 +61,6 @@ export interface SlotHistorico {
   hora: string;
   quant: number;
   isPeak?: boolean;
-  isCurrent?: boolean;
 }
 
 const CACHE_KEY = 'hsc_tasy_users_cache';
@@ -384,13 +383,12 @@ const UsuariosTasy: React.FC = () => {
       });
     });
 
-    // Identifica pico e slot atual no histórico
+    // Identifica pico no histórico
     if (parsedSlots.length > 0) {
       let maxVal = Math.max(...parsedSlots.map(s => s.quant));
-      parsedSlots = parsedSlots.map((s, idx) => ({
+      parsedSlots = parsedSlots.map(s => ({
         ...s,
-        isPeak: s.quant === maxVal && maxVal > 0,
-        isCurrent: idx === parsedSlots.length - 1
+        isPeak: s.quant === maxVal && maxVal > 0
       }));
     }
 
@@ -1191,9 +1189,7 @@ const UsuariosTasy: React.FC = () => {
                           className={`transition-colors hover:bg-muted/50 ${
                             slot.isPeak 
                               ? 'bg-amber-500/10 font-medium' 
-                              : slot.isCurrent 
-                                ? 'bg-sky-500/5' 
-                                : ''
+                              : ''
                           }`}
                         >
                           <td className="py-2 px-3 text-foreground font-mono">
@@ -1210,11 +1206,6 @@ const UsuariosTasy: React.FC = () => {
                               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-500/30">
                                 <Flame className="h-2.5 w-2.5" />
                                 Pico
-                              </span>
-                            ) : slot.isCurrent ? (
-                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30">
-                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                                Atual
                               </span>
                             ) : (
                               <div className="w-16 mx-auto bg-muted rounded-full h-1.5 overflow-hidden" title={`${percentOfMax}% do pico`}>
