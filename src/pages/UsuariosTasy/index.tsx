@@ -1,21 +1,21 @@
 import React, { useEffect, useState, useMemo, useCallback } from 'react';
-import { 
-  Users, 
-  UserCheck, 
-  Clock, 
-  Activity, 
-  Search, 
-  RefreshCw, 
-  FileSpreadsheet, 
-  FileText, 
-  X, 
-  Building2, 
-  Layers, 
-  ChevronLeft, 
-  ChevronRight, 
-  Eye, 
-  Copy, 
-  Check, 
+import {
+  Users,
+  UserCheck,
+  Clock,
+  Activity,
+  Search,
+  RefreshCw,
+  FileSpreadsheet,
+  FileText,
+  X,
+  Building2,
+  Layers,
+  ChevronLeft,
+  ChevronRight,
+  Eye,
+  Copy,
+  Check,
   Timer,
   Calendar,
   AlertTriangle,
@@ -27,16 +27,16 @@ import {
   Sparkles,
   Gauge
 } from 'lucide-react';
-import { 
-  ResponsiveContainer, 
-  BarChart, 
-  Bar, 
-  XAxis, 
-  YAxis, 
-  Tooltip as RechartsTooltip, 
-  PieChart, 
-  Pie, 
-  Cell, 
+import {
+  ResponsiveContainer,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  Tooltip as RechartsTooltip,
+  PieChart,
+  Pie,
+  Cell,
   CartesianGrid,
   AreaChart,
   Area
@@ -87,7 +87,7 @@ function formatDiaMesExtenso(diaMesStr: string): string {
 }
 
 const COLORS = [
-  '#0284c7', '#0d9488', '#8b5cf6', '#f59e0b', '#ec4899', 
+  '#0284c7', '#0d9488', '#8b5cf6', '#f59e0b', '#ec4899',
   '#10b981', '#6366f1', '#f43f5e', '#14b8a6', '#eab308'
 ];
 
@@ -224,7 +224,7 @@ const UsuariosTasy: React.FC = () => {
     try {
       const cached = sessionStorage.getItem(CACHE_KEY);
       if (cached) return JSON.parse(cached);
-    } catch {}
+    } catch { }
     return [];
   });
 
@@ -275,7 +275,7 @@ const UsuariosTasy: React.FC = () => {
       if (stored) {
         return JSON.parse(stored);
       }
-    } catch {}
+    } catch { }
     return { count: 0, time: '-' };
   });
 
@@ -284,13 +284,13 @@ const UsuariosTasy: React.FC = () => {
     try {
       const cached = sessionStorage.getItem(CACHE_HISTORICO_KEY);
       if (cached) return JSON.parse(cached);
-    } catch {}
+    } catch { }
     return [];
   });
 
   // Normalização blindada do retorno
-  const normalizeData = (rawList: any[]): { 
-    list: UsuarioTasy[]; 
+  const normalizeData = (rawList: any[]): {
+    list: UsuarioTasy[];
     headerInfo: { hora: string | null; quant: number | null; picoQtd?: number | null; picoHora?: string | null };
     slots: SlotHistorico[];
   } => {
@@ -309,7 +309,7 @@ const UsuariosTasy: React.FC = () => {
       const itemFirst = first.json && typeof first.json === 'object' ? first.json : first;
       if (itemFirst['Dia/Mês Hora']) snapshotHora = String(itemFirst['Dia/Mês Hora']).trim();
       if (itemFirst['Quant.'] !== undefined && itemFirst['Quant.'] !== null) quantTotal = Number(itemFirst['Quant.']);
-      
+
       if (itemFirst.PICO_QTD !== undefined && itemFirst.PICO_QTD !== null) picoQtd = Number(itemFirst.PICO_QTD);
       else if (itemFirst.pico_qtd !== undefined && itemFirst.pico_qtd !== null) picoQtd = Number(itemFirst.pico_qtd);
 
@@ -342,7 +342,7 @@ const UsuariosTasy: React.FC = () => {
               quant: Number(item.quant || item.count || item.value || 0)
             }));
           }
-        } catch {}
+        } catch { }
       }
     }
 
@@ -350,7 +350,7 @@ const UsuariosTasy: React.FC = () => {
 
     rawList.forEach((raw, idx) => {
       if (!raw || typeof raw !== 'object') return;
-      
+
       const item = raw.json && typeof raw.json === 'object' ? raw.json : raw;
 
       const rawNome = item.NM_SUBJECT || item.nm_subject || item.NOME || item.nome || item.NM_USUARIO || item.nm_usuario || item.name;
@@ -393,10 +393,10 @@ const UsuariosTasy: React.FC = () => {
       }));
     }
 
-    return { 
-      list, 
-      headerInfo: { 
-        hora: snapshotHora, 
+    return {
+      list,
+      headerInfo: {
+        hora: snapshotHora,
         quant: quantTotal || list.length,
         picoQtd,
         picoHora
@@ -416,21 +416,21 @@ const UsuariosTasy: React.FC = () => {
       console.log('[UsuariosTasy] Chamando webhook...');
       const data = await webhookService.fetchUsuariosAtivosTasy();
       console.log('[UsuariosTasy] Resposta recebida:', Array.isArray(data) ? `${data.length} itens` : typeof data);
-      
+
       if (Array.isArray(data) && data.length > 0) {
         const { list, headerInfo, slots } = normalizeData(data);
         console.log(`[UsuariosTasy] ${list.length} usuários e ${slots.length} intervalos de 10 min normalizados.`);
-        
+
         setUsuarios(list);
         setSnapshotHeader(headerInfo);
-        
+
         if (slots.length > 0) {
           setHistoricoSlots(slots);
           try {
             sessionStorage.setItem(CACHE_HISTORICO_KEY, JSON.stringify(slots));
-          } catch {}
+          } catch { }
         }
-        
+
         const nowTime = new Date().toLocaleTimeString('pt-BR', {
           timeZone: 'America/Sao_Paulo',
           hour: '2-digit',
@@ -438,7 +438,7 @@ const UsuariosTasy: React.FC = () => {
           second: '2-digit'
         });
         setLastSyncTime(nowTime);
-        
+
         // Atualiza e persiste o pico de conexões do dia
         const todayKey = getTodayDateKey();
         if (headerInfo.picoQtd && headerInfo.picoQtd > 0) {
@@ -447,7 +447,7 @@ const UsuariosTasy: React.FC = () => {
           setPeakToday(dbPeak);
           try {
             localStorage.setItem(PEAK_KEY_PREFIX + todayKey, JSON.stringify(dbPeak));
-          } catch {}
+          } catch { }
         } else {
           // Fallback para monitoramento contínuo em tempo real
           const totalConexoes = headerInfo.quant || list.length;
@@ -463,18 +463,18 @@ const UsuariosTasy: React.FC = () => {
                 const newPeak = { count: totalConexoes, time: shortTime };
                 try {
                   localStorage.setItem(PEAK_KEY_PREFIX + todayKey, JSON.stringify(newPeak));
-                } catch {}
+                } catch { }
                 return newPeak;
               }
               return prev;
             });
           }
         }
-        
+
         try {
           sessionStorage.setItem(CACHE_KEY, JSON.stringify(list));
           sessionStorage.setItem(CACHE_TIME_KEY, nowTime);
-        } catch {}
+        } catch { }
       } else {
         console.warn('[UsuariosTasy] Webhook retornou lista vazia.');
         if (usuarios.length === 0) {
@@ -530,13 +530,13 @@ const UsuariosTasy: React.FC = () => {
       const nome = (u.nome || '').toLowerCase();
       const setor = (u.setor || '').toLowerCase();
 
-      const matchesSearch = !term || 
+      const matchesSearch = !term ||
         login.includes(term) ||
         nome.includes(term) ||
         setor.includes(term);
 
       const matchesSetor = selectedSetor === 'TODOS' || u.setor === selectedSetor;
-      
+
       let matchesDuracao = true;
       if (selectedDuracao === 'MENOS_2H') matchesDuracao = (u.duracaoMinutos || 0) < 120;
       else if (selectedDuracao === '2H_4H') matchesDuracao = (u.duracaoMinutos || 0) >= 120 && (u.duracaoMinutos || 0) <= 240;
@@ -581,7 +581,7 @@ const UsuariosTasy: React.FC = () => {
   // KPIs
   const kpis = useMemo(() => {
     const total = snapshotHeader.quant || usuarios.length;
-    
+
     // Setor com mais usuários
     const setorCounts: Record<string, number> = {};
     usuarios.forEach(u => {
@@ -677,7 +677,7 @@ const UsuariosTasy: React.FC = () => {
     if (filteredUsuarios.length === 0) return;
 
     const doc = new jsPDF('landscape');
-    
+
     // Cabeçalho institucional HSC
     doc.setFillColor(2, 132, 199);
     doc.rect(0, 0, 297, 20, 'F');
@@ -726,7 +726,7 @@ const UsuariosTasy: React.FC = () => {
 
   return (
     <div className="space-y-6 w-full max-w-none animate-in fade-in duration-300">
-      
+
       {/* ── HEADER ───────────────────────────────────────────────────────────── */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 bg-card/60 backdrop-blur-md p-6 rounded-2xl border border-border/60 shadow-sm">
         <div>
@@ -775,7 +775,7 @@ const UsuariosTasy: React.FC = () => {
             </select>
             {refreshInterval > 0 && (
               <span className="font-mono text-sky-600 dark:text-sky-400 font-semibold min-w-[32px] text-center">
-                {secondsUntilRefresh >= 60 
+                {secondsUntilRefresh >= 60
                   ? `${Math.floor(secondsUntilRefresh / 60)}:${(secondsUntilRefresh % 60).toString().padStart(2, '0')}`
                   : `${secondsUntilRefresh}s`}
               </span>
@@ -824,7 +824,7 @@ const UsuariosTasy: React.FC = () => {
             <AlertTriangle className="h-4 w-4 text-rose-500 flex-shrink-0" />
             <span>{errorMessage}</span>
           </div>
-          <button 
+          <button
             onClick={() => loadData(false)}
             className="flex items-center gap-1 px-2.5 py-1 rounded bg-rose-500/20 hover:bg-rose-500/30 text-rose-900 dark:text-rose-100 font-semibold transition-colors flex-shrink-0"
           >
@@ -865,16 +865,16 @@ const UsuariosTasy: React.FC = () => {
           const percentOcupacao = Math.min(Math.round((ativas / totalLicencas) * 100), 100);
           const livres = Math.max(totalLicencas - ativas, 0);
 
-          const statusColor = percentOcupacao >= 90 
-            ? 'text-rose-500 bg-rose-500/10 border-rose-500/20' 
-            : percentOcupacao >= 75 
-              ? 'text-amber-500 bg-amber-500/10 border-amber-500/20' 
+          const statusColor = percentOcupacao >= 90
+            ? 'text-rose-500 bg-rose-500/10 border-rose-500/20'
+            : percentOcupacao >= 75
+              ? 'text-amber-500 bg-amber-500/10 border-amber-500/20'
               : 'text-indigo-500 bg-indigo-500/10 border-indigo-500/20';
 
-          const barColor = percentOcupacao >= 90 
-            ? 'bg-rose-500' 
-            : percentOcupacao >= 75 
-              ? 'bg-amber-500' 
+          const barColor = percentOcupacao >= 90
+            ? 'bg-rose-500'
+            : percentOcupacao >= 75
+              ? 'bg-amber-500'
               : 'bg-indigo-500';
 
           return (
@@ -887,7 +887,7 @@ const UsuariosTasy: React.FC = () => {
                   <Gauge className="h-4 w-4" />
                 </div>
               </div>
-              
+
               <div className="mt-3 flex items-baseline gap-2">
                 <span className="text-3xl font-extrabold tracking-tight text-foreground font-sans">
                   {percentOcupacao}%
@@ -899,7 +899,7 @@ const UsuariosTasy: React.FC = () => {
 
               {/* Barra de Progresso de Ocupação */}
               <div className="mt-2.5 w-full h-1.5 rounded-full bg-muted overflow-hidden">
-                <div 
+                <div
                   className={`h-full rounded-full transition-all duration-500 ${barColor}`}
                   style={{ width: `${percentOcupacao}%` }}
                 />
@@ -1006,25 +1006,25 @@ const UsuariosTasy: React.FC = () => {
 
               <div className="h-[240px] w-full pt-2">
                 <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={historicoSlots} margin={{ top: 32, right: 15, left: -20, bottom: 0 }}>
+                  <AreaChart data={historicoSlots} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                     <defs>
                       <linearGradient id="colorQuant" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#6366f1" stopOpacity={0.4}/>
-                        <stop offset="95%" stopColor="#6366f1" stopOpacity={0.0}/>
+                        <stop offset="5%" stopColor="#6366f1" stopOpacity={0.4} />
+                        <stop offset="95%" stopColor="#6366f1" stopOpacity={0.0} />
                       </linearGradient>
                     </defs>
                     <CartesianGrid strokeDasharray="3 3" opacity={0.15} vertical={false} />
-                    <XAxis 
-                      dataKey="hora" 
+                    <XAxis
+                      dataKey="hora"
                       tick={{ fontSize: 10 }}
                       interval="preserveStartEnd"
                       minTickGap={20}
                     />
-                    <YAxis 
+                    <YAxis
                       tick={{ fontSize: 10 }}
                       domain={[0, 'auto']}
                     />
-                    <RechartsTooltip 
+                    <RechartsTooltip
                       content={({ active, payload }) => {
                         if (active && payload && payload.length) {
                           const data = payload[0].payload as SlotHistorico;
@@ -1050,53 +1050,13 @@ const UsuariosTasy: React.FC = () => {
                         return null;
                       }}
                     />
-                    <Area 
-                      type="monotone" 
-                      dataKey="quant" 
-                      stroke="#6366f1" 
+                    <Area
+                      type="monotone"
+                      dataKey="quant"
+                      stroke="#6366f1"
                       strokeWidth={2.5}
-                      fillOpacity={1} 
-                      fill="url(#colorQuant)" 
-                      dot={(props: any) => {
-                        const { cx, cy, payload, index } = props;
-                        if (!payload || !payload.isPeak || payload.quant === 0) {
-                          return <React.Fragment key={`dot-${index}`} />;
-                        }
-
-                        return (
-                          <g key={`peak-dot-${index}`}>
-                            {/* Halo pulsante */}
-                            <circle cx={cx} cy={cy} r={14} fill="#f59e0b" opacity={0.3} />
-                            {/* Ponto central */}
-                            <circle cx={cx} cy={cy} r={6} fill="#f59e0b" stroke="#ffffff" strokeWidth={2} />
-                            {/* Pin / Badge acima do ponto com ícone de fogo e valor */}
-                            <g transform={`translate(${cx}, ${cy - 24})`}>
-                              <rect
-                                x="-32"
-                                y="-12"
-                                width="64"
-                                height="20"
-                                rx="10"
-                                fill="#f59e0b"
-                                stroke="#ffffff"
-                                strokeWidth="1.5"
-                              />
-                              <text
-                                x="0"
-                                y="2"
-                                fill="#ffffff"
-                                textAnchor="middle"
-                                fontSize="10"
-                                fontWeight="bold"
-                                fontFamily="sans-serif"
-                              >
-                                🔥 {payload.quant}
-                              </text>
-                            </g>
-                          </g>
-                        );
-                      }}
-                      activeDot={{ r: 6, fill: '#6366f1', stroke: '#ffffff', strokeWidth: 2 }}
+                      fillOpacity={1}
+                      fill="url(#colorQuant)"
                     />
                   </AreaChart>
                 </ResponsiveContainer>
@@ -1130,13 +1090,12 @@ const UsuariosTasy: React.FC = () => {
                       const percentOfMax = Math.round((slot.quant / maxQuant) * 100);
 
                       return (
-                        <tr 
+                        <tr
                           key={idx}
-                          className={`transition-colors hover:bg-muted/50 ${
-                            slot.isPeak 
-                              ? 'bg-amber-500/10 font-medium' 
+                          className={`transition-colors hover:bg-muted/50 ${slot.isPeak
+                              ? 'bg-amber-500/10 font-medium'
                               : ''
-                          }`}
+                            }`}
                         >
                           <td className="py-2 px-3 text-foreground font-mono">
                             {slot.diaMes}
@@ -1155,8 +1114,8 @@ const UsuariosTasy: React.FC = () => {
                               </span>
                             ) : (
                               <div className="w-16 mx-auto bg-muted rounded-full h-1.5 overflow-hidden" title={`${percentOfMax}% do pico`}>
-                                <div 
-                                  className="bg-indigo-500/70 h-full rounded-full" 
+                                <div
+                                  className="bg-indigo-500/70 h-full rounded-full"
                                   style={{ width: `${percentOfMax}%` }}
                                 />
                               </div>
@@ -1306,8 +1265,8 @@ const UsuariosTasy: React.FC = () => {
                       <Users className="h-8 w-8 opacity-40 text-muted-foreground" />
                       <span className="font-medium text-foreground">Nenhum usuário encontrado</span>
                       <span className="text-xs">
-                        {usuarios.length === 0 
-                          ? 'Não foram retornados registros na consulta ao Tasy.' 
+                        {usuarios.length === 0
+                          ? 'Não foram retornados registros na consulta ao Tasy.'
                           : 'Nenhum usuário coincide com os filtros aplicados.'}
                       </span>
                       <button
@@ -1322,14 +1281,14 @@ const UsuariosTasy: React.FC = () => {
                 </tr>
               ) : (
                 paginatedUsuarios.map((user, idx) => (
-                  <tr 
-                    key={`${user.login}_${idx}`} 
+                  <tr
+                    key={`${user.login}_${idx}`}
                     className="hover:bg-muted/30 transition-colors group cursor-pointer"
                     onClick={() => setSelectedUser(user)}
                   >
                     {/* Status */}
                     <td className="p-4 text-center">
-                      <span 
+                      <span
                         className="inline-block w-2.5 h-2.5 rounded-full bg-emerald-500 shadow-sm shadow-emerald-500/50 animate-pulse"
                         title="Conectado no Tasy"
                       />
@@ -1433,7 +1392,7 @@ const UsuariosTasy: React.FC = () => {
       {selectedUser && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm animate-in fade-in duration-200">
           <div className="relative w-full max-w-lg rounded-2xl border border-border bg-card p-6 shadow-2xl space-y-6">
-            
+
             {/* Modal Header */}
             <div className="flex items-start justify-between">
               <div className="flex items-center gap-3">
