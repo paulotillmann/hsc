@@ -1,7 +1,7 @@
 // src/components/ordemServico/ActiveUsersModal.tsx
 // Modal interativo para visualização de usuários ativos em tempo real e encerramento de sessões
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   X,
@@ -12,7 +12,8 @@ import {
   AlertCircle,
   Loader2,
   Clock,
-  ShieldAlert
+  ShieldAlert,
+  RefreshCw
 } from 'lucide-react';
 import { OnlineUser, useAuth } from '../../contexts/AuthContext';
 
@@ -22,12 +23,34 @@ interface ActiveUsersModalProps {
 }
 
 export const ActiveUsersModal: React.FC<ActiveUsersModalProps> = ({ isOpen, onClose }) => {
-  const { user: currentUser, activeUsers, terminateUserSessions } = useAuth();
+  const { user: currentUser, activeUsers, refreshActiveUsers, terminateUserSessions } = useAuth();
   const [search, setSearch] = useState('');
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [terminating, setTerminating] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [confirmTarget, setConfirmTarget] = useState<string[] | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+
+  // Carrega lista ao abrir e atualiza a cada 30 segundos enquanto o modal estiver aberto
+  useEffect(() => {
+    if (!isOpen) return;
+
+    handleRefresh();
+    const interval = setInterval(() => {
+      refreshActiveUsers();
+    }, 30000);
+
+    return () => clearInterval(interval);
+  }, [isOpen]);
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    try {
+      await refreshActiveUsers();
+    } finally {
+      setRefreshing(false);
+    }
+  };
 
   if (!isOpen) return null;
 
@@ -81,7 +104,7 @@ export const ActiveUsersModal: React.FC<ActiveUsersModalProps> = ({ isOpen, onCl
     if (!dateStr) return 'Online';
     try {
       const date = new Date(dateStr);
-      return `Conectado às ${date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`;
+      return `Visto às ${date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`;
     } catch {
       return 'Online';
     }
@@ -110,17 +133,28 @@ export const ActiveUsersModal: React.FC<ActiveUsersModalProps> = ({ isOpen, onCl
                 </span>
               </div>
               <p className="text-xs text-muted-foreground mt-0.5">
-                Usuários conectados ao sistema em tempo real
+                Usuários ativos nos últimos 5 minutos
               </p>
             </div>
           </div>
-          <button
-            onClick={onClose}
-            className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-          >
-            <X className="h-5 w-5" />
-          </button>
+          <div className="flex items-center gap-1">
+            <button
+              onClick={handleRefresh}
+              disabled={refreshing}
+              title="Atualizar lista"
+              className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors disabled:opacity-50"
+            >
+              <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin text-primary' : ''}`} />
+            </button>
+            <button
+              onClick={onClose}
+              className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+            >
+              <X className="h-5 w-5" />
+            </button>
+          </div>
         </div>
+
 
         {/* Notificação de Sucesso */}
         <AnimatePresence>
