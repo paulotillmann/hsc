@@ -248,7 +248,7 @@ const Login: React.FC = () => {
                     <img src="/technocode-logo-white.png" alt="TECHNOCODE" className="h-16 w-auto opacity-90" />
                   </div>
                   <p className="text-[10px] opacity-70">Abril, 2026 - by Paulo Tillmann</p>
-                  <p className="text-[10px] opacity-70">versão 2.0</p>
+                  <p className="text-[10px] opacity-70">versão 2.18.45.1</p>
                 </div>
               </motion.div>
             ) : isRegistering ? (
