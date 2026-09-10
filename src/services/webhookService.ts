@@ -273,8 +273,64 @@ export const webhookService = {
       console.error('Error in webhook fetchPlantaoMedicoCustos:', error);
       return [];
     }
+  },
+
+  /**
+   * Fetch Active Tasy Users from n8n webhook
+   */
+  async fetchUsuariosAtivosTasy(payload: any = {}): Promise<any[]> {
+    const webhookUrl = import.meta.env.VITE_N8N_WEBHOOK_USUARIOS_TASY || 'https://n8n-n8n.7woir1.easypanel.host/webhook/usuarios_tasy';
+    
+    if (!webhookUrl) {
+      console.error('Webhook URL (VITE_N8N_WEBHOOK_USUARIOS_TASY) is not configured.');
+      return [];
+    }
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 15000);
+
+    try {
+      const response = await fetch(webhookUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        throw new Error(`Erro na resposta do webhook: ${response.status} ${response.statusText}`);
+      }
+
+      const text = await response.text();
+      if (!text || !text.trim()) {
+        console.warn('[webhookService] Webhook retornou corpo vazio.');
+        return [];
+      }
+
+      const data = JSON.parse(text);
+      
+      let items: any[] = [];
+      if (Array.isArray(data)) {
+        items = data;
+      } else if (data && typeof data === 'object') {
+        if (Array.isArray(data.data)) items = data.data;
+        else if (Array.isArray(data.rows)) items = data.rows;
+        else if (Array.isArray(data.items)) items = data.items;
+        else if (Array.isArray(data.result)) items = data.result;
+        else items = [data];
+      }
+
+      // Desempacota itens encapsulados em { json: { ... } } se o n8n enviar formato de item
+      const unwrapItems = items.map(item => (item && typeof item === 'object' && item.json) ? item.json : item);
+      return unwrapItems;
+    } catch (error: any) {
+      clearTimeout(timeoutId);
+      console.error('Error in webhook fetchUsuariosAtivosTasy:', error);
+      throw error;
+    }
   }
 };
-
-
-
