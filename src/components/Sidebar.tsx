@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { NavLink, useNavigate, useLocation } from 'react-router-dom';
-import { LogOut, Sun, Moon, ChevronLeft, ChevronRight, ChevronDown, HeartPulse, Cpu, Users, GraduationCap, Smartphone, Newspaper } from 'lucide-react';
+import { LogOut, Sun, Moon, ChevronLeft, ChevronRight, ChevronDown, HeartPulse, Cpu, Users, GraduationCap, Smartphone, Newspaper, Briefcase, TrendingUp } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { usePermissions } from '../hooks/usePermissions';
 import DynamicIcon from './DynamicIcon';
@@ -27,6 +27,7 @@ const Sidebar: React.FC = () => {
     if (window.location.pathname.startsWith('/plantao-ti') || window.location.pathname.startsWith('/ordem-servico') || window.location.pathname.startsWith('/ordem-servico-mobile') || window.location.pathname.startsWith('/equipamentos') || window.location.pathname.startsWith('/custos-ti') || window.location.pathname.startsWith('/usuarios-tasy')) return 'tecnologia-informacao';
     if (window.location.pathname.startsWith('/dashboard') || window.location.pathname.startsWith('/holerites') || window.location.pathname.startsWith('/informes')) return 'recursos-humanos';
     if (window.location.pathname.startsWith('/internato-secretaria') || window.location.pathname.startsWith('/internato-notas') || window.location.pathname.startsWith('/internato-agenda')) return 'internato';
+    if (window.location.pathname.startsWith('/atendimentos') || window.location.pathname.startsWith('/diretoria-atendimentos')) return 'diretoria';
     return null;
   });
 
@@ -70,6 +71,8 @@ const Sidebar: React.FC = () => {
       setExpandedMenu('internato');
     } else if (location.pathname.startsWith('/gestao-novidades')) {
       setExpandedMenu('conecta-saude');
+    } else if (location.pathname.startsWith('/atendimentos') || location.pathname.startsWith('/diretoria-atendimentos')) {
+      setExpandedMenu('diretoria');
     }
   }, [location.pathname, isCollapsed]);
 
@@ -135,10 +138,9 @@ const Sidebar: React.FC = () => {
           />
         )}
       </div>
-
-      {/* ── Menu dinâmico gerado pelos módulos do perfil ── */}
+      {/* ── Menu dinâmico gerado pelos módulos do perfil em Ordem Alfabética ── */}
       <nav className="flex-1 p-3 flex flex-col gap-2 overflow-x-hidden overflow-y-auto pt-8 scrollbar-hide">
-        {/* Categoria Assistencial (Agrupador) */}
+        {/* 1. Categoria Assistencial (Agrupador) */}
         {(() => {
           const hasPacientesAccess = userModules.some(m => m.slug === 'pacientes-internados');
           const hasCentroCirurgicoAccess = userModules.some(m => m.slug === 'centro-cirurgico');
@@ -345,124 +347,55 @@ const Sidebar: React.FC = () => {
           );
         })()}
 
-        {/* Categoria T.I (Agrupador) */}
+        {/* 2. Categoria Conecta Saúde (Agrupador) */}
         {(() => {
-          const hasPlantaoTiAccess = isAdmin || userModules.some(m => m.slug === 'plantao-ti');
-          const hasOrdemServicoAccess = isAdmin || userModules.some(m => m.slug === 'ordem-servico');
-          const hasEquipamentosAccess = isAdmin || userModules.some(m => m.slug === 'equipamentos');
-          const hasCustosTiAccess = isAdmin || userModules.some(m => m.slug === 'custos-ti');
-          const hasUsuariosTasyAccess = isAdmin || userModules.some(m => m.slug === 'usuarios-tasy');
-          const showTI = hasPlantaoTiAccess || hasOrdemServicoAccess || hasEquipamentosAccess || hasCustosTiAccess || hasUsuariosTasyAccess;
-          const isTIActive = location.pathname.startsWith('/plantao-ti') || location.pathname.startsWith('/ordem-servico') || location.pathname.startsWith('/ordem-servico-mobile') || location.pathname.startsWith('/equipamentos') || location.pathname.startsWith('/custos-ti') || location.pathname.startsWith('/usuarios-tasy');
+          const hasNovidadesAccess = userModules.some(m => m.slug === 'gestao-novidades');
+          const showConectaSaude = hasNovidadesAccess;
+          const isConectaSaudeActive = location.pathname.startsWith('/gestao-novidades');
 
-          if (!showTI) return null;
+          if (!showConectaSaude) return null;
 
           return (
             <div className="flex flex-col">
               {isCollapsed ? (
                 <NavLink
-                  to={hasPlantaoTiAccess ? "/plantao-ti" : (hasOrdemServicoAccess ? "/ordem-servico" : (hasEquipamentosAccess ? "/equipamentos" : (hasCustosTiAccess ? "/custos-ti" : "/usuarios-tasy")))}
-                  title="T.I"
-                  className={navLinkClass(isTIActive)}
+                  to="/gestao-novidades"
+                  title="Conecta Saúde"
+                  className={navLinkClass(isConectaSaudeActive)}
                 >
-                  <Cpu className="h-5 w-5 flex-shrink-0" />
+                  <Smartphone className="h-5 w-5 flex-shrink-0" />
                 </NavLink>
               ) : (
                 <button
                   onClick={() => {
-                    setExpandedMenu(expandedMenu === 'tecnologia-informacao' ? null : 'tecnologia-informacao');
+                    setExpandedMenu(expandedMenu === 'conecta-saude' ? null : 'conecta-saude');
                   }}
-                  className={`flex items-center rounded-md text-sm transition-all duration-200 justify-start gap-3 px-3 py-2 w-full ${isTIActive
+                  className={`flex items-center rounded-md text-sm transition-all duration-200 justify-start gap-3 px-3 py-2 w-full ${isConectaSaudeActive
                       ? 'bg-primary text-primary-foreground shadow-sm hover:shadow-md hover:shadow-primary/20 font-medium'
                       : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
                     }`}
                 >
-                  <Cpu className="h-5 w-5 flex-shrink-0" />
+                  <Smartphone className="h-5 w-5 flex-shrink-0" />
                   <div className="flex flex-1 items-center justify-between">
-                    <span className="truncate">T.I</span>
-                    <ChevronRight className={`h-4 w-4 transition-transform ${expandedMenu === 'tecnologia-informacao' ? 'rotate-90' : ''}`} />
+                    <span className="truncate">Conecta Saúde</span>
+                    <ChevronRight className={`h-4 w-4 transition-transform ${expandedMenu === 'conecta-saude' ? 'rotate-90' : ''}`} />
                   </div>
                 </button>
               )}
 
-              {!isCollapsed && expandedMenu === 'tecnologia-informacao' && (
+              {!isCollapsed && expandedMenu === 'conecta-saude' && (
                 <div className="flex flex-col ml-9 mt-1 gap-1 border-l-2 border-border pl-2 border-primary/20 animate-in fade-in duration-300">
-                  {hasPlantaoTiAccess && (
+                  {hasNovidadesAccess && (
                     <NavLink
-                      to="/plantao-ti"
+                      to="/gestao-novidades"
                       className={({ isActive }) =>
                         `text-sm px-3 py-2 rounded-md transition-colors ${isActive
-                          ? 'bg-primary text-primary-foreground shadow-sm font-medium'
+                          ? 'bg-primary/10 text-primary font-medium'
                           : 'text-muted-foreground hover:bg-muted hover:text-foreground'
                         }`
                       }
                     >
-                      Plantão TI
-                    </NavLink>
-                  )}
-                  {hasOrdemServicoAccess && (
-                    <>
-                      <NavLink
-                        to="/ordem-servico"
-                        className={({ isActive }) =>
-                          `text-sm px-3 py-2 rounded-md transition-colors ${isActive
-                            ? 'bg-primary text-primary-foreground shadow-sm font-medium'
-                            : 'text-muted-foreground hover:bg-muted hover:text-foreground'
-                          }`
-                        }
-                      >
-                        Ordem de Serviço
-                      </NavLink>
-                      <NavLink
-                        to="/ordem-servico-mobile"
-                        className={({ isActive }) =>
-                          `text-sm px-3 py-2 rounded-md transition-colors ${isActive
-                            ? 'bg-primary text-primary-foreground shadow-sm font-medium'
-                            : 'text-muted-foreground hover:bg-muted hover:text-foreground'
-                          }`
-                        }
-                      >
-                        Ordem de Serviço (Móbile)
-                      </NavLink>
-                    </>
-                  )}
-                  {hasEquipamentosAccess && (
-                    <NavLink
-                      to="/equipamentos"
-                      className={({ isActive }) =>
-                        `text-sm px-3 py-2 rounded-md transition-colors ${isActive
-                          ? 'bg-primary text-primary-foreground shadow-sm font-medium'
-                          : 'text-muted-foreground hover:bg-muted hover:text-foreground'
-                        }`
-                      }
-                    >
-                      Equipamentos
-                    </NavLink>
-                  )}
-                  {hasCustosTiAccess && (
-                    <NavLink
-                      to="/custos-ti"
-                      className={({ isActive }) =>
-                        `text-sm px-3 py-2 rounded-md transition-colors ${isActive
-                          ? 'bg-primary text-primary-foreground shadow-sm font-medium'
-                          : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
-                        }`
-                      }
-                    >
-                      Custos TI
-                    </NavLink>
-                  )}
-                  {hasUsuariosTasyAccess && (
-                    <NavLink
-                      to="/usuarios-tasy"
-                      className={({ isActive }) =>
-                        `text-sm px-3 py-2 rounded-md transition-colors ${isActive
-                          ? 'bg-primary text-primary-foreground shadow-sm font-medium'
-                          : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
-                        }`
-                      }
-                    >
-                      Usuários Tasy
+                      Novidades
                     </NavLink>
                   )}
                 </div>
@@ -471,54 +404,47 @@ const Sidebar: React.FC = () => {
           );
         })()}
 
-        {/* Categoria Recursos Humanos (Agrupador) */}
+        {/* 3. Categoria Diretoria (Agrupador) */}
         {(() => {
-          const hasDashboardAccess = userModules.some(m => m.slug === 'dashboard');
-          const hasHoleriteAccess = userModules.some(m => m.slug === 'holerites');
-          const hasInformeAccess = userModules.some(m => m.slug === 'informes');
-          const showRH = hasDashboardAccess || hasHoleriteAccess || hasInformeAccess;
-          const isRHActive = location.pathname.startsWith('/dashboard') || location.pathname.startsWith('/holerites') || location.pathname.startsWith('/informes');
+          const hasAtendimentosAccess = isAdmin || userModules.some(m => m.slug === 'atendimentos' || m.slug === 'diretoria-atendimentos');
+          const showDiretoria = hasAtendimentosAccess;
+          const isDiretoriaActive = location.pathname.startsWith('/atendimentos') || location.pathname.startsWith('/diretoria-atendimentos');
 
-          if (!showRH) return null;
-
-          let firstRHRoute = '/dashboard';
-          if (hasDashboardAccess) firstRHRoute = '/dashboard';
-          else if (hasHoleriteAccess) firstRHRoute = '/holerites';
-          else if (hasInformeAccess) firstRHRoute = '/informes';
+          if (!showDiretoria) return null;
 
           return (
             <div className="flex flex-col">
               {isCollapsed ? (
                 <NavLink
-                  to={firstRHRoute}
-                  title="Recursos Humanos"
-                  className={navLinkClass(isRHActive)}
+                  to="/atendimentos"
+                  title="Diretoria"
+                  className={navLinkClass(isDiretoriaActive)}
                 >
-                  <Users className="h-5 w-5 flex-shrink-0" />
+                  <Briefcase className="h-5 w-5 flex-shrink-0" />
                 </NavLink>
               ) : (
                 <button
                   onClick={() => {
-                    setExpandedMenu(expandedMenu === 'recursos-humanos' ? null : 'recursos-humanos');
+                    setExpandedMenu(expandedMenu === 'diretoria' ? null : 'diretoria');
                   }}
-                  className={`flex items-center rounded-md text-sm transition-all duration-200 justify-start gap-3 px-3 py-2 w-full ${isRHActive
+                  className={`flex items-center rounded-md text-sm transition-all duration-200 justify-start gap-3 px-3 py-2 w-full ${isDiretoriaActive
                       ? 'bg-primary text-primary-foreground shadow-sm hover:shadow-md hover:shadow-primary/20 font-medium'
-                      : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                      : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
                     }`}
                 >
-                  <Users className="h-5 w-5 flex-shrink-0" />
+                  <Briefcase className="h-5 w-5 flex-shrink-0" />
                   <div className="flex flex-1 items-center justify-between">
-                    <span className="truncate">Recursos Humanos</span>
-                    <ChevronRight className={`h-4 w-4 transition-transform ${expandedMenu === 'recursos-humanos' ? 'rotate-90' : ''}`} />
+                    <span className="truncate">Diretoria</span>
+                    <ChevronRight className={`h-4 w-4 transition-transform ${expandedMenu === 'diretoria' ? 'rotate-90' : ''}`} />
                   </div>
                 </button>
               )}
 
-              {!isCollapsed && expandedMenu === 'recursos-humanos' && (
+              {!isCollapsed && expandedMenu === 'diretoria' && (
                 <div className="flex flex-col ml-9 mt-1 gap-1 border-l-2 border-border pl-2 border-primary/20 animate-in fade-in duration-300">
-                  {hasDashboardAccess && (
+                  {hasAtendimentosAccess && (
                     <NavLink
-                      to="/dashboard"
+                      to="/atendimentos"
                       className={({ isActive }) =>
                         `text-sm px-3 py-2 rounded-md transition-colors ${isActive
                           ? 'bg-primary/10 text-primary font-medium'
@@ -526,33 +452,7 @@ const Sidebar: React.FC = () => {
                         }`
                       }
                     >
-                      Visão Geral
-                    </NavLink>
-                  )}
-                  {hasHoleriteAccess && (
-                    <NavLink
-                      to="/holerites"
-                      className={({ isActive }) =>
-                        `text-sm px-3 py-2 rounded-md transition-colors ${isActive
-                          ? 'bg-primary/10 text-primary font-medium'
-                          : 'text-muted-foreground hover:bg-muted hover:text-foreground'
-                        }`
-                      }
-                    >
-                      Holerite
-                    </NavLink>
-                  )}
-                  {hasInformeAccess && (
-                    <NavLink
-                      to="/informes"
-                      className={({ isActive }) =>
-                        `text-sm px-3 py-2 rounded-md transition-colors ${isActive
-                          ? 'bg-primary/10 text-primary font-medium'
-                          : 'text-muted-foreground hover:bg-muted hover:text-foreground'
-                        }`
-                      }
-                    >
-                      Informe
+                      Atendimentos
                     </NavLink>
                   )}
                 </div>
@@ -561,7 +461,261 @@ const Sidebar: React.FC = () => {
           );
         })()}
 
-        {/* Categoria Internato (Agrupador) */}
+        {/* 4. Categoria Escuta Santa Casa (Agrupador) */}
+        {(() => {
+          const hasEscutaAccess = isAdmin || userModules.some(m => m.slug === 'gestao-escuta-santa-casa');
+          const isEscutaActive = location.pathname.startsWith('/gestao-escuta-santa-casa');
+
+          if (!hasEscutaAccess) return null;
+
+          return (
+            <div className="flex flex-col">
+              {isCollapsed ? (
+                <NavLink
+                  to="/gestao-escuta-santa-casa"
+                  title="Escuta Santa Casa"
+                  className={navLinkClass(isEscutaActive)}
+                >
+                  <DynamicIcon name="Headphones" className="h-5 w-5 flex-shrink-0" />
+                </NavLink>
+              ) : (
+                <button
+                  onClick={() => {
+                    setExpandedMenu(expandedMenu === 'gestao-escuta-santa-casa' ? null : 'gestao-escuta-santa-casa');
+                    if (!isEscutaActive) navigate('/gestao-escuta-santa-casa');
+                  }}
+                  className={`flex items-center rounded-md text-sm transition-all duration-200 justify-start gap-3 px-3 py-2 w-full ${isEscutaActive
+                    ? 'bg-primary text-primary-foreground shadow-sm hover:shadow-md hover:shadow-primary/20 font-medium'
+                    : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
+                    }`}
+                >
+                  <DynamicIcon name="Headphones" className="h-5 w-5 flex-shrink-0" />
+                  <div className="flex flex-1 items-center justify-between">
+                    <span className="truncate">Escuta Santa Casa</span>
+                    <ChevronRight className={`h-4 w-4 transition-transform ${expandedMenu === 'gestao-escuta-santa-casa' ? 'rotate-90' : ''}`} />
+                  </div>
+                </button>
+              )}
+
+              {!isCollapsed && expandedMenu === 'gestao-escuta-santa-casa' && (
+                <div className="flex flex-col ml-9 mt-1 gap-1 border-l-2 border-border pl-2 border-primary/20 animate-in fade-in duration-300">
+                  <NavLink
+                    to="/gestao-escuta-santa-casa"
+                    end
+                    className={({ isActive }) =>
+                      `text-sm px-3 py-2 rounded-md transition-colors ${isActive
+                        ? 'bg-primary text-primary-foreground shadow-sm font-medium'
+                        : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
+                      }`
+                    }
+                  >
+                    Gestão de Denúncias
+                  </NavLink>
+                  <a
+                    href="/escuta-santa-casa"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-sm px-3 py-2 rounded-md transition-colors flex items-center justify-between text-muted-foreground hover:bg-muted hover:text-foreground font-medium"
+                  >
+                    <span>Canal Público</span>
+                    <DynamicIcon name="ExternalLink" className="h-3.5 w-3.5 opacity-60" />
+                  </a>
+                </div>
+              )}
+            </div>
+          );
+        })()}
+
+        {/* 5. Categoria Faturamento (Agrupador) */}
+        {(() => {
+          const hasFaturamentoAccess = isAdmin || userModules.some(m => m.slug === 'gestao-pendencias');
+          const isFaturamentoActive = location.pathname.startsWith('/gestao-pendencias');
+
+          if (!hasFaturamentoAccess) return null;
+
+          return (
+            <div className="flex flex-col">
+              {isCollapsed ? (
+                <NavLink
+                  to="/gestao-pendencias"
+                  title="Faturamento"
+                  className={navLinkClass(isFaturamentoActive)}
+                >
+                  <DynamicIcon name="DollarSign" className="h-5 w-5 flex-shrink-0" />
+                </NavLink>
+              ) : (
+                <button
+                  onClick={() => {
+                    setExpandedMenu(expandedMenu === 'faturamento' ? null : 'faturamento');
+                    if (!isFaturamentoActive) navigate('/gestao-pendencias');
+                  }}
+                  className={`flex items-center rounded-md text-sm transition-all duration-200 justify-start gap-3 px-3 py-2 w-full ${isFaturamentoActive
+                    ? 'bg-primary text-primary-foreground shadow-sm hover:shadow-md hover:shadow-primary/20 font-medium'
+                    : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
+                    }`}
+                >
+                  <DynamicIcon name="DollarSign" className="h-5 w-5 flex-shrink-0" />
+                  <div className="flex flex-1 items-center justify-between">
+                    <span className="truncate">Faturamento</span>
+                    <ChevronRight className={`h-4 w-4 transition-transform ${expandedMenu === 'faturamento' ? 'rotate-90' : ''}`} />
+                  </div>
+                </button>
+              )}
+
+              {!isCollapsed && expandedMenu === 'faturamento' && (
+                <div className="flex flex-col ml-9 mt-1 gap-1 border-l-2 border-border pl-2 border-primary/20 animate-in fade-in duration-300">
+                  <NavLink
+                    to="/gestao-pendencias"
+                    end
+                    className={({ isActive }) =>
+                      `text-sm px-3 py-2 rounded-md transition-colors ${isActive
+                        ? 'bg-primary text-primary-foreground shadow-sm font-medium'
+                        : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
+                      }`
+                    }
+                  >
+                    Gestão de Pendências
+                  </NavLink>
+                  <NavLink
+                    to="/gestao-pendencias/consulta-faturamentos"
+                    className={({ isActive }) =>
+                      `text-sm px-3 py-2 rounded-md transition-colors ${isActive
+                        ? 'bg-primary text-primary-foreground shadow-sm font-medium'
+                        : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
+                      }`
+                    }
+                  >
+                    Consulta Faturamentos
+                  </NavLink>
+                </div>
+              )}
+            </div>
+          );
+        })()}
+
+        {/* 6. Categoria Financeiro (Agrupador) */}
+        {(() => {
+          const hasFinanceiroAccess = isAdmin || userModules.some(m => m.slug === 'financeiro');
+          const isFinanceiroActive = location.pathname.startsWith('/financeiro');
+
+          if (!hasFinanceiroAccess) return null;
+
+          return (
+            <div className="flex flex-col">
+              {isCollapsed ? (
+                <NavLink
+                  to="/financeiro/tesouraria"
+                  title="Financeiro"
+                  className={navLinkClass(isFinanceiroActive)}
+                >
+                  <DynamicIcon name="Wallet" className="h-5 w-5 flex-shrink-0" />
+                </NavLink>
+              ) : (
+                <button
+                  onClick={() => {
+                    setExpandedMenu(expandedMenu === 'financeiro' ? null : 'financeiro');
+                    if (!isFinanceiroActive) navigate('/financeiro/tesouraria');
+                  }}
+                  className={`flex items-center rounded-md text-sm transition-all duration-200 justify-start gap-3 px-3 py-2 w-full ${isFinanceiroActive
+                    ? 'bg-primary text-primary-foreground shadow-sm hover:shadow-md hover:shadow-primary/20 font-medium'
+                    : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
+                    }`}
+                >
+                  <DynamicIcon name="Wallet" className="h-5 w-5 flex-shrink-0" />
+                  <div className="flex flex-1 items-center justify-between">
+                    <span className="truncate">Financeiro</span>
+                    <ChevronRight className={`h-4 w-4 transition-transform ${expandedMenu === 'financeiro' ? 'rotate-90' : ''}`} />
+                  </div>
+                </button>
+              )}
+
+              {!isCollapsed && expandedMenu === 'financeiro' && (
+                <div className="flex flex-col ml-9 mt-1 gap-1 border-l-2 border-border pl-2 border-primary/20 animate-in fade-in duration-300">
+                  <NavLink
+                    to="/financeiro/tesouraria"
+                    className={({ isActive }) =>
+                      `text-sm px-3 py-2 rounded-md transition-colors ${isActive
+                        ? 'bg-primary text-primary-foreground shadow-sm font-medium'
+                        : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
+                      }`
+                    }
+                  >
+                    Tesouraria
+                  </NavLink>
+                  <NavLink
+                    to="/financeiro/plantao-medico"
+                    className={({ isActive }) =>
+                      `text-sm px-3 py-2 rounded-md transition-colors ${isActive
+                        ? 'bg-primary text-primary-foreground shadow-sm font-medium'
+                        : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
+                      }`
+                    }
+                  >
+                    Plantão Médico
+                  </NavLink>
+                </div>
+              )}
+            </div>
+          );
+        })()}
+
+        {/* 7. Categoria Gestão de Prontuários (Agrupador) */}
+        {(() => {
+          const hasProntuariosAccess = isAdmin || userModules.some(m => m.slug === 'gestao-prontuarios');
+          const isProntuariosActive = location.pathname.startsWith('/gestao-prontuarios');
+
+          if (!hasProntuariosAccess) return null;
+
+          return (
+            <div className="flex flex-col">
+              {isCollapsed ? (
+                <NavLink
+                  to="/gestao-prontuarios"
+                  title="Gestão de Prontuários"
+                  className={navLinkClass(isProntuariosActive)}
+                >
+                  <DynamicIcon name="FileText" className="h-5 w-5 flex-shrink-0" />
+                </NavLink>
+              ) : (
+                <button
+                  onClick={() => {
+                    setExpandedMenu(expandedMenu === 'gestao-prontuarios' ? null : 'gestao-prontuarios');
+                    if (!isProntuariosActive) navigate('/gestao-prontuarios');
+                  }}
+                  className={`flex items-center rounded-md text-sm transition-all duration-200 justify-start gap-3 px-3 py-2 w-full ${isProntuariosActive
+                      ? 'bg-primary text-primary-foreground shadow-sm hover:shadow-md hover:shadow-primary/20 font-medium'
+                      : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
+                    }`}
+                >
+                  <DynamicIcon name="FileText" className="h-5 w-5 flex-shrink-0" />
+                  <div className="flex flex-1 items-center justify-between">
+                    <span className="truncate">Gestão de Prontuários</span>
+                    <ChevronRight className={`h-4 w-4 transition-transform ${expandedMenu === 'gestao-prontuarios' ? 'rotate-90' : ''}`} />
+                  </div>
+                </button>
+              )}
+
+              {!isCollapsed && expandedMenu === 'gestao-prontuarios' && (
+                <div className="flex flex-col ml-9 mt-1 gap-1 border-l-2 border-border pl-2 border-primary/20 animate-in fade-in duration-300">
+                  <NavLink
+                    to="/gestao-prontuarios"
+                    end
+                    className={({ isActive }) =>
+                      `text-sm px-3 py-2 rounded-md transition-colors ${isActive
+                        ? 'bg-primary text-primary-foreground shadow-sm font-medium'
+                        : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
+                      }`
+                    }
+                  >
+                    Solicitações
+                  </NavLink>
+                </div>
+              )}
+            </div>
+          );
+        })()}
+
+        {/* 8. Categoria Internato (Agrupador) */}
         {(() => {
           const hasSecretariaAccess = userModules.some(m => m.slug === 'internato-secretaria');
           const hasNotasAccess = userModules.some(m => m.slug === 'internato-notas');
@@ -651,47 +805,165 @@ const Sidebar: React.FC = () => {
           );
         })()}
 
-        {/* Categoria Conecta Saúde (Agrupador) */}
+        {/* 9. Categoria Recepção (Agrupador) */}
         {(() => {
-          const hasNovidadesAccess = userModules.some(m => m.slug === 'gestao-novidades');
-          const showConectaSaude = hasNovidadesAccess;
-          const isConectaSaudeActive = location.pathname.startsWith('/gestao-novidades');
+          const hasRecepcaoAccess = isAdmin || userModules.some(m => m.slug === 'recepcao');
+          const isRecepcaoActive = location.pathname.startsWith('/recepcao');
 
-          if (!showConectaSaude) return null;
+          if (!hasRecepcaoAccess) return null;
 
           return (
             <div className="flex flex-col">
               {isCollapsed ? (
                 <NavLink
-                  to="/gestao-novidades"
-                  title="Conecta Saúde"
-                  className={navLinkClass(isConectaSaudeActive)}
+                  to="/recepcao"
+                  title="Recepção"
+                  className={navLinkClass(isRecepcaoActive)}
                 >
-                  <Smartphone className="h-5 w-5 flex-shrink-0" />
+                  <DynamicIcon name="Users" className="h-5 w-5 flex-shrink-0" />
                 </NavLink>
               ) : (
                 <button
                   onClick={() => {
-                    setExpandedMenu(expandedMenu === 'conecta-saude' ? null : 'conecta-saude');
+                    setExpandedMenu(expandedMenu === 'recepcao' ? null : 'recepcao');
+                    if (!isRecepcaoActive) navigate('/recepcao');
                   }}
-                  className={`flex items-center rounded-md text-sm transition-all duration-200 justify-start gap-3 px-3 py-2 w-full ${isConectaSaudeActive
-                      ? 'bg-primary text-primary-foreground shadow-sm hover:shadow-md hover:shadow-primary/20 font-medium'
-                      : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
+                  className={`flex items-center rounded-md text-sm transition-all duration-200 justify-start gap-3 px-3 py-2 w-full ${isRecepcaoActive
+                    ? 'bg-primary text-primary-foreground shadow-sm hover:shadow-md hover:shadow-primary/20 font-medium'
+                    : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
                     }`}
                 >
-                  <Smartphone className="h-5 w-5 flex-shrink-0" />
+                  <DynamicIcon name="Users" className="h-5 w-5 flex-shrink-0" />
                   <div className="flex flex-1 items-center justify-between">
-                    <span className="truncate">Conecta Saúde</span>
-                    <ChevronRight className={`h-4 w-4 transition-transform ${expandedMenu === 'conecta-saude' ? 'rotate-90' : ''}`} />
+                    <span className="truncate">Recepção</span>
+                    <ChevronRight className={`h-4 w-4 transition-transform ${expandedMenu === 'recepcao' ? 'rotate-90' : ''}`} />
                   </div>
                 </button>
               )}
 
-              {!isCollapsed && expandedMenu === 'conecta-saude' && (
+              {!isCollapsed && expandedMenu === 'recepcao' && (
                 <div className="flex flex-col ml-9 mt-1 gap-1 border-l-2 border-border pl-2 border-primary/20 animate-in fade-in duration-300">
-                  {hasNovidadesAccess && (
+                  <NavLink
+                    to="/recepcao"
+                    end
+                    className={({ isActive }) =>
+                      `text-sm px-3 py-2 rounded-md transition-colors ${isActive
+                        ? 'bg-primary text-primary-foreground shadow-sm font-medium'
+                        : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
+                      }`
+                    }
+                  >
+                    Visão Geral
+                  </NavLink>
+                  <NavLink
+                    to="/recepcao/visitantes"
+                    className={({ isActive }) =>
+                      `text-sm px-3 py-2 rounded-md transition-colors ${isActive
+                        ? 'bg-primary text-primary-foreground shadow-sm font-medium'
+                        : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
+                      }`
+                    }
+                  >
+                    Visitantes
+                  </NavLink>
+                  <NavLink
+                    to="/recepcao/terceiros"
+                    className={({ isActive }) =>
+                      `text-sm px-3 py-2 rounded-md transition-colors ${isActive
+                        ? 'bg-primary text-primary-foreground shadow-sm font-medium'
+                        : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
+                      }`
+                    }
+                  >
+                    Terceiros
+                  </NavLink>
+                  <NavLink
+                    to="/recepcao/pacientes"
+                    className={({ isActive }) =>
+                      `text-sm px-3 py-2 rounded-md transition-colors ${isActive
+                        ? 'bg-primary text-primary-foreground shadow-sm font-medium'
+                        : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
+                      }`
+                    }
+                  >
+                    Pacientes
+                  </NavLink>
+                  <NavLink
+                    to="/recepcao/relatorio"
+                    className={({ isActive }) =>
+                      `text-sm px-3 py-2 rounded-md transition-colors ${isActive
+                        ? 'bg-primary text-primary-foreground shadow-sm font-medium'
+                        : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
+                      }`
+                    }
+                  >
+                    Relatório de Visitas
+                  </NavLink>
+                  <NavLink
+                    to="/senhas-atendente"
+                    className={({ isActive }) =>
+                      `text-sm px-3 py-2 rounded-md transition-colors ${isActive
+                        ? 'bg-primary text-primary-foreground shadow-sm font-medium'
+                        : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
+                      }`
+                    }
+                  >
+                    Painel de Senhas
+                  </NavLink>
+                </div>
+              )}
+            </div>
+          );
+        })()}
+
+        {/* 10. Categoria Recursos Humanos (Agrupador) */}
+        {(() => {
+          const hasDashboardAccess = userModules.some(m => m.slug === 'dashboard');
+          const hasHoleriteAccess = userModules.some(m => m.slug === 'holerites');
+          const hasInformeAccess = userModules.some(m => m.slug === 'informes');
+          const showRH = hasDashboardAccess || hasHoleriteAccess || hasInformeAccess;
+          const isRHActive = location.pathname.startsWith('/dashboard') || location.pathname.startsWith('/holerites') || location.pathname.startsWith('/informes');
+
+          if (!showRH) return null;
+
+          let firstRHRoute = '/dashboard';
+          if (hasDashboardAccess) firstRHRoute = '/dashboard';
+          else if (hasHoleriteAccess) firstRHRoute = '/holerites';
+          else if (hasInformeAccess) firstRHRoute = '/informes';
+
+          return (
+            <div className="flex flex-col">
+              {isCollapsed ? (
+                <NavLink
+                  to={firstRHRoute}
+                  title="Recursos Humanos"
+                  className={navLinkClass(isRHActive)}
+                >
+                  <Users className="h-5 w-5 flex-shrink-0" />
+                </NavLink>
+              ) : (
+                <button
+                  onClick={() => {
+                    setExpandedMenu(expandedMenu === 'recursos-humanos' ? null : 'recursos-humanos');
+                  }}
+                  className={`flex items-center rounded-md text-sm transition-all duration-200 justify-start gap-3 px-3 py-2 w-full ${isRHActive
+                      ? 'bg-primary text-primary-foreground shadow-sm hover:shadow-md hover:shadow-primary/20 font-medium'
+                      : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                    }`}
+                >
+                  <Users className="h-5 w-5 flex-shrink-0" />
+                  <div className="flex flex-1 items-center justify-between">
+                    <span className="truncate">Recursos Humanos</span>
+                    <ChevronRight className={`h-4 w-4 transition-transform ${expandedMenu === 'recursos-humanos' ? 'rotate-90' : ''}`} />
+                  </div>
+                </button>
+              )}
+
+              {!isCollapsed && expandedMenu === 'recursos-humanos' && (
+                <div className="flex flex-col ml-9 mt-1 gap-1 border-l-2 border-border pl-2 border-primary/20 animate-in fade-in duration-300">
+                  {hasDashboardAccess && (
                     <NavLink
-                      to="/gestao-novidades"
+                      to="/dashboard"
                       className={({ isActive }) =>
                         `text-sm px-3 py-2 rounded-md transition-colors ${isActive
                           ? 'bg-primary/10 text-primary font-medium'
@@ -699,7 +971,33 @@ const Sidebar: React.FC = () => {
                         }`
                       }
                     >
-                      Novidades
+                      Visão Geral
+                    </NavLink>
+                  )}
+                  {hasHoleriteAccess && (
+                    <NavLink
+                      to="/holerites"
+                      className={({ isActive }) =>
+                        `text-sm px-3 py-2 rounded-md transition-colors ${isActive
+                          ? 'bg-primary/10 text-primary font-medium'
+                          : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                        }`
+                      }
+                    >
+                      Holerite
+                    </NavLink>
+                  )}
+                  {hasInformeAccess && (
+                    <NavLink
+                      to="/informes"
+                      className={({ isActive }) =>
+                        `text-sm px-3 py-2 rounded-md transition-colors ${isActive
+                          ? 'bg-primary/10 text-primary font-medium'
+                          : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                        }`
+                      }
+                    >
+                      Informe
                     </NavLink>
                   )}
                 </div>
@@ -708,363 +1006,174 @@ const Sidebar: React.FC = () => {
           );
         })()}
 
-        {userModules
-          .filter(m => m.slug !== 'configuracoes' && m.slug !== 'pacientes-internados' && m.slug !== 'centro-cirurgico' && m.slug !== 'pronto-atendimento' && m.slug !== 'plantao-ti' && m.slug !== 'ordem-servico' && m.slug !== 'dashboard' && m.slug !== 'holerites' && m.slug !== 'informes' && m.slug !== 'notificacoes' && m.slug !== 'taxa-ocupacao' && m.slug !== 'internato-secretaria' && m.slug !== 'internato-notas' && m.slug !== 'internato-agenda' && m.slug !== 'equipamentos' && m.slug !== 'custos-ti' && m.slug !== 'usuarios-tasy' && m.slug !== 'gestao-novidades') // Configurações fica na área inferior, e assistenciais, TI, RH, notificações, taxas, internato e conecta_saude ficam agrupados
-          .map(module => {
+        {/* 11. Categoria T.I (Agrupador) */}
+        {(() => {
+          const hasPlantaoTiAccess = isAdmin || userModules.some(m => m.slug === 'plantao-ti');
+          const hasOrdemServicoAccess = isAdmin || userModules.some(m => m.slug === 'ordem-servico');
+          const hasEquipamentosAccess = isAdmin || userModules.some(m => m.slug === 'equipamentos');
+          const hasCustosTiAccess = isAdmin || userModules.some(m => m.slug === 'custos-ti');
+          const hasUsuariosTasyAccess = isAdmin || userModules.some(m => m.slug === 'usuarios-tasy');
+          const showTI = hasPlantaoTiAccess || hasOrdemServicoAccess || hasEquipamentosAccess || hasCustosTiAccess || hasUsuariosTasyAccess;
+          const isTIActive = location.pathname.startsWith('/plantao-ti') || location.pathname.startsWith('/ordem-servico') || location.pathname.startsWith('/ordem-servico-mobile') || location.pathname.startsWith('/equipamentos') || location.pathname.startsWith('/custos-ti') || location.pathname.startsWith('/usuarios-tasy');
 
-            if (module.slug === 'recepcao') {
-              const isActiveLocal = location.pathname.startsWith('/recepcao');
-              return (
-                <div key={module.slug} className="flex flex-col">
-                  {isCollapsed ? (
+          if (!showTI) return null;
+
+          return (
+            <div className="flex flex-col">
+              {isCollapsed ? (
+                <NavLink
+                  to={hasPlantaoTiAccess ? "/plantao-ti" : (hasOrdemServicoAccess ? "/ordem-servico" : (hasEquipamentosAccess ? "/equipamentos" : (hasCustosTiAccess ? "/custos-ti" : "/usuarios-tasy")))}
+                  title="T.I"
+                  className={navLinkClass(isTIActive)}
+                >
+                  <Cpu className="h-5 w-5 flex-shrink-0" />
+                </NavLink>
+              ) : (
+                <button
+                  onClick={() => {
+                    setExpandedMenu(expandedMenu === 'tecnologia-informacao' ? null : 'tecnologia-informacao');
+                  }}
+                  className={`flex items-center rounded-md text-sm transition-all duration-200 justify-start gap-3 px-3 py-2 w-full ${isTIActive
+                      ? 'bg-primary text-primary-foreground shadow-sm hover:shadow-md hover:shadow-primary/20 font-medium'
+                      : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
+                    }`}
+                >
+                  <Cpu className="h-5 w-5 flex-shrink-0" />
+                  <div className="flex flex-1 items-center justify-between">
+                    <span className="truncate">T.I</span>
+                    <ChevronRight className={`h-4 w-4 transition-transform ${expandedMenu === 'tecnologia-informacao' ? 'rotate-90' : ''}`} />
+                  </div>
+                </button>
+              )}
+
+              {!isCollapsed && expandedMenu === 'tecnologia-informacao' && (
+                <div className="flex flex-col ml-9 mt-1 gap-1 border-l-2 border-border pl-2 border-primary/20 animate-in fade-in duration-300">
+                  {hasPlantaoTiAccess && (
                     <NavLink
-                      to={`/${module.slug}`}
-                      title={module.name}
-                      className={navLinkClass(isActiveLocal)}
+                      to="/plantao-ti"
+                      className={({ isActive }) =>
+                        `text-sm px-3 py-2 rounded-md transition-colors ${isActive
+                          ? 'bg-primary text-primary-foreground shadow-sm font-medium'
+                          : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                        }`
+                      }
                     >
-                      <DynamicIcon name={module.icon} className="h-5 w-5 flex-shrink-0" />
+                      Plantão TI
                     </NavLink>
-                  ) : (
-                    <button
-                      onClick={() => {
-                        setExpandedMenu(expandedMenu === 'recepcao' ? null : 'recepcao');
-                        if (!isActiveLocal) navigate('/recepcao');
-                      }}
-                      className={`flex items-center rounded-md text-sm transition-all duration-200 justify-start gap-3 px-3 py-2 w-full ${isActiveLocal
-                        ? 'bg-primary text-primary-foreground shadow-sm hover:shadow-md hover:shadow-primary/20 font-medium'
-                        : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
-                        }`}
+                  )}
+                  {hasOrdemServicoAccess && (
+                    <>
+                      <NavLink
+                        to="/ordem-servico"
+                        className={({ isActive }) =>
+                          `text-sm px-3 py-2 rounded-md transition-colors ${isActive
+                            ? 'bg-primary text-primary-foreground shadow-sm font-medium'
+                            : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                          }`
+                        }
+                      >
+                        Ordem de Serviço
+                      </NavLink>
+                      <NavLink
+                        to="/ordem-servico-mobile"
+                        className={({ isActive }) =>
+                          `text-sm px-3 py-2 rounded-md transition-colors ${isActive
+                            ? 'bg-primary text-primary-foreground shadow-sm font-medium'
+                            : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                        }`
+                      }
                     >
-                      <DynamicIcon name={module.icon} className="h-5 w-5 flex-shrink-0" />
-                      <div className="flex flex-1 items-center justify-between">
-                        <span className="truncate">{module.name}</span>
-                        <ChevronRight className={`h-4 w-4 transition-transform ${expandedMenu === 'recepcao' ? 'rotate-90' : ''}`} />
-                      </div>
-                    </button>
+                      Ordem de Serviço (Móbile)
+                    </NavLink>
+                  </>
                   )}
-
-                  {!isCollapsed && expandedMenu === 'recepcao' && (
-                    <div className="flex flex-col ml-9 mt-1 gap-1 border-l-2 border-border pl-2 border-primary/20">
-                      <NavLink
-                        to="/recepcao"
-                        end
-                        className={({ isActive }) =>
-                          `text-sm px-3 py-2 rounded-md transition-colors ${isActive
-                            ? 'bg-primary text-primary-foreground shadow-sm font-medium'
-                            : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
-                          }`
-                        }
-                      >
-                        Visão Geral
-                      </NavLink>
-                      <NavLink
-                        to="/recepcao/visitantes"
-                        className={({ isActive }) =>
-                          `text-sm px-3 py-2 rounded-md transition-colors ${isActive
-                            ? 'bg-primary text-primary-foreground shadow-sm font-medium'
-                            : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
-                          }`
-                        }
-                      >
-                        Visitantes
-                      </NavLink>
-                      <NavLink
-                        to="/recepcao/terceiros"
-                        className={({ isActive }) =>
-                          `text-sm px-3 py-2 rounded-md transition-colors ${isActive
-                            ? 'bg-primary text-primary-foreground shadow-sm font-medium'
-                            : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
-                          }`
-                        }
-                      >
-                        Terceiros
-                      </NavLink>
-                      <NavLink
-                        to="/recepcao/pacientes"
-                        className={({ isActive }) =>
-                          `text-sm px-3 py-2 rounded-md transition-colors ${isActive
-                            ? 'bg-primary text-primary-foreground shadow-sm font-medium'
-                            : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
-                          }`
-                        }
-                      >
-                        Pacientes
-                      </NavLink>
-                      <NavLink
-                        to="/recepcao/relatorio"
-                        className={({ isActive }) =>
-                          `text-sm px-3 py-2 rounded-md transition-colors ${isActive
-                            ? 'bg-primary text-primary-foreground shadow-sm font-medium'
-                            : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
-                          }`
-                        }
-                      >
-                        Relatório de Visitas
-                      </NavLink>
-                      <NavLink
-                        to="/senhas-atendente"
-                        className={({ isActive }) =>
-                          `text-sm px-3 py-2 rounded-md transition-colors ${isActive
-                            ? 'bg-primary text-primary-foreground shadow-sm font-medium'
-                            : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
-                          }`
-                        }
-                      >
-                        Painel de Senhas
-                      </NavLink>
-                    </div>
-                  )}
-                </div>
-              );
-            }
-
-
-            if (module.slug === 'gestao-pendencias') {
-              const isActiveLocal = location.pathname.startsWith('/gestao-pendencias');
-              return (
-                <div key={module.slug} className="flex flex-col">
-                  {isCollapsed ? (
+                  {hasEquipamentosAccess && (
                     <NavLink
-                      to={`/${module.slug}`}
-                      title="Faturamento"
-                      className={navLinkClass(isActiveLocal)}
+                      to="/equipamentos"
+                      className={({ isActive }) =>
+                        `text-sm px-3 py-2 rounded-md transition-colors ${isActive
+                          ? 'bg-primary text-primary-foreground shadow-sm font-medium'
+                          : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                        }`
+                      }
                     >
-                      <DynamicIcon name="DollarSign" className="h-5 w-5 flex-shrink-0" />
+                      Equipamentos
                     </NavLink>
-                  ) : (
-                    <button
-                      onClick={() => {
-                        setExpandedMenu(expandedMenu === 'faturamento' ? null : 'faturamento');
-                        if (!isActiveLocal) navigate('/gestao-pendencias');
-                      }}
-                      className={`flex items-center rounded-md text-sm transition-all duration-200 justify-start gap-3 px-3 py-2 w-full ${isActiveLocal
-                        ? 'bg-primary text-primary-foreground shadow-sm hover:shadow-md hover:shadow-primary/20 font-medium'
-                        : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
-                        }`}
-                    >
-                      <DynamicIcon name="DollarSign" className="h-5 w-5 flex-shrink-0" />
-                      <div className="flex flex-1 items-center justify-between">
-                        <span className="truncate">Faturamento</span>
-                        <ChevronRight className={`h-4 w-4 transition-transform ${expandedMenu === 'faturamento' ? 'rotate-90' : ''}`} />
-                      </div>
-                    </button>
                   )}
-
-                  {!isCollapsed && expandedMenu === 'faturamento' && (
-                    <div className="flex flex-col ml-9 mt-1 gap-1 border-l-2 border-border pl-2 border-primary/20">
-                      <NavLink
-                        to="/gestao-pendencias"
-                        end
-                        className={({ isActive }) =>
-                          `text-sm px-3 py-2 rounded-md transition-colors ${isActive
-                            ? 'bg-primary text-primary-foreground shadow-sm font-medium'
-                            : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
-                          }`
-                        }
-                      >
-                        Gestão de Pendências
-                      </NavLink>
-                      <NavLink
-                        to="/gestao-pendencias/consulta-faturamentos"
-                        className={({ isActive }) =>
-                          `text-sm px-3 py-2 rounded-md transition-colors ${isActive
-                            ? 'bg-primary text-primary-foreground shadow-sm font-medium'
-                            : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
-                          }`
-                        }
-                      >
-                        Consulta Faturamentos
-                      </NavLink>
-                    </div>
-                  )}
-                </div>
-              );
-            }
- 
-            if (module.slug === 'financeiro') {
-              const isActiveLocal = location.pathname.startsWith('/financeiro');
-              return (
-                <div key={module.slug} className="flex flex-col">
-                  {isCollapsed ? (
+                  {hasCustosTiAccess && (
                     <NavLink
-                      to="/financeiro/tesouraria"
-                      title="Financeiro"
-                      className={navLinkClass(isActiveLocal)}
-                    >
-                      <DynamicIcon name="Wallet" className="h-5 w-5 flex-shrink-0" />
-                    </NavLink>
-                  ) : (
-                    <button
-                      onClick={() => {
-                        setExpandedMenu(expandedMenu === 'financeiro' ? null : 'financeiro');
-                        if (!isActiveLocal) navigate('/financeiro/tesouraria');
-                      }}
-                      className={`flex items-center rounded-md text-sm transition-all duration-200 justify-start gap-3 px-3 py-2 w-full ${isActiveLocal
-                        ? 'bg-primary text-primary-foreground shadow-sm hover:shadow-md hover:shadow-primary/20 font-medium'
-                        : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
-                        }`}
-                    >
-                      <DynamicIcon name="Wallet" className="h-5 w-5 flex-shrink-0" />
-                      <div className="flex flex-1 items-center justify-between">
-                        <span className="truncate">Financeiro</span>
-                        <ChevronRight className={`h-4 w-4 transition-transform ${expandedMenu === 'financeiro' ? 'rotate-90' : ''}`} />
-                      </div>
-                    </button>
-                  )}
-
-                  {!isCollapsed && expandedMenu === 'financeiro' && (
-                    <div className="flex flex-col ml-9 mt-1 gap-1 border-l-2 border-border pl-2 border-primary/20">
-                      <NavLink
-                        to="/financeiro/tesouraria"
-                        className={({ isActive }) =>
-                          `text-sm px-3 py-2 rounded-md transition-colors ${isActive
-                            ? 'bg-primary text-primary-foreground shadow-sm font-medium'
-                            : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
-                          }`
-                        }
-                      >
-                        Tesouraria
-                      </NavLink>
-                      <NavLink
-                        to="/financeiro/plantao-medico"
-                        className={({ isActive }) =>
-                          `text-sm px-3 py-2 rounded-md transition-colors ${isActive
-                            ? 'bg-primary text-primary-foreground shadow-sm font-medium'
-                            : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
-                          }`
-                        }
-                      >
-                        Plantão Médico
-                      </NavLink>
-                    </div>
-                  )}
-                </div>
-              );
-            }
-
-            if (module.slug === 'gestao-escuta-santa-casa') {
-              const isActiveLocal = location.pathname.startsWith('/gestao-escuta-santa-casa');
-              return (
-                <div key={module.slug} className="flex flex-col">
-                  {isCollapsed ? (
-                    <NavLink
-                      to={`/${module.slug}`}
-                      title="Escuta Santa Casa"
-                      className={navLinkClass(isActiveLocal)}
-                    >
-                      <DynamicIcon name={module.icon} className="h-5 w-5 flex-shrink-0" />
-                    </NavLink>
-                  ) : (
-                    <button
-                      onClick={() => {
-                        setExpandedMenu(expandedMenu === 'gestao-escuta-santa-casa' ? null : 'gestao-escuta-santa-casa');
-                        if (!isActiveLocal) navigate('/gestao-escuta-santa-casa');
-                      }}
-                      className={`flex items-center rounded-md text-sm transition-all duration-200 justify-start gap-3 px-3 py-2 w-full ${isActiveLocal
-                        ? 'bg-primary text-primary-foreground shadow-sm hover:shadow-md hover:shadow-primary/20 font-medium'
-                        : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
-                        }`}
-                    >
-                      <DynamicIcon name={module.icon} className="h-5 w-5 flex-shrink-0" />
-                      <div className="flex flex-1 items-center justify-between">
-                        <span className="truncate">Escuta Santa Casa</span>
-                        <ChevronRight className={`h-4 w-4 transition-transform ${expandedMenu === 'gestao-escuta-santa-casa' ? 'rotate-90' : ''}`} />
-                      </div>
-                    </button>
-                  )}
-
-                  {!isCollapsed && expandedMenu === 'gestao-escuta-santa-casa' && (
-                    <div className="flex flex-col ml-9 mt-1 gap-1 border-l-2 border-border pl-2 border-primary/20">
-                      <NavLink
-                        to="/gestao-escuta-santa-casa"
-                        end
-                        className={({ isActive }) =>
-                          `text-sm px-3 py-2 rounded-md transition-colors ${isActive
-                            ? 'bg-primary text-primary-foreground shadow-sm font-medium'
-                            : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
-                          }`
-                        }
-                      >
-                        Gestão de Denúncias
-                      </NavLink>
-                      <a
-                        href="/escuta-santa-casa"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-sm px-3 py-2 rounded-md transition-colors flex items-center justify-between text-muted-foreground hover:bg-muted hover:text-foreground font-medium"
-                      >
-                        <span>Canal Público</span>
-                        <DynamicIcon name="ExternalLink" className="h-3.5 w-3.5 opacity-60" />
-                      </a>
-                    </div>
-                  )}
-                </div>
-              );
-            }
-
-            if (module.slug === 'gestao-prontuarios') {
-              const isActiveLocal = location.pathname.startsWith('/gestao-prontuarios');
-              return (
-                <div key={module.slug} className="flex flex-col">
-                  {isCollapsed ? (
-                    <NavLink
-                      to={`/${module.slug}`}
-                      title={module.name}
-                      className={navLinkClass(isActiveLocal)}
-                    >
-                      <DynamicIcon name={module.icon} className="h-5 w-5 flex-shrink-0" />
-                    </NavLink>
-                  ) : (
-                    <button
-                      onClick={() => {
-                        setExpandedMenu(expandedMenu === 'gestao-prontuarios' ? null : 'gestao-prontuarios');
-                        if (!isActiveLocal) navigate('/gestao-prontuarios');
-                      }}
-                      className={`flex items-center rounded-md text-sm transition-all duration-200 justify-start gap-3 px-3 py-2 w-full ${isActiveLocal
-                          ? 'bg-primary text-primary-foreground shadow-sm hover:shadow-md hover:shadow-primary/20 font-medium'
+                      to="/custos-ti"
+                      className={({ isActive }) =>
+                        `text-sm px-3 py-2 rounded-md transition-colors ${isActive
+                          ? 'bg-primary text-primary-foreground shadow-sm font-medium'
                           : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
-                        }`}
+                        }`
+                      }
                     >
-                      <DynamicIcon name={module.icon} className="h-5 w-5 flex-shrink-0" />
-                      <div className="flex flex-1 items-center justify-between">
-                        <span className="truncate">{module.name}</span>
-                        <ChevronRight className={`h-4 w-4 transition-transform ${expandedMenu === 'gestao-prontuarios' ? 'rotate-90' : ''}`} />
-                      </div>
-                    </button>
+                      Custos TI
+                    </NavLink>
                   )}
-
-                  {!isCollapsed && expandedMenu === 'gestao-prontuarios' && (
-                    <div className="flex flex-col ml-9 mt-1 gap-1 border-l-2 border-border pl-2 border-primary/20">
-                      <NavLink
-                        to="/gestao-prontuarios"
-                        end
-                        className={({ isActive }) =>
-                          `text-sm px-3 py-2 rounded-md transition-colors ${isActive
-                            ? 'bg-primary text-primary-foreground shadow-sm font-medium'
-                            : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
-                          }`
-                        }
-                      >
-                        Solicitações
-                      </NavLink>
-                    </div>
+                  {hasUsuariosTasyAccess && (
+                    <NavLink
+                      to="/usuarios-tasy"
+                      className={({ isActive }) =>
+                        `text-sm px-3 py-2 rounded-md transition-colors ${isActive
+                          ? 'bg-primary text-primary-foreground shadow-sm font-medium'
+                          : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
+                        }`
+                      }
+                    >
+                      Usuários Tasy
+                    </NavLink>
                   )}
                 </div>
-              );
-            }
+              )}
+            </div>
+          );
+        })()}
 
-            return (
-              <NavLink
-                key={module.slug}
-                to={`/${module.slug}`}
-                title={module.name}
-                className={({ isActive }) => navLinkClass(isActive)}
-              >
-                <DynamicIcon name={module.icon} className="h-5 w-5 flex-shrink-0" />
-                {!isCollapsed && <span className="truncate">{module.name}</span>}
-              </NavLink>
-            );
-          })
+        {/* 12. Demais Módulos Dinâmicos Individuais (Ordenados em ordem alfabética) */}
+        {userModules
+          .filter(m => 
+            m.slug !== 'configuracoes' &&
+            m.slug !== 'pacientes-internados' &&
+            m.slug !== 'centro-cirurgico' &&
+            m.slug !== 'pronto-atendimento' &&
+            m.slug !== 'notificacoes' &&
+            m.slug !== 'taxa-ocupacao' &&
+            m.slug !== 'gestao-novidades' &&
+            m.slug !== 'atendimentos' &&
+            m.slug !== 'diretoria-atendimentos' &&
+            m.slug !== 'gestao-escuta-santa-casa' &&
+            m.slug !== 'gestao-pendencias' &&
+            m.slug !== 'financeiro' &&
+            m.slug !== 'gestao-prontuarios' &&
+            m.slug !== 'internato-secretaria' &&
+            m.slug !== 'internato-notas' &&
+            m.slug !== 'internato-agenda' &&
+            m.slug !== 'recepcao' &&
+            m.slug !== 'dashboard' &&
+            m.slug !== 'holerites' &&
+            m.slug !== 'informes' &&
+            m.slug !== 'plantao-ti' &&
+            m.slug !== 'ordem-servico' &&
+            m.slug !== 'ordem-servico-mobile' &&
+            m.slug !== 'equipamentos' &&
+            m.slug !== 'custos-ti' &&
+            m.slug !== 'usuarios-tasy'
+          )
+          .sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'))
+          .map(module => (
+            <NavLink
+              key={module.slug}
+              to={`/${module.slug}`}
+              title={module.name}
+              className={({ isActive }) => navLinkClass(isActive)}
+            >
+              <DynamicIcon name={module.icon} className="h-5 w-5 flex-shrink-0" />
+              {!isCollapsed && <span className="truncate">{module.name}</span>}
+            </NavLink>
+          ))
         }
       </nav>
 

@@ -332,5 +332,60 @@ export const webhookService = {
       console.error('Error in webhook fetchUsuariosAtivosTasy:', error);
       throw error;
     }
+  },
+
+  /**
+   * Fetch Hospital Consultations/Attendances for Board (Diretoria) from n8n webhook
+   */
+  async fetchConsultaAtendimentosDir(payload: any = {}): Promise<any[]> {
+    const webhookUrl = import.meta.env.VITE_N8N_WEBHOOK_ATENDIMENTOS || 'https://n8n-n8n.7woir1.easypanel.host/webhook/consulta_atendimentos_dir';
+    
+    if (!webhookUrl) {
+      console.error('Webhook URL (VITE_N8N_WEBHOOK_ATENDIMENTOS) is not configured.');
+      return [];
+    }
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 20000);
+
+    try {
+      const response = await fetch(webhookUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        throw new Error(`Erro na resposta do webhook: ${response.status} ${response.statusText}`);
+      }
+
+      const text = await response.text();
+      if (!text || !text.trim()) {
+        return [];
+      }
+
+      const data = JSON.parse(text);
+      let items: any[] = [];
+      if (Array.isArray(data)) {
+        items = data;
+      } else if (data && typeof data === 'object') {
+        if (Array.isArray(data.data)) items = data.data;
+        else if (Array.isArray(data.rows)) items = data.rows;
+        else if (Array.isArray(data.items)) items = data.items;
+        else if (Array.isArray(data.result)) items = data.result;
+        else items = [data];
+      }
+
+      return items.map(item => (item && typeof item === 'object' && item.json) ? item.json : item);
+    } catch (error: any) {
+      clearTimeout(timeoutId);
+      console.error('Error in webhook fetchConsultaAtendimentosDir:', error);
+      return [];
+    }
   }
 };
