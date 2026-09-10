@@ -125,7 +125,7 @@ export default function OrdemServico() {
 
 
   // Presença em tempo real e usuários ativos
-  const { activeUsers } = useAuth();
+  const { activeUsers, refreshActiveUsers } = useAuth();
   const [isActiveUsersModalOpen, setIsActiveUsersModalOpen] = useState(false);
 
   // Filtros
@@ -460,6 +460,7 @@ export default function OrdemServico() {
   useEffect(() => {
     // Carrega dados iniciais do banco
     fetchOrders();
+    refreshActiveUsers();
 
     // Inscreve no Realtime para alterações nas ordens de serviço
     const ordersChannel = supabase

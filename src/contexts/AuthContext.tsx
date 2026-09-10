@@ -1,18 +1,13 @@
 // src/contexts/AuthContext.tsx
 // Contexto global de autenticação via Supabase Auth com suporte a RBAC dinâmico
 
-import React, { createContext, useContext, useEffect, useState, useRef } from 'react';
+import React, { createContext, useContext, useEffect, useState, useRef, useCallback } from 'react';
 import { Session, User } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
 import { Permissions, Role, Module } from '../types/permissions';
+import { fetchActiveUsers, sendUserHeartbeat, OnlineUser } from '../services/settingsService';
 
-export interface OnlineUser {
-  id: string;
-  email: string | null;
-  full_name: string | null;
-  avatar_url: string | null;
-  online_at: string;
-}
+export type { OnlineUser };
 
 interface Profile {
   id: string;
@@ -40,6 +35,7 @@ interface AuthContextType {
   profileLoaded: boolean;
   defaultModuleSlug: string | null;
   activeUsers: OnlineUser[];
+  refreshActiveUsers: () => Promise<OnlineUser[]>;
   terminateUserSessions: (userIds: string[]) => Promise<void>;
   signIn: (email: string, password: string) => Promise<{ error: string | null }>;
   signUp: (email: string, password: string, fullName: string, phone: string, avatarUrl?: string) => Promise<{ error: string | null }>;
@@ -380,51 +376,67 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, [user?.id]);
 
-  // ── 3. Presença em tempo real e sinalização de encerramento remoto de sessão ─
-  const presenceChannelRef = useRef<any>(null);
+  // ── 3. Ações de saída e Heartbeat ──────────────────────────────────────────
+  const signOut = useCallback(async () => {
+    await supabase.auth.signOut();
+    setProfile(null);
+    setPermissions(null);
+    setUserModules([]);
+    setProfileLoaded(false);
+
+    // Limpa timestamp de atividade
+    localStorage.removeItem('hsc_last_activity');
+
+    // Limpa o cache de pendências e outros caches de sessão por segurança
+    try {
+      sessionStorage.removeItem('hsc_gestao_pendencias_data');
+      sessionStorage.removeItem('hsc_gestao_pendencias_sync_time');
+      sessionStorage.removeItem('hsc_gestao_pendencias_is_demo');
+      sessionStorage.removeItem('hsc_gestao_pendencias_sync_status');
+      
+      sessionStorage.removeItem('hsc_faturamentos_cache_data');
+      sessionStorage.removeItem('hsc_faturamentos_cache_time');
+      sessionStorage.removeItem('hsc_faturamentos_cache_is_demo');
+      sessionStorage.removeItem('hsc_faturamentos_cache_status');
+      sessionStorage.removeItem('hsc_faturamentos_cache_from');
+      sessionStorage.removeItem('hsc_faturamentos_cache_to');
+    } catch (e) {
+      console.error('Erro ao limpar cache na saída:', e);
+    }
+  }, []);
+
+  const broadcastChannelRef = useRef<any>(null);
   const [activeUsers, setActiveUsers] = useState<OnlineUser[]>([]);
+
+  const refreshActiveUsers = useCallback(async (): Promise<OnlineUser[]> => {
+    try {
+      const list = await fetchActiveUsers(5); // Considera ativos quem esteve online nos últimos 5 minutos
+      setActiveUsers(list);
+      return list;
+    } catch {
+      return [];
+    }
+  }, []);
 
   useEffect(() => {
     if (!user?.id || !profileLoaded || !profile) {
       setActiveUsers([]);
-      if (presenceChannelRef.current) {
-        supabase.removeChannel(presenceChannelRef.current);
-        presenceChannelRef.current = null;
+      if (broadcastChannelRef.current) {
+        supabase.removeChannel(broadcastChannelRef.current);
+        broadcastChannelRef.current = null;
       }
       return;
     }
 
-    const channel = supabase.channel('global-user-presence', {
-      config: {
-        presence: {
-          key: user.id,
-        },
-      },
-    });
+    // 1. Envia heartbeat inicial ao logar/carregar perfil
+    sendUserHeartbeat(user.id);
 
-    presenceChannelRef.current = channel;
+    // 2. Inscreve em canal leve de BROADCAST PURO (Zero presence, zero mensagens contínuas)
+    // Só consome mensagem se algum admin explicitamente disparar FORCE_LOGOUT
+    const channel = supabase.channel('global-user-events');
+    broadcastChannelRef.current = channel;
 
     channel
-      .on('presence', { event: 'sync' }, () => {
-        const state = channel.presenceState();
-        const onlineList: OnlineUser[] = [];
-        const seenIds = new Set<string>();
-
-        Object.keys(state).forEach((key) => {
-          const presences = state[key] as any[];
-          if (presences && presences.length > 0) {
-            const item = presences[0] as OnlineUser;
-            if (item && item.id && !seenIds.has(item.id)) {
-              seenIds.add(item.id);
-              onlineList.push(item);
-            }
-          }
-        });
-
-        // Ordena por nome alfabeticamente
-        onlineList.sort((a, b) => (a.full_name || a.email || '').localeCompare(b.full_name || b.email || ''));
-        setActiveUsers(onlineList);
-      })
       .on('broadcast', { event: 'FORCE_LOGOUT' }, (payload) => {
         const targetUserIds = payload?.payload?.targetUserIds as string[] | undefined;
         if (targetUserIds && targetUserIds.includes(user.id)) {
@@ -433,36 +445,39 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           signOut();
         }
       })
-      .subscribe(async (status) => {
-        if (status === 'SUBSCRIBED') {
-          await channel.track({
-            id: user.id,
-            email: user.email ?? profile.email ?? null,
-            full_name: profile.full_name ?? user.email ?? 'Usuário',
-            avatar_url: profile.avatar_url ?? null,
-            online_at: new Date().toISOString(),
-          });
-        }
-      });
+      .subscribe();
 
     return () => {
-      if (presenceChannelRef.current) {
-        supabase.removeChannel(presenceChannelRef.current);
-        presenceChannelRef.current = null;
+      if (broadcastChannelRef.current) {
+        supabase.removeChannel(broadcastChannelRef.current);
+        broadcastChannelRef.current = null;
       }
     };
-  }, [user?.id, profileLoaded, profile?.full_name, profile?.avatar_url]);
+  }, [user?.id, profileLoaded, signOut]);
 
   const terminateUserSessions = async (userIds: string[]) => {
-    if (!presenceChannelRef.current || userIds.length === 0) return;
+    if (userIds.length === 0) return;
 
-    await presenceChannelRef.current.send({
-      type: 'broadcast',
-      event: 'FORCE_LOGOUT',
-      payload: { targetUserIds: userIds },
-    });
+    // 1. Dispara broadcast para forçar logout remoto imediato
+    if (broadcastChannelRef.current) {
+      await broadcastChannelRef.current.send({
+        type: 'broadcast',
+        event: 'FORCE_LOGOUT',
+        payload: { targetUserIds: userIds },
+      });
+    }
 
-    // Remove imediatamente do estado local
+    // 2. Limpa last_seen_at no banco para sair imediatamente da lista de ativos
+    try {
+      await supabase
+        .from('profiles')
+        .update({ last_seen_at: null })
+        .in('id', userIds);
+    } catch (err: any) {
+      console.warn('[AuthContext] Erro ao limpar last_seen_at dos usuários desconectados:', err.message);
+    }
+
+    // 3. Atualiza estado local
     setActiveUsers(prev => prev.filter(u => !userIds.includes(u.id)));
 
     // Se o próprio usuário atual estiver na lista
@@ -471,6 +486,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       await signOut();
     }
   };
+
 
   // ── Auth actions ────────────────────────────────────────────────────────────
   const signIn = async (email: string, password: string): Promise<{ error: string | null }> => {
@@ -536,34 +552,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return { error: null };
   };
 
-  const signOut = async () => {
-    await supabase.auth.signOut();
-    setProfile(null);
-    setPermissions(null);
-    setUserModules([]);
-    setProfileLoaded(false);
-
-    // Limpa timestamp de atividade
-    localStorage.removeItem('hsc_last_activity');
-
-    // Limpa o cache de pendências e outros caches de sessão por segurança
-    try {
-      sessionStorage.removeItem('hsc_gestao_pendencias_data');
-      sessionStorage.removeItem('hsc_gestao_pendencias_sync_time');
-      sessionStorage.removeItem('hsc_gestao_pendencias_is_demo');
-      sessionStorage.removeItem('hsc_gestao_pendencias_sync_status');
-      
-      sessionStorage.removeItem('hsc_faturamentos_cache_data');
-      sessionStorage.removeItem('hsc_faturamentos_cache_time');
-      sessionStorage.removeItem('hsc_faturamentos_cache_is_demo');
-      sessionStorage.removeItem('hsc_faturamentos_cache_status');
-      sessionStorage.removeItem('hsc_faturamentos_cache_from');
-      sessionStorage.removeItem('hsc_faturamentos_cache_to');
-    } catch (e) {
-      console.error('Erro ao limpar cache na saída:', e);
-    }
-  };
-
   const resetPassword = async (email: string): Promise<{ error: string | null }> => {
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
       redirectTo: `${window.location.origin}/update-password`,
@@ -598,7 +586,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   return (
     <AuthContext.Provider value={{
       session, user, profile, permissions, userModules, loading, profileLoaded,
-      defaultModuleSlug, activeUsers, terminateUserSessions,
+      defaultModuleSlug, activeUsers, refreshActiveUsers, terminateUserSessions,
       signIn, signUp, signOut, resetPassword, updatePassword, refreshProfile, isAdmin,
     }}>
       {children}

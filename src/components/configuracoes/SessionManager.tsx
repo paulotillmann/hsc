@@ -15,7 +15,8 @@ import {
   AlertCircle,
   ShieldAlert,
   Info,
-  Tv
+  Tv,
+  RefreshCw
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { fetchSessionSettings, saveSessionSettings } from '../../services/settingsService';
@@ -27,7 +28,7 @@ interface SessionManagerProps {
 const PRESET_TIMEOUTS = [15, 30, 45, 60, 120];
 
 export const SessionManager: React.FC<SessionManagerProps> = ({ showToast }) => {
-  const { user: currentUser, activeUsers, terminateUserSessions } = useAuth();
+  const { user: currentUser, activeUsers, refreshActiveUsers, terminateUserSessions } = useAuth();
 
   // Estados de Configuração de Timeout
   const [timeoutMinutes, setTimeoutMinutes] = useState<number>(30);
@@ -39,12 +40,29 @@ export const SessionManager: React.FC<SessionManagerProps> = ({ showToast }) => 
   const [search, setSearch] = useState('');
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [terminating, setTerminating] = useState(false);
+  const [refreshingUsers, setRefreshingUsers] = useState(false);
   const [confirmTarget, setConfirmTarget] = useState<string[] | null>(null);
 
-  // Carrega configurações iniciais
+  // Carrega configurações iniciais e lista de usuários
   useEffect(() => {
     loadSettings();
+    handleRefreshUsers();
+
+    const interval = setInterval(() => {
+      refreshActiveUsers();
+    }, 30000);
+
+    return () => clearInterval(interval);
   }, []);
+
+  const handleRefreshUsers = async () => {
+    setRefreshingUsers(true);
+    try {
+      await refreshActiveUsers();
+    } finally {
+      setRefreshingUsers(false);
+    }
+  };
 
   const loadSettings = async () => {
     setLoadingSettings(true);
@@ -269,6 +287,14 @@ export const SessionManager: React.FC<SessionManagerProps> = ({ showToast }) => 
           </div>
 
           <div className="flex items-center gap-2">
+            <button
+              onClick={handleRefreshUsers}
+              disabled={refreshingUsers}
+              title="Atualizar lista de usuários"
+              className="p-2 rounded-xl border border-border bg-background hover:bg-muted text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
+            >
+              <RefreshCw className={`h-4 w-4 ${refreshingUsers ? 'animate-spin text-primary' : ''}`} />
+            </button>
             <button
               onClick={() => setConfirmTarget(selectedIds)}
               disabled={selectedIds.length === 0 || terminating}
