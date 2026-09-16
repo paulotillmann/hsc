@@ -1,18 +1,21 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { fetchSessionSettings } from '../services/settingsService';
+import { fetchSessionSettings, sendUserHeartbeat } from '../services/settingsService';
 import { supabase } from '../lib/supabase';
 
 // Fallback padrão: 30 minutos em milissegundos
 const DEFAULT_TIMEOUT_MINUTES = 30;
 // Intervalo de checagem periódica (15 segundos)
 const CHECK_INTERVAL_MS = 15 * 1000;
-// Throttling de registro de atividade (10 segundos)
+// Throttling de registro de atividade local (10 segundos)
 const THROTTLE_ACTIVITY_MS = 10 * 1000;
+// Throttling de envio de heartbeat ao banco (2.5 minutos)
+const THROTTLE_HEARTBEAT_MS = 2.5 * 60 * 1000;
 
 export const SessionTimeoutManager: React.FC = () => {
-  const { session, profile, profileLoaded, signOut } = useAuth();
+  const { session, user, profile, profileLoaded, signOut } = useAuth();
   const lastRecordedActivityRef = useRef<number>(Date.now());
+  const lastHeartbeatRef = useRef<number>(Date.now());
   const [timeoutMinutes, setTimeoutMinutes] = useState<number>(DEFAULT_TIMEOUT_MINUTES);
 
   // Carrega configuração de timeout do banco de dados e ouve alterações em tempo real
@@ -47,7 +50,7 @@ export const SessionTimeoutManager: React.FC = () => {
 
   useEffect(() => {
     // Não ativa se não houver usuário autenticado ou perfil não carregado
-    if (!session || !profileLoaded || !profile) return;
+    if (!session || !user?.id || !profileLoaded || !profile) return;
 
     // Se o usuário possui a flag de exceção (TV/Painel/Totem), não aplica o timeout por inatividade
     if (profile.exempt_session_timeout) {
@@ -60,6 +63,9 @@ export const SessionTimeoutManager: React.FC = () => {
       localStorage.setItem('hsc_last_activity', Date.now().toString());
     }
 
+    // Heartbeat inicial ao montar
+    sendUserHeartbeat(user.id);
+
     const handleUserActivity = () => {
       const now = Date.now();
       // Throttle para evitar escritas constantes no localStorage
@@ -67,7 +73,14 @@ export const SessionTimeoutManager: React.FC = () => {
         lastRecordedActivityRef.current = now;
         localStorage.setItem('hsc_last_activity', now.toString());
       }
+
+      // Throttle para envio de heartbeat leve no PostgreSQL (last_seen_at)
+      if (now - lastHeartbeatRef.current >= THROTTLE_HEARTBEAT_MS) {
+        lastHeartbeatRef.current = now;
+        sendUserHeartbeat(user.id);
+      }
     };
+
 
     // Eventos monitorados
     const events = ['mousemove', 'mousedown', 'keydown', 'touchstart', 'scroll', 'click'];

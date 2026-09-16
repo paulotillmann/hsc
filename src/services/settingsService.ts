@@ -194,3 +194,59 @@ export async function saveSessionSettings(
   }
 }
 
+// ─────────────────────────────────────────────────────────────
+// USUÁRIOS ONLINE & HEARTBEAT
+// ─────────────────────────────────────────────────────────────
+
+export interface OnlineUser {
+  id: string;
+  email: string | null;
+  full_name: string | null;
+  avatar_url: string | null;
+  online_at: string;
+}
+
+export async function fetchActiveUsers(thresholdMinutes: number = 5): Promise<OnlineUser[]> {
+  try {
+    const thresholdDate = new Date(Date.now() - thresholdMinutes * 60 * 1000).toISOString();
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('id, email, full_name, avatar_url, last_seen_at')
+      .gte('last_seen_at', thresholdDate)
+      .order('full_name', { ascending: true });
+
+    if (error) {
+      console.warn('[Settings] Erro ao buscar usuários ativos:', error.message);
+      return [];
+    }
+
+    return (data || []).map(p => ({
+      id: p.id,
+      email: p.email,
+      full_name: p.full_name || p.email || 'Usuário',
+      avatar_url: p.avatar_url,
+      online_at: p.last_seen_at || new Date().toISOString()
+    }));
+  } catch (err: any) {
+    console.error('[Settings] Exceção ao buscar usuários ativos:', err.message);
+    return [];
+  }
+}
+
+export async function sendUserHeartbeat(userId?: string): Promise<void> {
+  if (!userId) return;
+  try {
+    const { error: rpcError } = await supabase.rpc('heartbeat_user');
+    if (rpcError) {
+      // Fallback para update direto caso a RPC ainda não esteja aplicada
+      await supabase
+        .from('profiles')
+        .update({ last_seen_at: new Date().toISOString() })
+        .eq('id', userId);
+    }
+  } catch (err: any) {
+    console.debug('[Settings] Falha no heartbeat:', err.message);
+  }
+}
+
+
