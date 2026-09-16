@@ -305,7 +305,11 @@ const PlantaoMedico: React.FC = () => {
 
   const [syntheticEdits, setSyntheticEdits] = useState<Record<string, { producoes?: ProducaoItem[]; status?: 'Pago' | 'Pendente' | 'Parcial'; valorPago?: number }>>(() => {
     try {
-      const cached = getStorageItem('hsc_plantao_medico_synthetic_edits');
+      // Limpeza automática da chave legada antiga sem período para não contaminar navegadores existentes
+      localStorage.removeItem('hsc_plantao_medico_synthetic_edits');
+      sessionStorage.removeItem('hsc_plantao_medico_synthetic_edits');
+      const initialKey = `hsc_plantao_medico_synthetic_edits_${periodFrom}_${periodTo}`;
+      const cached = getStorageItem(initialKey);
       if (cached) return JSON.parse(cached);
     } catch (e) {}
     return {};
@@ -316,6 +320,8 @@ const PlantaoMedico: React.FC = () => {
     if (!from || !to) return;
     try {
       setLoadingProducoes(true);
+      // Limpa dados do período anterior imediatamente para evitar estado residual enquanto busca
+      setDbProducoesMap({});
       const lista = await plantaoMedicoProducoesService.listarPorPeriodo(from, to);
       const map: Record<string, PlantaoMedicoProducaoDB> = {};
       lista.forEach(item => {
@@ -333,6 +339,19 @@ const PlantaoMedico: React.FC = () => {
   useEffect(() => {
     carregarProducoesSupabase(periodFrom, periodTo);
   }, [carregarProducoesSupabase, periodFrom, periodTo]);
+
+  // Sincronizar cache local de rascunhos sintéticos estritamente com o período ativo
+  useEffect(() => {
+    try {
+      localStorage.removeItem('hsc_plantao_medico_synthetic_edits');
+      sessionStorage.removeItem('hsc_plantao_medico_synthetic_edits');
+      const storageKey = `hsc_plantao_medico_synthetic_edits_${periodFrom}_${periodTo}`;
+      const cached = getStorageItem(storageKey);
+      setSyntheticEdits(cached ? JSON.parse(cached) : {});
+    } catch {
+      setSyntheticEdits({});
+    }
+  }, [periodFrom, periodTo]);
 
   // Modal de Gestão de E-mails dos Médicos e Disparo em Lote
   const [isEmailsModalOpen, setIsEmailsModalOpen] = useState<boolean>(false);
@@ -505,7 +524,8 @@ const PlantaoMedico: React.FC = () => {
         [itemKey]: saved
       }));
 
-      // 3. Atualizar fallback em cache
+      // 3. Atualizar fallback em cache isolado por período
+      const storageKey = `hsc_plantao_medico_synthetic_edits_${periodFrom}_${periodTo}`;
       const updatedEdits = {
         ...syntheticEdits,
         [itemKey]: {
@@ -521,7 +541,7 @@ const PlantaoMedico: React.FC = () => {
       };
 
       setSyntheticEdits(updatedEdits);
-      setStorageItem('hsc_plantao_medico_synthetic_edits', JSON.stringify(updatedEdits));
+      setStorageItem(storageKey, JSON.stringify(updatedEdits));
 
       setSaveSuccessMessage(true);
       setTimeout(() => {
@@ -612,13 +632,22 @@ const PlantaoMedico: React.FC = () => {
     if (showLoading) setLoading(true);
     setSyncStatus('idle');
 
-    // Mapear edições existentes para preservar
+    // Mapear edições existentes para preservar (apenas se for do mesmo período)
     const existingEditsMap = new Map<string, { tipoProducao?: string; valorProducao?: number }>();
     try {
-      const currentCached = getStorageItem('hsc_plantao_medico_cache_data');
-      if (currentCached) {
-        const parsed: PlantaoMedicoItem[] = JSON.parse(currentCached);
-        parsed.forEach(p => {
+      const currentKeyed = getStorageItem(`hsc_plantao_medico_cache_${periodFrom}_${periodTo}`);
+      const cachedFrom = getStorageItem('hsc_plantao_medico_cache_from');
+      const cachedTo = getStorageItem('hsc_plantao_medico_cache_to');
+      let currentCachedList: PlantaoMedicoItem[] | null = null;
+      if (currentKeyed) {
+        const parsed = JSON.parse(currentKeyed);
+        currentCachedList = parsed.list || parsed;
+      } else if (cachedFrom === periodFrom && cachedTo === periodTo) {
+        const cachedData = getStorageItem('hsc_plantao_medico_cache_data');
+        if (cachedData) currentCachedList = JSON.parse(cachedData);
+      }
+      if (currentCachedList && Array.isArray(currentCachedList)) {
+        currentCachedList.forEach(p => {
           if (p.id && (p.tipoProducao || p.valorProducao !== undefined)) {
             existingEditsMap.set(p.id, {
               tipoProducao: p.tipoProducao,
