@@ -286,6 +286,9 @@ const PlantaoMedico: React.FC = () => {
   // Filtro de Status de Pagamento (Sintético): 'todos' | 'Pago' | 'Pendente' | 'Parcial'
   const [statusFilter, setStatusFilter] = useState<'todos' | 'Pago' | 'Pendente' | 'Parcial'>('todos');
 
+  // Filtro de Status de Envio de E-mail (Sintético): 'todos' | 'nao_enviado' | 'enviado'
+  const [emailStatusFilter, setEmailStatusFilter] = useState<'todos' | 'nao_enviado' | 'enviado'>('todos');
+
   // Ordenação
   const [sortField, setSortField] = useState<keyof PlantaoMedicoItem>('DT_CHAMADO');
   const [sortAsc, setSortAsc] = useState<boolean>(false);
@@ -964,6 +967,15 @@ const PlantaoMedico: React.FC = () => {
       filteredResult = filteredResult.filter(item => item.status === statusFilter);
     }
 
+    // Filtro por Status de Envio de E-mail (Todos, Não Enviado, Enviado)
+    if (emailStatusFilter !== 'todos') {
+      if (emailStatusFilter === 'nao_enviado') {
+        filteredResult = filteredResult.filter(item => !item.emailEnviado);
+      } else if (emailStatusFilter === 'enviado') {
+        filteredResult = filteredResult.filter(item => !!item.emailEnviado);
+      }
+    }
+
     filteredResult.sort((a, b) => {
       let valA = a[sortFieldSintetico];
       let valB = b[sortFieldSintetico];
@@ -984,7 +996,7 @@ const PlantaoMedico: React.FC = () => {
     });
 
     return filteredResult;
-  }, [plantaosFiltrados, sortFieldSintetico, sortAscSintetico, dbProducoesMap, syntheticEdits, statusFilter]);
+  }, [plantaosFiltrados, sortFieldSintetico, sortAscSintetico, dbProducoesMap, syntheticEdits, statusFilter, emailStatusFilter]);
 
   // KPIs
   const kpis = useMemo(() => {
@@ -1095,6 +1107,10 @@ const PlantaoMedico: React.FC = () => {
     ? Math.ceil(plantaosSinteticos.length / itemsPerPage)
     : Math.ceil(plantaosFiltrados.length / itemsPerPage);
 
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, selectedEspecialidades, selectedMedicos, selectedTipos, statusFilter, emailStatusFilter, periodFrom, periodTo, viewMode]);
+
   // Exportar PDF Executivo (Sintético ou Analítico em Modo Paisagem / Landscape)
   const handleExportPDF = async () => {
     const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
@@ -1132,6 +1148,9 @@ const PlantaoMedico: React.FC = () => {
     if (selectedTipos.length > 0) activeFilters.push(`Tipos: ${selectedTipos.join(', ')}`);
     if (selectedEspecialidades.length > 0) activeFilters.push(`Especialidades: ${selectedEspecialidades.join(', ')}`);
     if (statusFilter !== 'todos') activeFilters.push(`Status: ${statusFilter}`);
+    if (emailStatusFilter !== 'todos') {
+      activeFilters.push(`E-mail: ${emailStatusFilter === 'nao_enviado' ? 'Pendente de Envio' : 'Enviado'}`);
+    }
 
     if (activeFilters.length > 0) {
       doc.text(`Filtros: ${activeFilters.join(' | ')}`, 10, 37);
@@ -1398,7 +1417,7 @@ const PlantaoMedico: React.FC = () => {
             <Filter className="h-4 w-4 text-[#8a1515] dark:text-[#f43f5e]" />
             <span className="font-sans">Filtros de Pesquisa</span>
           </div>
-          {(searchTerm || selectedEspecialidades.length > 0 || selectedMedicos.length > 0 || selectedTipos.length > 0 || statusFilter !== 'todos' || periodFrom !== getDefaultDates().from || periodTo !== getDefaultDates().to) && (
+          {(searchTerm || selectedEspecialidades.length > 0 || selectedMedicos.length > 0 || selectedTipos.length > 0 || statusFilter !== 'todos' || emailStatusFilter !== 'todos' || periodFrom !== getDefaultDates().from || periodTo !== getDefaultDates().to) && (
             <button
               onClick={() => {
                 setSearchTerm('');
@@ -1406,6 +1425,7 @@ const PlantaoMedico: React.FC = () => {
                 setSelectedMedicos([]);
                 setSelectedTipos([]);
                 setStatusFilter('todos');
+                setEmailStatusFilter('todos');
                 const defaults = getDefaultDates();
                 setPeriodFrom(defaults.from);
                 setPeriodTo(defaults.to);
@@ -1418,7 +1438,7 @@ const PlantaoMedico: React.FC = () => {
           )}
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 xl:grid-cols-7 gap-4">
           {/* Data Início */}
           <div className="flex flex-col gap-1.5">
             <label className="text-xs font-semibold text-muted-foreground flex items-center gap-1 font-sans">
@@ -1753,6 +1773,23 @@ const PlantaoMedico: React.FC = () => {
               <option value="Pago">Somente Pagos (Integral)</option>
               <option value="Parcial">Somente Parciais (Com Saldo)</option>
               <option value="Pendente">Somente Pendentes (0% Pago)</option>
+            </select>
+          </div>
+
+          {/* Filtro: Status de Envio de E-mail (Todos / Não Enviado / Enviado) */}
+          <div className="flex flex-col gap-1.5">
+            <label className="text-xs font-semibold text-muted-foreground flex items-center gap-1 font-sans">
+              <Mail className="h-3.5 w-3.5" />
+              Envio de E-mail
+            </label>
+            <select
+              value={emailStatusFilter}
+              onChange={(e) => setEmailStatusFilter(e.target.value as 'todos' | 'nao_enviado' | 'enviado')}
+              className="w-full bg-background border border-border hover:border-muted-foreground/40 focus:border-[#8a1515] focus:ring-1 focus:ring-[#8a1515] rounded-lg px-3 py-2 text-sm text-foreground outline-none transition-colors cursor-pointer font-sans"
+            >
+              <option value="todos">Todos</option>
+              <option value="nao_enviado">Pendente de Envio (Não Enviado)</option>
+              <option value="enviado">Já Enviado</option>
             </select>
           </div>
         </div>

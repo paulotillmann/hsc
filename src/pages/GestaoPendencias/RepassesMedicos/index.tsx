@@ -4,7 +4,7 @@ import {
   Stethoscope, DollarSign, Users, FileText, Search, Plus, 
   FileSpreadsheet, RefreshCw, Calendar, Edit3, Trash2, Building2,
   ChevronRight, ArrowUpRight, Check, AlertCircle, Sparkles,
-  Download, FileCheck, Layers, Eye
+  Download, FileCheck, Layers, Eye, Wrench, Construction, ArrowLeft, ShieldAlert, Clock
 } from 'lucide-react';
 import { 
   repasseService, 
@@ -78,12 +78,12 @@ const SEED_PRINT_ITENS: Array<Partial<RepasseItem>> = [
 ];
 
 const SEED_UTI_ADULTO_I_DETALHES = [
-  { paciente: 'FREIDEL ALEXIS RODRIGUES BERIA', procedimento: 'ATENDIMENTO DO INTENSIVISTA', data_procedimento: '2026-04-28', quantidade: 6, valor_total: 1492.50 },
-  { paciente: 'GERALDA LOURDES DA COSTA RODRIGUES', procedimento: 'ATENDIMENTO DO INTENSIVISTA', data_procedimento: '2026-05-14', quantidade: 14, valor_total: 3482.50 },
-  { paciente: 'FILIPE RODRIGUES DE OLIVEIRA', procedimento: 'ATENDIMENTO DO INTENSIVISTA', data_procedimento: '2026-05-15', quantidade: 7, valor_total: 1741.25 },
-  { paciente: 'BRUNO HENRIQUE IZIDORO DE AGUIAR', procedimento: 'ATENDIMENTO DO INTENSIVISTA', data_procedimento: '2026-04-30', quantidade: 3, valor_total: 746.25 },
-  { paciente: 'JACINTO PIMENTA DE FIGUEIREDO JUNIOR', procedimento: 'ATENDIMENTO DO INTENSIVISTA', data_procedimento: '2026-05-22', quantidade: 6, valor_total: 1492.50 },
-  { paciente: 'MATHEUS MEIRA CARDOSO', procedimento: 'ATENDIMENTO DO INTENSIVISTA', data_procedimento: '2026-06-24', quantidade: 2, valor_total: 497.50 }
+  { paciente: 'FREIDEL ALEXIS RODRIGUES BERIA', procedimento: 'ATENDIMENTO DO INTENSIVISTA', data_procedimento: '2026-04-28', quantidade: 6, valor_total: 1492.50, ordem: 1 },
+  { paciente: 'GERALDA LOURDES DA COSTA RODRIGUES', procedimento: 'ATENDIMENTO DO INTENSIVISTA', data_procedimento: '2026-05-14', quantidade: 14, valor_total: 3482.50, ordem: 2 },
+  { paciente: 'FILIPE RODRIGUES DE OLIVEIRA', procedimento: 'ATENDIMENTO DO INTENSIVISTA', data_procedimento: '2026-05-15', quantidade: 7, valor_total: 1741.25, ordem: 3 },
+  { paciente: 'BRUNO HENRIQUE IZIDORO DE AGUIAR', procedimento: 'ATENDIMENTO DO INTENSIVISTA', data_procedimento: '2026-04-30', quantidade: 3, valor_total: 746.25, ordem: 4 },
+  { paciente: 'JACINTO PIMENTA DE FIGUEIREDO JUNIOR', procedimento: 'ATENDIMENTO DO INTENSIVISTA', data_procedimento: '2026-05-22', quantidade: 6, valor_total: 1492.50, ordem: 5 },
+  { paciente: 'MATHEUS MEIRA CARDOSO', procedimento: 'ATENDIMENTO DO INTENSIVISTA', data_procedimento: '2026-06-24', quantidade: 2, valor_total: 497.50, ordem: 6 }
 ];
 
 const RepassesMedicos: React.FC = () => {
@@ -288,6 +288,84 @@ const RepassesMedicos: React.FC = () => {
 
     doc.save(`Repasse_${convenio}_${competenciaStr}.pdf`);
   };
+
+  // Flag de módulo em produção / implantação
+  const [emProducao, setEmProducao] = useState<boolean>(true);
+
+  if (emProducao) {
+    return (
+      <motion.div
+        initial={{ opacity: 0, y: 15 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.3 }}
+        className="w-full min-h-[70vh] flex items-center justify-center p-4 sm:p-8 font-sans"
+      >
+        <div className="max-w-xl w-full bg-card border border-border/80 rounded-2xl p-8 sm:p-10 shadow-lg text-center space-y-6 relative overflow-hidden">
+          {/* Faixa decorativa superior */}
+          <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-amber-500 via-[#8a1515] to-rose-600" />
+
+          {/* Ícone com pulso */}
+          <div className="relative inline-flex items-center justify-center">
+            <div className="w-20 h-20 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-amber-600 dark:text-amber-400 flex items-center justify-center shadow-inner">
+              <Construction className="w-10 h-10 animate-bounce" style={{ animationDuration: '2.5s' }} />
+            </div>
+            <span className="absolute -top-1 -right-1 flex h-4 w-4">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-4 w-4 bg-amber-500"></span>
+            </span>
+          </div>
+
+          {/* Textos Informativos */}
+          <div className="space-y-2">
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider bg-amber-100 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-800">
+              <Clock className="w-3.5 h-3.5" />
+              Em Fase de Produção / Homologação
+            </div>
+            <h2 className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground">
+              Repasses Médicos e Convênios
+            </h2>
+            <p className="text-sm text-muted-foreground max-w-md mx-auto leading-relaxed">
+              Esta página e os módulos de fechamento de competências, auditoria e detalhamento de repasses estão atualmente em fase de produção e implantação no sistema.
+            </p>
+          </div>
+
+          {/* Card com aviso adicional */}
+          <div className="p-4 rounded-xl bg-muted/40 border border-border/60 text-left flex items-start gap-3">
+            <ShieldAlert className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" />
+            <div className="text-xs text-muted-foreground space-y-1">
+              <p className="font-semibold text-foreground">Aviso aos Usuários</p>
+              <p>
+                O acesso às tabelas e relatórios de repasses estará disponível para consulta e lançamentos em breve, após a conclusão dos testes de segurança e validação com o faturamento.
+              </p>
+            </div>
+          </div>
+
+          {/* Botões de Ação */}
+          <div className="pt-2 flex flex-col sm:flex-row items-center justify-center gap-3">
+            <button
+              type="button"
+              onClick={() => window.history.back()}
+              className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold bg-card border border-border hover:bg-muted text-foreground transition-all shadow-xs cursor-pointer"
+            >
+              <ArrowLeft className="w-4 h-4" />
+              <span>Voltar à página anterior</span>
+            </button>
+
+            {/* Acesso rápido para desenvolvimento / testes caso necessário */}
+            <button
+              type="button"
+              onClick={() => setEmProducao(false)}
+              className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-xs font-semibold text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-all cursor-pointer"
+              title="Permite visualizar a tela em desenvolvimento"
+            >
+              <Eye className="w-3.5 h-3.5" />
+              <span>Acessar Prévia (Desenvolvedor)</span>
+            </button>
+          </div>
+        </div>
+      </motion.div>
+    );
+  }
 
   return (
     <motion.div
