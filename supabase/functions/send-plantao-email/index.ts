@@ -262,7 +262,7 @@ function buildPlantaoEmailHtml(payload: SendPlantaoEmailPayload): string {
                 Olá, Dr(a). ${payload.nomeMedico}! 👋
               </h2>
               <p style="margin:0 0 20px;color:#475569;font-size:14px;line-height:1.6;">
-                Segue o <strong>Demonstrativo Consolidado de Plantões e Honorários Médicos</strong> referente ao período de <strong>${payload.periodoReferencia}</strong>.
+                Segue o <strong>Demonstrativo Consolidado de Plantões e Honorários Médicos</strong> referente ao período de <strong>${payload.periodoReferencia}</strong>, <strong>para a emissão de Nota Fiscal de Serviço</strong>.
               </p>
 
               <!-- Card de Resumo Financeiro -->

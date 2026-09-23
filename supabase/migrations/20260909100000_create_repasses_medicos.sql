@@ -29,8 +29,8 @@ CREATE TABLE IF NOT EXISTS public.repasse_itens (
   competencia_id uuid NOT NULL REFERENCES public.repasse_competencias(id) ON DELETE CASCADE,
   tipo text NOT NULL CHECK (tipo IN ('profissional', 'setor')),
   descricao text NOT NULL, -- Nome do Médico ou Nome do Setor
-  medico_id uuid REFERENCES public.plantao_medico_contatos(id) ON DELETE SET NULL,
-  setor_id uuid REFERENCES public.taxa_setores(id) ON DELETE SET NULL,
+  medico_id uuid,
+  setor_id uuid,
   valor_bruto numeric(14, 2) DEFAULT 0 NOT NULL,
   desconto_percentual numeric(5, 2) DEFAULT 0 NOT NULL,
   desconto_valor numeric(14, 2) DEFAULT 0 NOT NULL,
@@ -40,6 +40,32 @@ CREATE TABLE IF NOT EXISTS public.repasse_itens (
   created_at timestamp with time zone DEFAULT timezone('utc'::text, now()) NOT NULL,
   updated_at timestamp with time zone DEFAULT timezone('utc'::text, now()) NOT NULL
 );
+
+-- Adiciona Foreign Keys opcionais com segurança apenas se as tabelas de referência existirem
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'plantao_medico_contatos') THEN
+    IF NOT EXISTS (
+      SELECT 1 FROM information_schema.table_constraints 
+      WHERE table_schema = 'public' AND table_name = 'repasse_itens' AND constraint_name = 'fk_repasse_itens_medico'
+    ) THEN
+      ALTER TABLE public.repasse_itens 
+        ADD CONSTRAINT fk_repasse_itens_medico 
+        FOREIGN KEY (medico_id) REFERENCES public.plantao_medico_contatos(id) ON DELETE SET NULL;
+    END IF;
+  END IF;
+
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'taxa_setores') THEN
+    IF NOT EXISTS (
+      SELECT 1 FROM information_schema.table_constraints 
+      WHERE table_schema = 'public' AND table_name = 'repasse_itens' AND constraint_name = 'fk_repasse_itens_setor'
+    ) THEN
+      ALTER TABLE public.repasse_itens 
+        ADD CONSTRAINT fk_repasse_itens_setor 
+        FOREIGN KEY (setor_id) REFERENCES public.taxa_setores(id) ON DELETE SET NULL;
+    END IF;
+  END IF;
+END $$;
 
 CREATE INDEX IF NOT EXISTS idx_repasse_itens_competencia 
   ON public.repasse_itens (competencia_id);

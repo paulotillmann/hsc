@@ -485,6 +485,62 @@ export const repasseService = {
       }
     });
 
+    // Ordenar alfabeticamente
+    medicos.sort((a, b) => a.nome.localeCompare(b.nome));
+    setores.sort((a, b) => a.nome.localeCompare(b.nome));
+
     return { medicos, setores };
+  },
+
+  // ── 5. CARREGAMENTO DE CONVÊNIOS HISTÓRICOS E REGISTRADOS ─────────────────────
+  async carregarConveniosDisponiveis(): Promise<string[]> {
+    const conveniosSet = new Set<string>([
+      'UNIMED',
+      'IPSEMG',
+      'CASSI',
+      'BRADESCO SAÚDE',
+      'SULAMERICA',
+      'SUS',
+      'GOLDEN CROSS',
+      'ALLIANZ SAÚDE',
+      'PARTICULAR'
+    ]);
+
+    // 1. Tentar pegar convênios já cadastrados nas competências de repasse
+    try {
+      const { data: compConvenios } = await supabase
+        .from('repasse_competencias')
+        .select('convenio');
+
+      if (compConvenios) {
+        compConvenios.forEach(c => {
+          if (c.convenio && c.convenio.trim()) {
+            conveniosSet.add(c.convenio.trim().toUpperCase());
+          }
+        });
+      }
+    } catch (e) {
+      console.warn('Erro ao carregar convenios de repasse_competencias:', e);
+    }
+
+    // 2. Tentar resgatar da sessão do ConsultaFaturamentos se houver
+    try {
+      const cacheStr = sessionStorage.getItem('hsc_faturamentos_cache_data');
+      if (cacheStr) {
+        const parsed = JSON.parse(cacheStr);
+        if (Array.isArray(parsed)) {
+          parsed.forEach((item: any) => {
+            if (item.convenio && typeof item.convenio === 'string') {
+              conveniosSet.add(item.convenio.trim().toUpperCase());
+            }
+          });
+        }
+      }
+    } catch (e) {
+      // silencioso
+    }
+
+    return Array.from(conveniosSet).sort();
   }
 };
+

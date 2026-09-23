@@ -9,6 +9,8 @@ import {
   RepasseDetalheProducao, 
   repasseService 
 } from '../../../services/repasseService';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 interface DetalhamentoSetorModalProps {
   isOpen: boolean;
@@ -235,6 +237,147 @@ export const DetalhamentoSetorModal: React.FC<DetalhamentoSetorModalProps> = ({
     }
   };
 
+  // Exportar PDF específico deste setor
+  const handleExportarPDFSetor = async () => {
+    if (!item) return;
+    const doc = new jsPDF();
+
+    // ── 1. LOGO OFICIAL HSC E CABEÇALHO INSTITUCIONAL ──
+    try {
+      const imgObj = new Image();
+      imgObj.src = '/LOGO_HSC_PRIMARY.png';
+      await new Promise((resolve) => {
+        imgObj.onload = resolve;
+        imgObj.onerror = resolve;
+      });
+      doc.addImage(imgObj, 'PNG', 14, 10, 45, 12);
+    } catch (e) {
+      console.error('Erro ao carregar logo do HSC:', e);
+    }
+
+    doc.setFontSize(15);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(0);
+    doc.text(`Detalhamento de Produção — ${item.descricao}`, 14, 29);
+
+    doc.setFontSize(9);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(100);
+    doc.text(
+      `Convênio: ${convenio}  |  Competência: ${competencia}  |  Desconto/Retenção: ${descontoPerc}%  |  Data de Emissão: ${new Date().toLocaleDateString('pt-BR')} às ${new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`,
+      14,
+      35
+    );
+
+    const linhasValidas = linhas.filter(l => (l.paciente || '').trim().length > 0);
+
+    const formatDateBR = (dateStr: string) => {
+      if (!dateStr) return '';
+      const clean = String(dateStr).trim().slice(0, 10);
+      if (clean.includes('-')) {
+        const parts = clean.split('-');
+        if (parts.length === 3 && parts[0].length === 4) {
+          return `${parts[2]}/${parts[1]}/${parts[0]}`;
+        }
+      }
+      return clean;
+    };
+
+    const tableData = linhasValidas.map((l, idx) => [
+      idx + 1,
+      (l.paciente || '').toUpperCase(),
+      (l.procedimento || 'ATENDIMENTO DO INTENSIVISTA').toUpperCase(),
+      formatDateBR(l.data_procedimento),
+      Number(l.quantidade) || 1,
+      formatCurrency(parseCurrency(l.valor_total))
+    ]);
+
+    tableData.push([
+      '',
+      `SUBTOTAL BRUTO (${item.descricao})`,
+      '',
+      '',
+      '',
+      formatCurrency(totalBruto)
+    ]);
+
+    if (descontoPerc > 0 || valorDesconto > 0) {
+      tableData.push([
+        '',
+        `DESCONTO (${descontoPerc}%)`,
+        '',
+        '',
+        '',
+        `- ${formatCurrency(valorDesconto)}`
+      ]);
+    }
+
+    tableData.push([
+      '',
+      `TOTAL LÍQUIDO A RECEBER`,
+      '',
+      '',
+      '',
+      formatCurrency(totalAReceber)
+    ]);
+
+    const numTotais = (descontoPerc > 0 || valorDesconto > 0) ? 3 : 2;
+
+    autoTable(doc, {
+      startY: 40,
+      head: [['#', 'PACIENTE', 'PROCEDIMENTO', 'DATA', 'QTD', 'VALOR TOTAL']],
+      body: tableData,
+      theme: 'grid',
+      headStyles: { fillColor: [90, 16, 16], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 8 },
+      bodyStyles: { fontSize: 8, cellPadding: 2 },
+      columnStyles: {
+        0: { cellWidth: 10, halign: 'center' },
+        1: { cellWidth: 'auto' },
+        2: { cellWidth: 55 },
+        3: { cellWidth: 22, halign: 'center' },
+        4: { cellWidth: 12, halign: 'center' },
+        5: { cellWidth: 30, halign: 'right', fontStyle: 'bold' }
+      },
+      didParseCell: (data) => {
+        if (data.row.index >= tableData.length - numTotais) {
+          data.cell.styles.fillColor = [248, 240, 240];
+          data.cell.styles.fontStyle = 'bold';
+          if (data.row.index === tableData.length - 1) {
+            data.cell.styles.textColor = [90, 16, 16];
+          }
+        }
+      }
+    });
+
+    const totalPages = doc.getNumberOfPages();
+    for (let i = 1; i <= totalPages; i++) {
+      doc.setPage(i);
+
+      // Linha divisória fina no rodapé
+      doc.setDrawColor(220, 220, 220);
+      doc.setLineWidth(0.3);
+      doc.line(14, 283, 196, 283);
+
+      doc.setFontSize(8);
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(130);
+      doc.text(
+        `Santa Casa de Misericórdia de Araguari • HSC Sistemas • Página ${i} de ${totalPages}`,
+        14,
+        288
+      );
+      doc.text(
+        `Gerado em ${new Date().toLocaleDateString('pt-BR')} às ${new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`,
+        196,
+        288,
+        { align: 'right' }
+      );
+    }
+
+    const cleanNome = item.descricao.replace(/[^a-zA-Z0-9]/g, '_');
+    doc.save(`Detalhamento_${cleanNome}_${convenio}_${competencia}.pdf`);
+  };
+
   if (!isOpen || !item) return null;
 
   return (
@@ -265,6 +408,15 @@ export const DetalhamentoSetorModal: React.FC<DetalhamentoSetorModalProps> = ({
             </div>
 
             <div className="flex items-center gap-2 self-end sm:self-center">
+              <button
+                type="button"
+                onClick={handleExportarPDFSetor}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-border bg-card hover:bg-muted/80 text-foreground transition-colors shadow-2xs"
+                title="Exportar Detalhamento deste Setor em PDF"
+              >
+                <Download className="w-3.5 h-3.5 text-primary" />
+                Exportar PDF
+              </button>
               <button
                 type="button"
                 onClick={() => setShowPasteArea(!showPasteArea)}
@@ -491,32 +643,44 @@ export const DetalhamentoSetorModal: React.FC<DetalhamentoSetorModalProps> = ({
           </div>
 
           {/* ── BOTÕES DE AÇÃO ── */}
-          <div className="px-6 py-3.5 bg-background border-t border-border flex justify-end items-center gap-3">
+          <div className="px-6 py-3.5 bg-background border-t border-border flex justify-between items-center gap-3">
             <button
               type="button"
-              onClick={onClose}
-              className="px-4 py-2 text-xs font-medium text-muted-foreground hover:text-foreground border border-border rounded-lg hover:bg-muted transition-colors"
+              onClick={handleExportarPDFSetor}
+              className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-foreground hover:bg-muted border border-border rounded-lg transition-colors shadow-2xs"
+              title="Gerar PDF com a discriminação deste setor"
             >
-              Cancelar
+              <Download className="w-4 h-4 text-primary" />
+              <span>Exportar PDF</span>
             </button>
-            <button
-              type="button"
-              onClick={handleSalvar}
-              disabled={saving}
-              className="inline-flex items-center gap-2 px-5 py-2 text-xs font-semibold text-white bg-primary hover:bg-primary/90 rounded-lg shadow-sm transition-all disabled:opacity-50"
-            >
-              {saving ? (
-                <>
-                  <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                  Salvando...
-                </>
-              ) : (
-                <>
-                  <Save className="w-4 h-4" />
-                  Salvar e Sincronizar Setor
-                </>
-              )}
-            </button>
+
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={onClose}
+                className="px-4 py-2 text-xs font-medium text-muted-foreground hover:text-foreground border border-border rounded-lg hover:bg-muted transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleSalvar}
+                disabled={saving}
+                className="inline-flex items-center gap-2 px-5 py-2 text-xs font-semibold text-white bg-primary hover:bg-primary/90 rounded-lg shadow-sm transition-all disabled:opacity-50"
+              >
+                {saving ? (
+                  <>
+                    <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    Salvando...
+                  </>
+                ) : (
+                  <>
+                    <Save className="w-4 h-4" />
+                    Salvar e Sincronizar Setor
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         </motion.div>
       </div>

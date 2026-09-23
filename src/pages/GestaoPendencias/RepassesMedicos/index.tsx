@@ -89,8 +89,8 @@ const SEED_UTI_ADULTO_I_DETALHES = [
 const RepassesMedicos: React.FC = () => {
   // Estados da Competência e Filtros
   const [convenio, setConvenio] = useState<string>('UNIMED');
+  const [conveniosDisponiveis, setConveniosDisponiveis] = useState<string[]>([]);
   const [competenciaStr, setCompetenciaStr] = useState<string>('07-2026');
-  const [competenciasList, setCompetenciasList] = useState<RepasseCompetencia[]>([]);
   const [competenciaAtual, setCompetenciaAtual] = useState<RepasseCompetencia | null>(null);
 
   // Estados dos Itens e Listagens
@@ -103,6 +103,17 @@ const RepassesMedicos: React.FC = () => {
   const [medicosDisponiveis, setMedicosDisponiveis] = useState<ReferenciaOpcao[]>([]);
   const [setoresDisponiveis, setSetoresDisponiveis] = useState<ReferenciaOpcao[]>([]);
 
+  // Estados da Barra de Inserção Rápida
+  const [novoTipo, setNovoTipo] = useState<'profissional' | 'setor'>('profissional');
+  const [novoItemSelecionado, setNovoItemSelecionado] = useState<string>('');
+  const [novoValorBruto, setNovoValorBruto] = useState<string>('');
+  const [novoDescontoPerc, setNovoDescontoPerc] = useState<number>(0);
+  const [inserindoRapido, setInserindoRapido] = useState<boolean>(false);
+
+  // Estados de Edição Inline na Grid
+  const [salvandoItemId, setSalvandoItemId] = useState<string | null>(null);
+  const [sucessoItemId, setSucessoItemId] = useState<string | null>(null);
+
   // Estados de Modais
   const [detalheModalOpen, setDetalheModalOpen] = useState<boolean>(false);
   const [itemParaDetalhe, setItemParaDetalhe] = useState<RepasseItem | null>(null);
@@ -112,20 +123,49 @@ const RepassesMedicos: React.FC = () => {
   const [novoItemModalOpen, setNovoItemModalOpen] = useState<boolean>(false);
   const [itemParaEdicao, setItemParaEdicao] = useState<RepasseItem | null>(null);
 
+  // Estado de exportação do PDF
+  const [exportandoPdf, setExportandoPdf] = useState<boolean>(false);
+
   // Edição rápida de Nota Fiscal
   const [isEditingNF, setIsEditingNF] = useState<boolean>(false);
   const [inputNFNum, setInputNFNum] = useState<string>('');
   const [inputNFVal, setInputNFVal] = useState<string>('');
 
-  // 1. Carregamento inicial de competências e opções
-  const carregarDadosIniciais = useCallback(async () => {
+  // Formatação de data padrão brasileiro (DD/MM/AAAA)
+  const formatDateBR = (dateStr: string) => {
+    if (!dateStr) return '';
+    const clean = String(dateStr).trim().slice(0, 10);
+    if (clean.includes('-')) {
+      const parts = clean.split('-');
+      if (parts.length === 3 && parts[0].length === 4) {
+        return `${parts[2]}/${parts[1]}/${parts[0]}`;
+      }
+    }
+    return clean;
+  };
+
+  // 1. Carregamento inicial de referências e convênios
+  useEffect(() => {
+    const carregarReferencias = async () => {
+      try {
+        const [refData, convList] = await Promise.all([
+          repasseService.carregarMedicosESetoresDisponiveis(),
+          repasseService.carregarConveniosDisponiveis()
+        ]);
+        setMedicosDisponiveis(refData.medicos);
+        setSetoresDisponiveis(refData.setores);
+        setConveniosDisponiveis(convList);
+      } catch (e) {
+        console.error('Erro ao carregar referências de médicos/setores/convênios:', e);
+      }
+    };
+    carregarReferencias();
+  }, []);
+
+  // 2. Carregamento da competência atual e itens
+  const carregarDadosCompetencia = useCallback(async () => {
     setLoading(true);
     try {
-      // Carrega referências
-      const { medicos, setores } = await repasseService.carregarMedicosESetoresDisponiveis();
-      setMedicosDisponiveis(medicos);
-      setSetoresDisponiveis(setores);
-
       // Carrega ou obtém competência atual
       const comp = await repasseService.obterOuCriarCompetencia(convenio, competenciaStr);
       setCompetenciaAtual(comp);
@@ -167,10 +207,10 @@ const RepassesMedicos: React.FC = () => {
   }, [convenio, competenciaStr]);
 
   useEffect(() => {
-    carregarDadosIniciais();
-  }, [carregarDadosIniciais]);
+    carregarDadosCompetencia();
+  }, [carregarDadosCompetencia]);
 
-  // Recarregar itens quando houver alteração
+  // Recarregar itens quando houver alteração externa
   const recarregarItens = async () => {
     if (!competenciaAtual) return;
     try {
@@ -196,10 +236,125 @@ const RepassesMedicos: React.FC = () => {
     }
   };
 
+  // Adicionar item rapidamente via formulário da barra
+  const handleAdicionarRapido = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!competenciaAtual || !novoItemSelecionado.trim()) return;
+
+    const nomeFormatado = novoItemSelecionado.trim().toUpperCase();
+
+    // Verifica se já está na lista
+    const jaExiste = itens.some(i => i.descricao.toUpperCase() === nomeFormatado);
+    if (jaExiste) {
+      alert(`O médico/setor "${nomeFormatado}" já está presente nesta planilha de repasse.`);
+      return;
+    }
+
+    setInserindoRapido(true);
+    try {
+      const list = novoTipo === 'profissional' ? medicosDisponiveis : setoresDisponiveis;
+      const refEncontrada = list.find(x => x.nome.toUpperCase() === nomeFormatado);
+
+      const numBruto = parseCurrency(novoValorBruto);
+      const numPerc = novoTipo === 'setor' && novoDescontoPerc === 0 ? 10 : novoDescontoPerc;
+      const descValor = Number((numBruto * (numPerc / 100)).toFixed(2));
+      const valorLiquido = Number((numBruto - descValor).toFixed(2));
+
+      const payload: Partial<RepasseItem> = {
+        competencia_id: competenciaAtual.id,
+        tipo: novoTipo,
+        descricao: nomeFormatado,
+        medico_id: novoTipo === 'profissional' ? (refEncontrada?.id || null) : null,
+        setor_id: novoTipo === 'setor' ? (refEncontrada?.id || null) : null,
+        valor_bruto: numBruto,
+        desconto_percentual: numPerc,
+        desconto_valor: descValor,
+        valor_liquido: valorLiquido,
+        possui_detalhes: false,
+        ordem: itens.length + 1
+      };
+
+      const salvo = await repasseService.salvarItem(payload);
+      setItens(prev => [...prev, salvo]);
+
+      // Limpar campos
+      setNovoItemSelecionado('');
+      setNovoValorBruto('');
+      if (novoTipo === 'profissional') {
+        setNovoDescontoPerc(0);
+      } else {
+        setNovoDescontoPerc(10);
+      }
+
+      setSucessoItemId(salvo.id);
+      setTimeout(() => setSucessoItemId(null), 2500);
+    } catch (err) {
+      console.error('Erro ao adicionar rapidamente:', err);
+      alert('Não foi possível adicionar o médico/setor. Tente novamente.');
+    } finally {
+      setInserindoRapido(false);
+    }
+  };
+
+  // Edição inline de valores na tabela
+  const handleAtualizarCampoItem = async (itemId: string, campo: 'valor_bruto' | 'desconto_percentual', novoValor: any) => {
+    const itemAtual = itens.find(i => i.id === itemId);
+    if (!itemAtual) return;
+
+    let bruto = itemAtual.valor_bruto;
+    let perc = itemAtual.desconto_percentual;
+
+    if (campo === 'valor_bruto') {
+      bruto = parseCurrency(novoValor);
+    } else if (campo === 'desconto_percentual') {
+      perc = Number(novoValor) || 0;
+    }
+
+    const descValor = Number((bruto * (perc / 100)).toFixed(2));
+    const liquido = Number((bruto - descValor).toFixed(2));
+
+    // Atualização otimista na interface
+    setItens(prev => prev.map(it => {
+      if (it.id === itemId) {
+        return {
+          ...it,
+          valor_bruto: bruto,
+          desconto_percentual: perc,
+          desconto_valor: descValor,
+          valor_liquido: liquido
+        };
+      }
+      return it;
+    }));
+
+    // Persiste no Supabase / Local
+    setSalvandoItemId(itemId);
+    try {
+      await repasseService.salvarItem({
+        id: itemId,
+        competencia_id: itemAtual.competencia_id,
+        tipo: itemAtual.tipo,
+        descricao: itemAtual.descricao,
+        valor_bruto: bruto,
+        desconto_percentual: perc,
+        desconto_valor: descValor,
+        valor_liquido: liquido,
+        possui_detalhes: itemAtual.possui_detalhes
+      });
+
+      setSucessoItemId(itemId);
+      setTimeout(() => setSucessoItemId(null), 2000);
+    } catch (err) {
+      console.error('Erro ao salvar item inline:', err);
+    } finally {
+      setSalvandoItemId(null);
+    }
+  };
+
   // Excluir item do resumo
   const handleExcluirItem = async (item: RepasseItem) => {
     if (!competenciaAtual) return;
-    if (!window.confirm(`Tem certeza que deseja excluir o lançamento de ${item.descricao}?`)) return;
+    if (!window.confirm(`Tem certeza que deseja remover "${item.descricao}" da planilha?`)) return;
 
     try {
       await repasseService.excluirItem(item.id, competenciaAtual.id);
@@ -234,145 +389,261 @@ const RepassesMedicos: React.FC = () => {
     });
   }, [itens, searchTerm, filtroTipo]);
 
-  // Exportar PDF no formato Santa Casa
-  const handleExportarPDF = () => {
-    const doc = new jsPDF();
+  // Médicos ou setores disponíveis ainda não adicionados à planilha para facilitar seleção
+  const opcoesDisponiveisParaAdicionar = useMemo(() => {
+    const list = novoTipo === 'profissional' ? medicosDisponiveis : setoresDisponiveis;
+    const jaAdicionados = new Set(itens.map(i => i.descricao.toUpperCase().trim()));
+    return list.filter(op => !jaAdicionados.has(op.nome.toUpperCase().trim()));
+  }, [novoTipo, medicosDisponiveis, setoresDisponiveis, itens]);
 
-    // Cabeçalho Santa Casa
-    doc.setFontSize(16);
-    doc.setTextColor(30, 41, 59);
-    doc.text('SANTA CASA DE MISERICÓRDIA DE ARAGUARI', 14, 18);
+  // Exportar PDF no formato oficial Santa Casa com Resumo e Detalhamento de Produção dos Setores
+  const handleExportarPDF = async () => {
+    try {
+      setExportandoPdf(true);
+      const doc = new jsPDF();
 
-    doc.setFontSize(12);
-    doc.setTextColor(71, 85, 105);
-    doc.text(`Resumo de Repasse ${convenio} - Competência ${competenciaStr}`, 14, 26);
+      // ── 1. LOGO OFICIAL HSC E CABEÇALHO INSTITUCIONAL ──
+      try {
+        const imgObj = new Image();
+        imgObj.src = '/LOGO_HSC_PRIMARY.png';
+        await new Promise((resolve) => {
+          imgObj.onload = resolve;
+          imgObj.onerror = resolve;
+        });
+        doc.addImage(imgObj, 'PNG', 14, 10, 45, 12);
+      } catch (e) {
+        console.error('Erro ao carregar logo do HSC:', e);
+      }
 
-    doc.setFontSize(10);
-    doc.text(
-      `Nº NOTA FISCAL: ${competenciaAtual?.numero_nota_fiscal || 'N/A'}  |  Valor da NF: ${formatCurrency(valorNotaFiscal)}`,
-      14,
-      33
-    );
+      doc.setFontSize(15);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(0);
+      doc.text(`Resumo de Repasse ${convenio} - Competência ${competenciaStr}`, 14, 29);
 
-    const tableData = itens.map((it, idx) => [
-      idx + 1,
-      it.tipo === 'setor' ? `[SETOR] ${it.descricao}` : it.descricao,
-      formatCurrency(it.valor_liquido)
-    ]);
+      // ── 2. DADOS FILTRADOS CONFORME A VISUALIZAÇÃO ATIVA NA PLANILHA ──
+      const itensParaExportar = itensFiltrados;
+      const totalFiltradoLiquido = itensParaExportar.reduce(
+        (acc, curr) => acc + (Number(curr.valor_liquido) || 0),
+        0
+      );
 
-    // Linha de total
-    tableData.push([
-      '',
-      'TOTAL REPASSES',
-      formatCurrency(totalRepassesLiquido)
-    ]);
+      // Metadados dos filtros ativos
+      const filtrosDesc: string[] = [];
+      if (filtroTipo === 'profissional') filtrosDesc.push('Exibindo: Apenas Médicos');
+      if (filtroTipo === 'setor') filtrosDesc.push('Exibindo: Apenas Setores');
+      if (searchTerm.trim()) filtrosDesc.push(`Busca: "${searchTerm.trim()}"`);
+      const textoFiltros = filtrosDesc.length > 0 ? `  |  ${filtrosDesc.join(' | ')}` : '';
 
-    autoTable(doc, {
-      startY: 38,
-      head: [['#', 'PROFISSIONAL / SETOR', 'VALOR']],
-      body: tableData,
-      theme: 'grid',
-      headStyles: { fillColor: [40, 50, 70], textColor: [255, 255, 255], fontStyle: 'bold' },
-      columnStyles: {
-        0: { cellWidth: 12, halign: 'center' },
-        1: { cellWidth: 'auto' },
-        2: { cellWidth: 45, halign: 'right', fontStyle: 'bold' }
-      },
-      didParseCell: (data) => {
-        if (data.row.index === tableData.length - 1) {
-          data.cell.styles.fillColor = [240, 243, 246];
-          data.cell.styles.fontStyle = 'bold';
+      doc.setFontSize(9);
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(100);
+      doc.text(
+        `Nº NOTA FISCAL: ${competenciaAtual?.numero_nota_fiscal || 'N/A'}  |  Valor da NF: ${formatCurrency(valorNotaFiscal)}  |  Data de Emissão: ${new Date().toLocaleDateString('pt-BR')} às ${new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}${textoFiltros}`,
+        14,
+        35
+      );
+
+      // Linhas da tabela
+      const tableData = itensParaExportar.map((it, idx) => [
+        idx + 1,
+        it.tipo === 'setor' ? `[SETOR] ${it.descricao}` : it.descricao,
+        formatCurrency(it.valor_bruto),
+        `${it.desconto_percentual || 0}%`,
+        formatCurrency(it.valor_liquido)
+      ]);
+
+      const rotuloTotal = filtroTipo === 'profissional'
+        ? 'TOTAL MÉDICOS'
+        : filtroTipo === 'setor'
+        ? 'TOTAL SETORES'
+        : 'TOTAL REPASSES';
+
+      // Linha de total geral dos itens exibidos
+      tableData.push([
+        '',
+        rotuloTotal,
+        '',
+        '',
+        formatCurrency(totalFiltradoLiquido)
+      ]);
+
+      autoTable(doc, {
+        startY: 40,
+        head: [['#', 'PROFISSIONAL / SETOR', 'VALOR BRUTO', 'DESC.', 'VALOR LÍQUIDO']],
+        body: tableData,
+        theme: 'grid',
+        headStyles: { fillColor: [90, 16, 16], textColor: [255, 255, 255], fontStyle: 'bold' },
+        columnStyles: {
+          0: { cellWidth: 10, halign: 'center' },
+          1: { cellWidth: 'auto' },
+          2: { cellWidth: 35, halign: 'right' },
+          3: { cellWidth: 20, halign: 'center' },
+          4: { cellWidth: 40, halign: 'right', fontStyle: 'bold' }
+        },
+        didParseCell: (data) => {
+          if (data.row.index === tableData.length - 1) {
+            data.cell.styles.fillColor = [248, 240, 240];
+            data.cell.styles.fontStyle = 'bold';
+            data.cell.styles.textColor = [90, 16, 16];
+          }
+        }
+      });
+
+      // ── 3. DETALHAMENTO DE PRODUÇÃO POR SETOR (Apenas dos setores presentes na listagem filtrada) ──
+      const itensComSetorOuDetalhes = itensParaExportar.filter(it => it.tipo === 'setor' || it.possui_detalhes);
+
+      if (itensComSetorOuDetalhes.length > 0) {
+        // Carrega todos os detalhes de produção dos setores filtrados
+        const detalhesCarregados = await Promise.all(
+          itensComSetorOuDetalhes.map(async (it) => {
+            const detalhes = await repasseService.listarDetalhes(it.id);
+            return { item: it, detalhes };
+          })
+        );
+
+        for (const { item: it, detalhes } of detalhesCarregados) {
+          if (!detalhes || detalhes.length === 0) continue;
+
+          let lastY = (doc as any).lastAutoTable ? (doc as any).lastAutoTable.finalY : 40;
+          // Se o espaço restante for insuficiente, quebra para nova página
+          if (lastY + 55 > 265) {
+            doc.addPage();
+            lastY = 18;
+          } else {
+            lastY += 14;
+          }
+
+          // Título e identificação do Setor
+          doc.setFontSize(12);
+          doc.setFont('helvetica', 'bold');
+          doc.setTextColor(90, 16, 16);
+          doc.text(`Detalhamento de Produção — ${it.descricao.toUpperCase()}`, 14, lastY);
+
+          doc.setFontSize(9);
+          doc.setFont('helvetica', 'normal');
+          doc.setTextColor(100);
+          doc.text(
+            `Setor: ${it.descricao}  |  Desconto Contratual: ${it.desconto_percentual || 0}%  |  Qtd. de Procedimentos: ${detalhes.length}`,
+            14,
+            lastY + 5
+          );
+
+          // Linhas dos procedimentos do paciente
+          const sectorBody = detalhes.map((d, dIdx) => [
+            dIdx + 1,
+            (d.paciente || '').toUpperCase(),
+            (d.procedimento || 'ATENDIMENTO DO INTENSIVISTA').toUpperCase(),
+            formatDateBR(d.data_procedimento),
+            Number(d.quantidade) || 1,
+            formatCurrency(Number(d.valor_total) || 0)
+          ]);
+
+          // Linhas de fechamento contábil do setor
+          sectorBody.push([
+            '',
+            `SUBTOTAL BRUTO (${it.descricao})`,
+            '',
+            '',
+            '',
+            formatCurrency(it.valor_bruto)
+          ]);
+
+          if ((it.desconto_percentual || 0) > 0 || (it.desconto_valor || 0) > 0) {
+            sectorBody.push([
+              '',
+              `DESCONTO (${it.desconto_percentual || 0}%)`,
+              '',
+              '',
+              '',
+              `- ${formatCurrency(it.desconto_valor)}`
+            ]);
+          }
+
+          sectorBody.push([
+            '',
+            `TOTAL LÍQUIDO DO SETOR`,
+            '',
+            '',
+            '',
+            formatCurrency(it.valor_liquido)
+          ]);
+
+          const numTotais = ((it.desconto_percentual || 0) > 0 || (it.desconto_valor || 0) > 0) ? 3 : 2;
+
+          autoTable(doc, {
+            startY: lastY + 9,
+            head: [['#', 'PACIENTE', 'PROCEDIMENTO', 'DATA', 'QTD', 'VALOR TOTAL']],
+            body: sectorBody,
+            theme: 'grid',
+            headStyles: { fillColor: [90, 16, 16], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 8 },
+            bodyStyles: { fontSize: 8, cellPadding: 2 },
+            columnStyles: {
+              0: { cellWidth: 10, halign: 'center' },
+              1: { cellWidth: 'auto' },
+              2: { cellWidth: 55 },
+              3: { cellWidth: 22, halign: 'center' },
+              4: { cellWidth: 12, halign: 'center' },
+              5: { cellWidth: 30, halign: 'right', fontStyle: 'bold' }
+            },
+            didParseCell: (data) => {
+              if (data.row.index >= sectorBody.length - numTotais) {
+                data.cell.styles.fillColor = [248, 240, 240];
+                data.cell.styles.fontStyle = 'bold';
+                if (data.row.index === sectorBody.length - 1) {
+                  data.cell.styles.textColor = [90, 16, 16];
+                }
+              }
+            }
+          });
         }
       }
-    });
 
-    doc.save(`Repasse_${convenio}_${competenciaStr}.pdf`);
+      // ── 4. NUMERAÇÃO DE PÁGINAS E RODAPÉ OFICIAL HSC ──
+      const totalPages = doc.getNumberOfPages();
+      for (let i = 1; i <= totalPages; i++) {
+        doc.setPage(i);
+
+        // Linha divisória fina no rodapé
+        doc.setDrawColor(220, 220, 220);
+        doc.setLineWidth(0.3);
+        doc.line(14, 283, 196, 283);
+
+        doc.setFontSize(8);
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(130);
+        doc.text(
+          `Santa Casa de Misericórdia de Araguari • HSC Sistemas • Página ${i} de ${totalPages}`,
+          14,
+          288
+        );
+        doc.text(
+          `Gerado em ${new Date().toLocaleDateString('pt-BR')} às ${new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`,
+          196,
+          288,
+          { align: 'right' }
+        );
+      }
+
+      const prefixoArquivo = filtroTipo === 'profissional'
+        ? 'Repasse_Medicos'
+        : filtroTipo === 'setor'
+        ? 'Repasse_Setores'
+        : 'Repasse';
+      doc.save(`${prefixoArquivo}_${convenio}_${competenciaStr}.pdf`);
+    } catch (err: any) {
+      console.error('Erro ao gerar PDF detalhado:', err);
+      alert('Erro ao exportar PDF: ' + (err.message || 'Verifique o console'));
+    } finally {
+      setExportandoPdf(false);
+    }
   };
-
-  // Flag de módulo em produção / implantação
-  const [emProducao, setEmProducao] = useState<boolean>(true);
-
-  if (emProducao) {
-    return (
-      <motion.div
-        initial={{ opacity: 0, y: 15 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.3 }}
-        className="w-full min-h-[70vh] flex items-center justify-center p-4 sm:p-8 font-sans"
-      >
-        <div className="max-w-xl w-full bg-card border border-border/80 rounded-2xl p-8 sm:p-10 shadow-lg text-center space-y-6 relative overflow-hidden">
-          {/* Faixa decorativa superior */}
-          <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-amber-500 via-[#8a1515] to-rose-600" />
-
-          {/* Ícone com pulso */}
-          <div className="relative inline-flex items-center justify-center">
-            <div className="w-20 h-20 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-amber-600 dark:text-amber-400 flex items-center justify-center shadow-inner">
-              <Construction className="w-10 h-10 animate-bounce" style={{ animationDuration: '2.5s' }} />
-            </div>
-            <span className="absolute -top-1 -right-1 flex h-4 w-4">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-4 w-4 bg-amber-500"></span>
-            </span>
-          </div>
-
-          {/* Textos Informativos */}
-          <div className="space-y-2">
-            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider bg-amber-100 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-800">
-              <Clock className="w-3.5 h-3.5" />
-              Em Fase de Produção / Homologação
-            </div>
-            <h2 className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground">
-              Repasses Médicos e Convênios
-            </h2>
-            <p className="text-sm text-muted-foreground max-w-md mx-auto leading-relaxed">
-              Esta página e os módulos de fechamento de competências, auditoria e detalhamento de repasses estão atualmente em fase de produção e implantação no sistema.
-            </p>
-          </div>
-
-          {/* Card com aviso adicional */}
-          <div className="p-4 rounded-xl bg-muted/40 border border-border/60 text-left flex items-start gap-3">
-            <ShieldAlert className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" />
-            <div className="text-xs text-muted-foreground space-y-1">
-              <p className="font-semibold text-foreground">Aviso aos Usuários</p>
-              <p>
-                O acesso às tabelas e relatórios de repasses estará disponível para consulta e lançamentos em breve, após a conclusão dos testes de segurança e validação com o faturamento.
-              </p>
-            </div>
-          </div>
-
-          {/* Botões de Ação */}
-          <div className="pt-2 flex flex-col sm:flex-row items-center justify-center gap-3">
-            <button
-              type="button"
-              onClick={() => window.history.back()}
-              className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold bg-card border border-border hover:bg-muted text-foreground transition-all shadow-xs cursor-pointer"
-            >
-              <ArrowLeft className="w-4 h-4" />
-              <span>Voltar à página anterior</span>
-            </button>
-
-            {/* Acesso rápido para desenvolvimento / testes caso necessário */}
-            <button
-              type="button"
-              onClick={() => setEmProducao(false)}
-              className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-xs font-semibold text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-all cursor-pointer"
-              title="Permite visualizar a tela em desenvolvimento"
-            >
-              <Eye className="w-3.5 h-3.5" />
-              <span>Acessar Prévia (Desenvolvedor)</span>
-            </button>
-          </div>
-        </div>
-      </motion.div>
-    );
-  }
 
   return (
     <motion.div
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.2 }}
-      className="space-y-6 w-full px-4 sm:px-8 max-w-none pb-14"
+      className="space-y-6 w-full px-4 sm:px-8 max-w-none pb-14 font-sans"
     >
       {/* ── HEADER PRINCIPAL ── */}
       <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 border-b border-border/60 pb-5">
@@ -382,22 +653,23 @@ const RepassesMedicos: React.FC = () => {
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <h1 className="text-2xl font-bold tracking-tight text-foreground font-sans">
+              <h1 className="text-2xl font-bold tracking-tight text-foreground">
                 Repasses Médicos e Convênios
               </h1>
-              <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 border border-emerald-500/20">
-                Ativo
+              <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 border border-emerald-500/20 flex items-center gap-1">
+                <Sparkles className="w-3 h-3" />
+                Planilha Inteligente
               </span>
             </div>
             <p className="text-xs sm:text-sm text-muted-foreground mt-0.5">
-              Gestão, fechamento de competências, auditoria e detalhamento de honorários
+              Lançamentos operacionais de honorários, auditoria por setor e conferência de notas fiscais
             </p>
           </div>
         </div>
 
         {/* Seletores de Convênio, Competência e Ações */}
         <div className="flex flex-wrap items-center gap-2.5 w-full lg:w-auto">
-          {/* Seletor de Convênio */}
+          {/* Seletor de Convênio Dinâmico */}
           <div className="flex items-center gap-1.5 bg-card border border-border px-3 py-1.5 rounded-xl shadow-2xs">
             <span className="text-[11px] font-semibold text-muted-foreground uppercase">Convênio:</span>
             <select
@@ -405,11 +677,12 @@ const RepassesMedicos: React.FC = () => {
               onChange={(e) => setConvenio(e.target.value)}
               className="bg-transparent font-semibold text-foreground text-xs focus:outline-none cursor-pointer"
             >
-              <option value="UNIMED">UNIMED</option>
-              <option value="IPSEMG">IPSEMG</option>
-              <option value="CASSI">CASSI</option>
-              <option value="BRADESCO">BRADESCO SAÚDE</option>
-              <option value="PARTICULAR">PARTICULAR</option>
+              {conveniosDisponiveis.map(c => (
+                <option key={c} value={c}>{c}</option>
+              ))}
+              {!conveniosDisponiveis.includes(convenio) && (
+                <option value={convenio}>{convenio}</option>
+              )}
             </select>
           </div>
 
@@ -433,35 +706,37 @@ const RepassesMedicos: React.FC = () => {
               setItemParaEdicao(null);
               setNovoItemModalOpen(true);
             }}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-xl bg-primary text-white hover:bg-primary/90 shadow-xs transition-colors"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-xl bg-card border border-border text-foreground hover:bg-muted shadow-xs transition-colors"
+            title="Formulário completo com mais detalhes"
           >
-            <Plus className="w-3.5 h-3.5" />
-            Novo Lançamento
+            <Plus className="w-3.5 h-3.5 text-primary" />
+            Lançamento Completo
           </button>
 
-          <button
-            type="button"
-            onClick={() => setImportarModalOpen(true)}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-xl bg-emerald-600/10 text-emerald-600 border border-emerald-500/20 hover:bg-emerald-600/20 shadow-xs transition-colors"
-            title="Importar lista do Excel"
-          >
-            <FileSpreadsheet className="w-3.5 h-3.5" />
-            Importar Excel
-          </button>
 
           <button
             type="button"
             onClick={handleExportarPDF}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-xl border border-border bg-card hover:bg-muted text-foreground transition-colors shadow-2xs"
-            title="Exportar Relatório em PDF"
+            disabled={exportandoPdf}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-xl border border-border bg-card hover:bg-muted text-foreground transition-colors shadow-2xs disabled:opacity-50 cursor-pointer"
+            title="Exportar Relatório em PDF com Resumo e Detalhamento de Produção"
           >
-            <Download className="w-3.5 h-3.5 text-muted-foreground" />
-            PDF
+            {exportandoPdf ? (
+              <>
+                <RefreshCw className="w-3.5 h-3.5 animate-spin text-primary" />
+                <span>Gerando PDF...</span>
+              </>
+            ) : (
+              <>
+                <Download className="w-3.5 h-3.5 text-primary" />
+                <span>PDF Detalhado</span>
+              </>
+            )}
           </button>
 
           <button
             type="button"
-            onClick={carregarDadosIniciais}
+            onClick={carregarDadosCompetencia}
             className="p-2 rounded-xl border border-border bg-card hover:bg-muted text-muted-foreground transition-colors"
             title="Atualizar dados"
           >
@@ -470,7 +745,7 @@ const RepassesMedicos: React.FC = () => {
         </div>
       </div>
 
-      {/* ── CARDS DE RESUMO (PRINT 2: NF, TOTAIS E SALDO) ── */}
+      {/* ── CARDS DE RESUMO (NF, TOTAIS E RETENÇÃO) ── */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Card 1: Valor da Nota Fiscal */}
         <div className="bg-card border border-border rounded-2xl p-5 shadow-xs relative overflow-hidden group">
@@ -555,21 +830,21 @@ const RepassesMedicos: React.FC = () => {
         {/* Card 3: Saldo / Retenção Hospitalar */}
         <div className="bg-card border border-border rounded-2xl p-5 shadow-xs">
           <div className="flex items-center justify-between text-muted-foreground mb-2">
-            <span className="text-[11px] font-semibold uppercase tracking-wider">Saldo da Nota Fiscal</span>
+            <span className="text-[11px] font-semibold uppercase tracking-wider">Saldo / Retenção HSC</span>
             <Layers className="w-4 h-4 text-primary" />
           </div>
           <div className="text-2xl font-extrabold text-foreground font-mono">
             {formatCurrency(diferencaNF)}
           </div>
           <p className="text-xs text-muted-foreground mt-1.5">
-            Margem / Taxa retida no hospital
+            Margem hospitalar restante da nota
           </p>
         </div>
 
         {/* Card 4: Quantidade de Profissionais e Setores */}
         <div className="bg-card border border-border rounded-2xl p-5 shadow-xs">
           <div className="flex items-center justify-between text-muted-foreground mb-2">
-            <span className="text-[11px] font-semibold uppercase tracking-wider">Destinatários</span>
+            <span className="text-[11px] font-semibold uppercase tracking-wider">Destinatários na Folha</span>
             <Users className="w-4 h-4 text-blue-500" />
           </div>
           <div className="text-2xl font-extrabold text-foreground flex items-center gap-2">
@@ -585,15 +860,140 @@ const RepassesMedicos: React.FC = () => {
         </div>
       </div>
 
-      {/* ── TABELA CONSOLIDADA DE REPASSES (PRINT 2) ── */}
+      {/* ── BARRA DE SELEÇÃO & PREENCHIMENTO RÁPIDO DO MÉDICO (BARRA OPERACIONAL) ── */}
+      <div className="bg-card border-2 border-primary/20 rounded-2xl p-4 sm:p-5 shadow-sm space-y-3">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-border/60 pb-3">
+          <div className="flex items-center gap-2">
+            <div className="w-2.5 h-2.5 rounded-full bg-primary animate-pulse" />
+            <span className="text-sm font-bold text-foreground">
+              Adicionar Médico ou Setor à Planilha de Repasse
+            </span>
+            <span className="text-[10px] text-muted-foreground font-medium hidden sm:inline">
+              (Selecione no filtro abaixo para iniciar o preenchimento)
+            </span>
+          </div>
+
+          {/* Alternador Médico / Setor */}
+          <div className="flex items-center bg-muted/60 p-1 rounded-xl text-xs">
+            <button
+              type="button"
+              onClick={() => {
+                setNovoTipo('profissional');
+                setNovoItemSelecionado('');
+                setNovoDescontoPerc(0);
+              }}
+              className={`flex items-center gap-1.5 px-3 py-1 rounded-lg font-medium transition-all ${
+                novoTipo === 'profissional'
+                  ? 'bg-primary text-white shadow-xs'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              <Stethoscope className="w-3.5 h-3.5" />
+              Médico / Profissional ({medicosDisponiveis.length})
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setNovoTipo('setor');
+                setNovoItemSelecionado('');
+                setNovoDescontoPerc(10);
+              }}
+              className={`flex items-center gap-1.5 px-3 py-1 rounded-lg font-medium transition-all ${
+                novoTipo === 'setor'
+                  ? 'bg-amber-600 text-white shadow-xs'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              <Building2 className="w-3.5 h-3.5" />
+              Setor / UTI ({setoresDisponiveis.length})
+            </button>
+          </div>
+        </div>
+
+        {/* Formulário Inline de Inserção */}
+        <form onSubmit={handleAdicionarRapido} className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-end">
+          {/* Campo de Seleção / Autocomplete */}
+          <div className="sm:col-span-6">
+            <label className="block text-xs font-semibold text-muted-foreground mb-1">
+              {novoTipo === 'profissional' ? 'Selecione o Médico:' : 'Selecione o Setor:'}
+            </label>
+            <div className="relative">
+              <input
+                type="text"
+                list="lista-opcoes-rapidas"
+                value={novoItemSelecionado}
+                onChange={(e) => setNovoItemSelecionado(e.target.value)}
+                placeholder={novoTipo === 'profissional' ? 'Digite ou selecione o nome do médico...' : 'Digite ou selecione o setor (Ex: UTI ADULTO I)...'}
+                className="w-full px-3 py-2 text-xs rounded-xl border border-border bg-background text-foreground font-semibold uppercase focus:ring-2 focus:ring-primary outline-none"
+                required
+              />
+              <datalist id="lista-opcoes-rapidas">
+                {opcoesDisponiveisParaAdicionar.map((op, idx) => (
+                  <option key={op.id || idx} value={op.nome} />
+                ))}
+              </datalist>
+            </div>
+          </div>
+
+          {/* Campo Valor Bruto */}
+          <div className="sm:col-span-2">
+            <label className="block text-xs font-semibold text-muted-foreground mb-1">
+              Valor Bruto (R$):
+            </label>
+            <input
+              type="text"
+              value={novoValorBruto}
+              onChange={(e) => setNovoValorBruto(e.target.value)}
+              placeholder="0,00"
+              className="w-full px-3 py-2 text-xs rounded-xl border border-border bg-background font-mono font-bold text-foreground focus:ring-2 focus:ring-primary outline-none"
+            />
+          </div>
+
+          {/* Campo Desconto / Retenção % */}
+          <div className="sm:col-span-2">
+            <label className="block text-xs font-semibold text-muted-foreground mb-1">
+              Retenção (%):
+            </label>
+            <input
+              type="number"
+              min="0"
+              max="100"
+              step="0.5"
+              value={novoDescontoPerc}
+              onChange={(e) => setNovoDescontoPerc(parseFloat(e.target.value) || 0)}
+              className="w-full px-3 py-2 text-xs rounded-xl border border-border bg-background font-mono text-foreground focus:ring-2 focus:ring-primary outline-none"
+            />
+          </div>
+
+          {/* Botão de Inserir */}
+          <div className="sm:col-span-2">
+            <button
+              type="submit"
+              disabled={inserindoRapido || !novoItemSelecionado.trim()}
+              className="w-full py-2 px-3 rounded-xl bg-primary text-white text-xs font-bold hover:bg-primary/90 transition-all flex items-center justify-center gap-1.5 shadow-xs disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+            >
+              {inserindoRapido ? (
+                <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <Plus className="w-3.5 h-3.5" />
+              )}
+              <span>Adicionar Linha</span>
+            </button>
+          </div>
+        </form>
+      </div>
+
+      {/* ── TABELA OPERACIONAL DE REPASSES (GRID EDITÁVEL TIPO PLANILHA) ── */}
       <div className="bg-card border border-border rounded-2xl shadow-xs overflow-hidden">
         {/* Barra superior de busca e filtros */}
         <div className="px-6 py-4 border-b border-border/80 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 bg-muted/20">
           <div className="flex items-center gap-2">
-            <div className="w-2.5 h-2.5 rounded-full bg-primary animate-pulse" />
             <h2 className="text-base font-bold text-foreground">
-              Resumo de Repasse {convenio} — Competência {competenciaStr}
+              Planilha de Lançamentos — {convenio} ({competenciaStr})
             </h2>
+            <span className="text-xs bg-muted px-2 py-0.5 rounded-full font-mono text-muted-foreground font-semibold">
+              {itens.length} linhas
+            </span>
           </div>
 
           <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto">
@@ -635,59 +1035,65 @@ const RepassesMedicos: React.FC = () => {
                 type="text"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                placeholder="Buscar médico ou setor..."
+                placeholder="Filtrar médico ou setor..."
                 className="w-full pl-9 pr-3 py-1.5 text-xs rounded-xl border border-border bg-background text-foreground focus:ring-2 focus:ring-primary outline-none"
               />
             </div>
           </div>
         </div>
 
-        {/* Conteúdo da Tabela */}
+        {/* Conteúdo da Grid */}
         {loading ? (
           <div className="py-16 flex flex-col items-center justify-center text-muted-foreground space-y-3">
             <div className="w-7 h-7 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-            <span className="text-xs">Carregando repasses da competência...</span>
+            <span className="text-xs">Carregando planilha de repasses...</span>
           </div>
         ) : itensFiltrados.length === 0 ? (
           <div className="py-16 text-center text-muted-foreground space-y-2">
             <FileSpreadsheet className="w-10 h-10 mx-auto opacity-30 text-primary" />
-            <p className="text-sm font-medium">Nenhum lançamento encontrado nesta competência.</p>
-            <p className="text-xs">Clique em "Novo Lançamento" ou "Importar Excel" para começar.</p>
+            <p className="text-sm font-medium">Nenhum médico ou setor inserido nesta competência.</p>
+            <p className="text-xs">Utilize a barra acima para selecionar um médico e adicionar à planilha.</p>
           </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse text-xs">
               <thead className="bg-muted/60 text-muted-foreground font-semibold uppercase tracking-wider text-[11px] border-b border-border">
                 <tr>
-                  <th className="py-3 px-4 w-12 text-center">#</th>
-                  <th className="py-3 px-4 w-32">Tipo</th>
-                  <th className="py-3 px-4">Profissional / Setor</th>
-                  <th className="py-3 px-4 w-44 text-center">Detalhamento</th>
-                  <th className="py-3 px-4 w-40 text-right">Valor Repasse (R$)</th>
-                  <th className="py-3 px-4 w-28 text-center">Ações</th>
+                  <th className="py-3 px-3 w-10 text-center">#</th>
+                  <th className="py-3 px-3 w-28">Tipo</th>
+                  <th className="py-3 px-4 min-w-[240px]">Profissional / Setor</th>
+                  <th className="py-3 px-3 w-40 text-center">Detalhamento</th>
+                  <th className="py-3 px-3 w-36 text-right">Valor Bruto (R$)</th>
+                  <th className="py-3 px-2 w-20 text-center">Desc. (%)</th>
+                  <th className="py-3 px-3 w-28 text-right">Retenção (R$)</th>
+                  <th className="py-3 px-4 w-36 text-right">Líquido Repasse (R$)</th>
+                  <th className="py-3 px-2 w-16 text-center">Ações</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border/60">
                 {itensFiltrados.map((item, idx) => {
                   const isSetor = item.tipo === 'setor';
+                  const isSaving = salvandoItemId === item.id;
+                  const isSuccess = sucessoItemId === item.id;
+
                   return (
                     <tr 
                       key={item.id} 
                       className={`hover:bg-muted/30 transition-colors ${
-                        isSetor ? 'bg-amber-500/5 dark:bg-amber-500/10 font-medium' : ''
-                      }`}
+                        isSetor ? 'bg-amber-500/5 dark:bg-amber-500/10' : ''
+                      } ${isSuccess ? 'bg-emerald-500/10 transition-all' : ''}`}
                     >
-                      <td className="py-2.5 px-4 text-center text-muted-foreground font-mono text-[11px]">
+                      <td className="py-2.5 px-3 text-center text-muted-foreground font-mono text-[11px]">
                         {String(idx + 1).padStart(2, '0')}
                       </td>
-                      <td className="py-2.5 px-4">
+                      <td className="py-2.5 px-3">
                         {isSetor ? (
-                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[10px] font-bold bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30">
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30">
                             <Building2 className="w-3 h-3" />
                             SETOR
                           </span>
                         ) : (
-                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[10px] font-semibold bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20">
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-semibold bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20">
                             <Stethoscope className="w-3 h-3" />
                             MÉDICO
                           </span>
@@ -698,14 +1104,20 @@ const RepassesMedicos: React.FC = () => {
                           <span className="font-bold text-foreground uppercase tracking-tight">
                             {item.descricao}
                           </span>
+                          {isSaving && (
+                            <RefreshCw className="w-3 h-3 animate-spin text-primary shrink-0" />
+                          )}
+                          {isSuccess && (
+                            <Check className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                          )}
                           {item.possui_detalhes && (
-                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-primary/10 text-primary font-medium border border-primary/20">
+                            <span className="text-[10px] px-1.5 py-0.2 rounded bg-primary/10 text-primary font-medium border border-primary/20">
                               Auditado
                             </span>
                           )}
                         </div>
                       </td>
-                      <td className="py-2.5 px-4 text-center">
+                      <td className="py-2.5 px-3 text-center">
                         {isSetor || item.possui_detalhes ? (
                           <button
                             type="button"
@@ -713,10 +1125,10 @@ const RepassesMedicos: React.FC = () => {
                               setItemParaDetalhe(item);
                               setDetalheModalOpen(true);
                             }}
-                            className="inline-flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-semibold text-primary bg-primary/10 hover:bg-primary/20 rounded-lg transition-colors border border-primary/20"
+                            className="inline-flex items-center gap-1 px-2 py-1 text-[11px] font-semibold text-primary bg-primary/10 hover:bg-primary/20 rounded-lg transition-colors border border-primary/20"
                           >
-                            <Eye className="w-3.5 h-3.5" />
-                            Ver Pacientes / Produção
+                            <Eye className="w-3 h-3" />
+                            Ver Produção
                           </button>
                         ) : (
                           <button
@@ -731,42 +1143,80 @@ const RepassesMedicos: React.FC = () => {
                           </button>
                         )}
                       </td>
-                      <td className="py-2.5 px-4 text-right font-mono font-bold text-foreground text-sm">
+
+                      {/* Célula Editável: Valor Bruto */}
+                      <td className="py-1.5 px-3 text-right">
+                        <input
+                          type="text"
+                          defaultValue={item.valor_bruto.toFixed(2).replace('.', ',')}
+                          onBlur={(e) => handleAtualizarCampoItem(item.id, 'valor_bruto', e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              (e.target as HTMLInputElement).blur();
+                            }
+                          }}
+                          className="w-full text-right font-mono font-bold text-foreground bg-background hover:bg-muted/40 focus:bg-background px-2 py-1 rounded border border-transparent hover:border-border focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all"
+                          title="Clique para editar o valor bruto diretamente na célula"
+                        />
+                      </td>
+
+                      {/* Célula Editável: Desconto % */}
+                      <td className="py-1.5 px-2 text-center">
+                        <input
+                          type="number"
+                          min="0"
+                          max="100"
+                          step="0.5"
+                          defaultValue={item.desconto_percentual || 0}
+                          onBlur={(e) => handleAtualizarCampoItem(item.id, 'desconto_percentual', e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              (e.target as HTMLInputElement).blur();
+                            }
+                          }}
+                          className="w-14 text-center font-mono text-muted-foreground bg-background hover:bg-muted/40 focus:bg-background px-1 py-1 rounded border border-transparent hover:border-border focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all"
+                          title="Percentual de retenção hospitalar"
+                        />
+                      </td>
+
+                      {/* Célula Calculada: Desconto R$ */}
+                      <td className="py-2.5 px-3 text-right font-mono text-muted-foreground text-xs">
+                        {formatCurrency(item.desconto_valor || 0)}
+                      </td>
+
+                      {/* Célula Calculada: Líquido */}
+                      <td className="py-2.5 px-4 text-right font-mono font-extrabold text-foreground text-sm">
                         {formatCurrency(item.valor_liquido)}
                       </td>
-                      <td className="py-2.5 px-4 text-center">
-                        <div className="flex items-center justify-center gap-1">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setItemParaEdicao(item);
-                              setNovoItemModalOpen(true);
-                            }}
-                            className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-                            title="Editar lançamento"
-                          >
-                            <Edit3 className="w-3.5 h-3.5" />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleExcluirItem(item)}
-                            className="p-1.5 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
-                            title="Excluir lançamento"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
+
+                      {/* Ações */}
+                      <td className="py-2.5 px-2 text-center">
+                        <button
+                          type="button"
+                          onClick={() => handleExcluirItem(item)}
+                          className="p-1 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+                          title="Remover linha da planilha"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
                       </td>
                     </tr>
                   );
                 })}
               </tbody>
 
-              {/* Linha de Totalizador Fixo no Rodapé da Tabela (Print 2: TOTAL 92.914,51) */}
+              {/* Linha de Totalizador Fixo no Rodapé */}
               <tfoot className="bg-muted/80 font-bold border-t-2 border-border text-foreground">
                 <tr>
-                  <td colSpan={4} className="py-3 px-6 text-sm tracking-wide uppercase text-right sm:text-left">
+                  <td colSpan={4} className="py-3 px-4 text-sm tracking-wide uppercase text-right sm:text-left">
                     TOTAL GERAL DE REPASSES
+                  </td>
+                  <td className="py-3 px-3 text-right font-mono text-xs text-muted-foreground">
+                    {formatCurrency(itens.reduce((acc, c) => acc + (c.valor_bruto || 0), 0))}
+                  </td>
+                  <td></td>
+                  <td className="py-3 px-3 text-right font-mono text-xs text-muted-foreground">
+                    {formatCurrency(itens.reduce((acc, c) => acc + (c.desconto_valor || 0), 0))}
                   </td>
                   <td className="py-3 px-4 text-right font-mono text-base font-extrabold text-primary">
                     {formatCurrency(totalRepassesLiquido)}
@@ -780,7 +1230,7 @@ const RepassesMedicos: React.FC = () => {
       </div>
 
       {/* ── MODAIS INTEGRADOS ── */}
-      {/* 1. Modal de Detalhamento por Setor/Pacientes (Print 1) */}
+      {/* 1. Modal de Detalhamento por Setor/Pacientes */}
       <DetalhamentoSetorModal
         isOpen={detalheModalOpen}
         onClose={() => {
@@ -795,7 +1245,7 @@ const RepassesMedicos: React.FC = () => {
         }}
       />
 
-      {/* 2. Modal de Importação em Lote do Excel (Print 2) */}
+      {/* 2. Modal de Importação em Lote do Excel */}
       {competenciaAtual && (
         <ImportarExcelModal
           isOpen={importarModalOpen}
@@ -807,7 +1257,7 @@ const RepassesMedicos: React.FC = () => {
         />
       )}
 
-      {/* 3. Modal de Novo/Editar Item */}
+      {/* 3. Modal de Novo/Editar Item Completo */}
       {competenciaAtual && (
         <NovoItemModal
           isOpen={novoItemModalOpen}
@@ -837,3 +1287,4 @@ const RepassesMedicos: React.FC = () => {
 };
 
 export default RepassesMedicos;
+
