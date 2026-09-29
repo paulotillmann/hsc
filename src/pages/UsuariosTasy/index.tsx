@@ -39,11 +39,13 @@ import {
   Cell,
   CartesianGrid,
   AreaChart,
-  Area
+  Area,
+  ReferenceLine
 } from 'recharts';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { webhookService } from '../../services/webhookService';
+import { TasySnapshotModal } from './TasySnapshotModal';
 
 export interface UsuarioTasy {
   login: string;
@@ -266,6 +268,9 @@ const UsuariosTasy: React.FC = () => {
   // Modal de Detalhes
   const [selectedUser, setSelectedUser] = useState<UsuarioTasy | null>(null);
   const [copiedField, setCopiedField] = useState<string | null>(null);
+
+  // Modal de Snapshots das 23:50
+  const [isSnapshotModalOpen, setIsSnapshotModalOpen] = useState<boolean>(false);
 
   // Pico simultâneo de conexões do dia
   const [peakToday, setPeakToday] = useState<{ count: number; time: string }>(() => {
@@ -754,6 +759,27 @@ const UsuariosTasy: React.FC = () => {
 
         {/* Ações do Header */}
         <div className="flex flex-wrap items-center gap-2">
+          {/* Data do Dia */}
+          <div 
+            className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-border bg-background/50 text-xs font-medium text-muted-foreground shadow-sm"
+            title="Data atual"
+          >
+            <Calendar className="h-3.5 w-3.5 text-primary" />
+            <span className="text-foreground font-medium">
+              {new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })}
+            </span>
+          </div>
+
+          {/* Botão de Fechamento Diário / Prints das 23:50 */}
+          <button
+            onClick={() => setIsSnapshotModalOpen(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border bg-card hover:bg-muted text-foreground text-xs font-medium transition-all shadow-sm hover:border-indigo-500/40 active:scale-95 group"
+            title="Visualizar histórico de fechamento diário e prints das 23:50"
+          >
+            <History className="h-3.5 w-3.5 text-indigo-500 group-hover:rotate-[-20deg] transition-transform" />
+            <span>Fechamento 23:50</span>
+          </button>
+
           {/* Seletor de Auto-Refresh */}
           <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-border bg-background/50 text-xs font-medium text-muted-foreground">
             <Timer className="h-3.5 w-3.5 text-sky-500" />
@@ -764,14 +790,14 @@ const UsuariosTasy: React.FC = () => {
                 setRefreshInterval(val);
                 setSecondsUntilRefresh(val);
               }}
-              className="bg-transparent text-foreground border-none outline-none cursor-pointer text-xs"
+              className="bg-transparent text-foreground border-none outline-none cursor-pointer text-xs [&>option]:bg-card [&>option]:text-card-foreground dark:[&>option]:bg-slate-900 dark:[&>option]:text-slate-100"
               title="Intervalo de atualização automática"
             >
-              <option value={0}>Auto: Desativado</option>
-              <option value={15}>Auto: a cada 15s</option>
-              <option value={30}>Auto: a cada 30s</option>
-              <option value={60}>Auto: a cada 1 min</option>
-              <option value={300}>Auto: a cada 5 min</option>
+              <option className="bg-card text-card-foreground dark:bg-slate-900 dark:text-slate-100" value={0}>Auto: Desativado</option>
+              <option className="bg-card text-card-foreground dark:bg-slate-900 dark:text-slate-100" value={15}>Auto: a cada 15s</option>
+              <option className="bg-card text-card-foreground dark:bg-slate-900 dark:text-slate-100" value={30}>Auto: a cada 30s</option>
+              <option className="bg-card text-card-foreground dark:bg-slate-900 dark:text-slate-100" value={60}>Auto: a cada 1 min</option>
+              <option className="bg-card text-card-foreground dark:bg-slate-900 dark:text-slate-100" value={300}>Auto: a cada 5 min</option>
             </select>
             {refreshInterval > 0 && (
               <span className="font-mono text-sky-600 dark:text-sky-400 font-semibold min-w-[32px] text-center">
@@ -1041,77 +1067,114 @@ const UsuariosTasy: React.FC = () => {
           </div>
         </div>
 
-        {historicoSlots.length > 0 ? (
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-            {/* Lado Esquerdo: Gráfico de Tendência ao Longo do Dia */}
-            <div className="lg:col-span-7 space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-semibold text-muted-foreground font-sans uppercase tracking-wider">
-                  Curva de Conexões no Dia (10 em 10 min)
-                </span>
-                <span className="text-[11px] text-muted-foreground font-mono">
-                  00:00 → {historicoSlots[historicoSlots.length - 1]?.hora || 'Agora'}
-                </span>
-              </div>
+        {historicoSlots.length > 0 ? (() => {
+          const peakSlot = historicoSlots.find(s => s.isPeak) ||
+            (historicoSlots.length > 0 ? historicoSlots.reduce((max, s) => (s.quant > max.quant ? s : max), historicoSlots[0]) : null);
 
-              <div className="h-[240px] w-full pt-2">
-                <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={historicoSlots} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                    <defs>
-                      <linearGradient id="colorQuant" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#6366f1" stopOpacity={0.4} />
-                        <stop offset="95%" stopColor="#6366f1" stopOpacity={0.0} />
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid strokeDasharray="3 3" opacity={0.15} vertical={false} />
-                    <XAxis
-                      dataKey="hora"
-                      tick={{ fontSize: 10 }}
-                      interval="preserveStartEnd"
-                      minTickGap={20}
-                    />
-                    <YAxis
-                      tick={{ fontSize: 10 }}
-                      domain={[0, 'auto']}
-                    />
-                    <RechartsTooltip
-                      content={({ active, payload }) => {
-                        if (active && payload && payload.length) {
-                          const data = payload[0].payload as SlotHistorico;
-                          return (
-                            <div className="bg-slate-900/95 border border-slate-700/60 backdrop-blur-md px-3.5 py-2.5 rounded-xl shadow-xl text-white text-xs space-y-1">
-                              <div className="flex items-center gap-2">
-                                <Calendar className="h-3.5 w-3.5 text-indigo-400" />
-                                <p className="font-bold text-slate-100">{data.diaMes} às {data.hora}</p>
-                              </div>
-                              <div className="flex items-center justify-between gap-4 text-slate-300">
-                                <span>Conexões Ativas:</span>
-                                <span className="font-bold text-indigo-400 font-mono text-sm">{data.quant} usuários</span>
-                              </div>
-                              {data.isPeak && (
-                                <div className="inline-flex items-center gap-1 text-[11px] text-amber-300 font-semibold mt-0.5">
-                                  <Flame className="h-3 w-3 text-amber-400" />
-                                  Maior pico do dia!
+          return (
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+              {/* Lado Esquerdo: Gráfico de Tendência ao Longo do Dia */}
+              <div className="lg:col-span-7 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold text-muted-foreground font-sans uppercase tracking-wider">
+                    Curva de Conexões no Dia (10 em 10 min)
+                  </span>
+                  <span className="text-[11px] text-muted-foreground font-mono">
+                    00:00 → {historicoSlots[historicoSlots.length - 1]?.hora || 'Agora'}
+                  </span>
+                </div>
+
+                <div className="h-[240px] w-full pt-2">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart data={historicoSlots} margin={{ top: 15, right: 15, left: -20, bottom: 0 }}>
+                      <defs>
+                        <linearGradient id="colorQuant" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="#6366f1" stopOpacity={0.4} />
+                          <stop offset="95%" stopColor="#6366f1" stopOpacity={0.0} />
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="3 3" opacity={0.15} vertical={false} />
+                      <XAxis
+                        dataKey="hora"
+                        tick={{ fontSize: 10 }}
+                        interval="preserveStartEnd"
+                        minTickGap={20}
+                      />
+                      <YAxis
+                        tick={{ fontSize: 10 }}
+                        domain={[0, (dataMax: number) => Math.max(dataMax + 10, 160)]}
+                      />
+                      <RechartsTooltip
+                        content={({ active, payload }) => {
+                          if (active && payload && payload.length) {
+                            const data = payload[0].payload as SlotHistorico;
+                            return (
+                              <div className="bg-slate-900/95 border border-slate-700/60 backdrop-blur-md px-3.5 py-2.5 rounded-xl shadow-xl text-white text-xs space-y-1">
+                                <div className="flex items-center gap-2">
+                                  <Calendar className="h-3.5 w-3.5 text-indigo-400" />
+                                  <p className="font-bold text-slate-100">{data.diaMes} às {data.hora}</p>
                                 </div>
-                              )}
-                            </div>
-                          );
-                        }
-                        return null;
-                      }}
-                    />
-                    <Area
-                      type="monotone"
-                      dataKey="quant"
-                      stroke="#6366f1"
-                      strokeWidth={2.5}
-                      fillOpacity={1}
-                      fill="url(#colorQuant)"
-                    />
-                  </AreaChart>
-                </ResponsiveContainer>
+                                <div className="flex items-center justify-between gap-4 text-slate-300">
+                                  <span>Conexões Ativas:</span>
+                                  <span className="font-bold text-indigo-400 font-mono text-sm">{data.quant} usuários</span>
+                                </div>
+                                {data.isPeak && (
+                                  <div className="inline-flex items-center gap-1 text-[11px] text-amber-300 font-semibold mt-0.5">
+                                    <Flame className="h-3 w-3 text-amber-400" />
+                                    Maior pico do dia!
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          }
+                          return null;
+                        }}
+                      />
+
+                      {/* Linha Horizontal de Limite de 150 Licenças */}
+                      <ReferenceLine
+                        y={150}
+                        stroke="#f43f5e"
+                        strokeDasharray="4 4"
+                        strokeWidth={1.5}
+                        label={{
+                          value: 'Limite 150 Licenças',
+                          position: 'top',
+                          fill: '#f43f5e',
+                          fontSize: 10,
+                          fontWeight: 600
+                        }}
+                      />
+
+                      {/* Linha Vertical no Momento do Pico */}
+                      {peakSlot && peakSlot.quant > 0 && (
+                        <ReferenceLine
+                          x={peakSlot.hora}
+                          stroke="#f59e0b"
+                          strokeDasharray="3 3"
+                          strokeWidth={1.5}
+                          label={{
+                            value: `Pico: ${peakSlot.quant} (${peakSlot.hora})`,
+                            position: 'insideTopLeft',
+                            fill: '#f59e0b',
+                            fontSize: 10,
+                            fontWeight: 600
+                          }}
+                        />
+                      )}
+
+                      <Area
+                        type="monotone"
+                        dataKey="quant"
+                        stroke="#6366f1"
+                        strokeWidth={2.5}
+                        fillOpacity={1}
+                        fill="url(#colorQuant)"
+                      />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </div>
               </div>
-            </div>
 
             {/* Lado Direito: Tabela Idêntica ao Relatório do Tasy */}
             <div className="lg:col-span-5 flex flex-col space-y-2">
@@ -1179,7 +1242,8 @@ const UsuariosTasy: React.FC = () => {
               </div>
             </div>
           </div>
-        ) : (
+          );
+        })() : (
           <div className="flex flex-col items-center justify-center p-8 rounded-xl border border-dashed border-border/80 bg-background/30 text-center space-y-2">
             <History className="h-8 w-8 text-muted-foreground/60" />
             <p className="text-sm font-semibold text-foreground">Aguardando dados dos intervalos de 10 em 10 minutos</p>
@@ -1228,10 +1292,10 @@ const UsuariosTasy: React.FC = () => {
                   setSelectedSetor(e.target.value);
                   setCurrentPage(1);
                 }}
-                className="bg-transparent text-foreground border-none outline-none cursor-pointer max-w-[180px] truncate font-sans"
+                className="bg-transparent text-foreground border-none outline-none cursor-pointer max-w-[180px] truncate font-sans [&>option]:bg-card [&>option]:text-card-foreground dark:[&>option]:bg-slate-900 dark:[&>option]:text-slate-100"
               >
                 {setoresList.map(s => (
-                  <option key={s} value={s}>{s === 'TODOS' ? 'Todos os Setores' : s}</option>
+                  <option key={s} value={s} className="bg-card text-card-foreground dark:bg-slate-900 dark:text-slate-100">{s === 'TODOS' ? 'Todos os Setores' : s}</option>
                 ))}
               </select>
             </div>
@@ -1245,12 +1309,12 @@ const UsuariosTasy: React.FC = () => {
                   setSelectedDuracao(e.target.value);
                   setCurrentPage(1);
                 }}
-                className="bg-transparent text-foreground border-none outline-none cursor-pointer font-sans"
+                className="bg-transparent text-foreground border-none outline-none cursor-pointer font-sans [&>option]:bg-card [&>option]:text-card-foreground dark:[&>option]:bg-slate-900 dark:[&>option]:text-slate-100"
               >
-                <option value="TODOS">Todas as Durações</option>
-                <option value="MENOS_2H">&lt; 2 horas</option>
-                <option value="2H_4H">Entre 2h e 4h</option>
-                <option value="MAIS_4H">&gt; 4 horas logado</option>
+                <option className="bg-card text-card-foreground dark:bg-slate-900 dark:text-slate-100" value="TODOS">Todas as Durações</option>
+                <option className="bg-card text-card-foreground dark:bg-slate-900 dark:text-slate-100" value="MENOS_2H">&lt; 2 horas</option>
+                <option className="bg-card text-card-foreground dark:bg-slate-900 dark:text-slate-100" value="2H_4H">Entre 2h e 4h</option>
+                <option className="bg-card text-card-foreground dark:bg-slate-900 dark:text-slate-100" value="MAIS_4H">&gt; 4 horas logado</option>
               </select>
             </div>
 
@@ -1530,6 +1594,20 @@ const UsuariosTasy: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Modal de Histórico de Fechamento Diário (Prints das 23:50) */}
+      <TasySnapshotModal
+        isOpen={isSnapshotModalOpen}
+        onClose={() => setIsSnapshotModalOpen(false)}
+        currentDataForSave={{
+          total: kpis.total,
+          picoQtd: peakToday.count > 0 ? peakToday.count : kpis.total,
+          picoHora: peakToday.time !== '-' ? peakToday.time : (snapshotHeader.hora || '-'),
+          mediaFormatada: kpis.mediaFormatada,
+          slots: historicoSlots,
+          usuarios: usuarios
+        }}
+      />
 
     </div>
   );
