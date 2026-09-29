@@ -46,6 +46,17 @@ interface SendPlantaoEmailPayload {
   producoes?: ProducaoItemDto[];
   pdfBase64?: string; // PDF gerado pelo cliente em base64
   pdfFilename?: string;
+  tipoModulo?: 'plantao' | 'repasse';
+  convenio?: string;
+  subject?: string;
+  resumoRepasse?: {
+    convenio: string;
+    competencia: string;
+    valorBruto: number;
+    descontoPercentual: number;
+    descontoValor: number;
+    valorLiquido: number;
+  };
 }
 
 // ---------- Busca config SMTP da tabela app_settings ----------
@@ -351,6 +362,135 @@ function buildPlantaoEmailHtml(payload: SendPlantaoEmailPayload): string {
 </html>`;
 }
 
+// ---------- Template HTML Profissional para Repasses Médicos ----------
+function buildRepasseEmailHtml(payload: SendPlantaoEmailPayload): string {
+  const logoHtml = `<img src="${LOGO_URL}" alt="Santa Casa de Araguari" height="54" style="display:block;height:54px;width:auto;outline:none;text-decoration:none;margin:0 auto;" />`;
+  const convenio = payload.convenio || 'CONVÊNIO';
+  const competencia = payload.periodoReferencia;
+  const repasse = payload.resumoRepasse;
+
+  const valorBruto = repasse?.valorBruto ?? payload.resumo?.valorPlantoes ?? payload.resumo?.valorTotalGeral ?? 0;
+  const descPerc = repasse?.descontoPercentual ?? 0;
+  const descVal = repasse?.descontoValor ?? 0;
+  const valorLiq = repasse?.valorLiquido ?? payload.resumo?.valorTotalGeral ?? valorBruto;
+
+  return `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body style="margin:0;padding:0;background-color:#f8fafc;font-family:'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#f8fafc;padding:32px 0;">
+    <tr>
+      <td align="center">
+        <table width="640" cellpadding="0" cellspacing="0" style="max-width:640px;width:100%;background:#ffffff;border-radius:14px;overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,0.06);border:1px solid #e2e8f0;">
+          
+          <!-- Header Banner -->
+          <tr>
+            <td style="background:linear-gradient(135deg, #8a1515 0%, #5e0b0b 100%);padding:28px 24px;text-align:center;">
+              ${logoHtml}
+              <div style="margin-top:14px;color:#fecdd3;font-size:12px;letter-spacing:1.5px;text-transform:uppercase;font-weight:700;">
+                Setor Financeiro & Repasses Médicos
+              </div>
+            </td>
+          </tr>
+
+          <!-- Conteúdo Principal -->
+          <tr>
+            <td style="padding:32px 32px 20px;">
+              <h2 style="margin:0 0 10px;color:#0f172a;font-size:20px;font-weight:700;">
+                Olá, ${payload.nomeMedico}! 👋
+              </h2>
+              <p style="margin:0 0 20px;color:#475569;font-size:14px;line-height:1.6;">
+                Segue o <strong>Demonstrativo Consolidado de Repasses e Honorários Médicos</strong> referente ao convênio <strong>${convenio}</strong> na competência <strong>${competencia}</strong>, <strong>para a conferência e emissão de Nota Fiscal de Serviço</strong>.
+              </p>
+
+              <!-- Card de Resumo Financeiro -->
+              <table width="100%" cellpadding="0" cellspacing="0" style="background:#f8fafc;border-radius:10px;border:1px solid #e2e8f0;margin-bottom:24px;">
+                <tr>
+                  <td style="padding:18px 20px;">
+                    <div style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:0.8px;margin-bottom:12px;">
+                      📊 Resumo do Repasse
+                    </div>
+                    <table width="100%" cellpadding="4" cellspacing="0" style="font-size:13px;color:#334155;">
+                      <tr>
+                        <td>Convênio:</td>
+                        <td align="right" style="font-weight:700;color:#0f172a;">${convenio}</td>
+                      </tr>
+                      <tr>
+                        <td>Competência:</td>
+                        <td align="right" style="font-weight:700;color:#0f172a;">${competencia}</td>
+                      </tr>
+                      <tr>
+                        <td>Valor Bruto:</td>
+                        <td align="right" style="font-weight:600;">${formatCurrency(valorBruto)}</td>
+                      </tr>
+                      ${descVal > 0 ? `
+                      <tr>
+                        <td>Retenção / Desconto (${descPerc}%):</td>
+                        <td align="right" style="font-weight:600;color:#dc2626;">- ${formatCurrency(descVal)}</td>
+                      </tr>` : ''}
+                      <tr>
+                        <td style="border-top:1px solid #cbd5e1;padding-top:8px;font-weight:700;color:#8a1515;font-size:14px;">Total Líquido a Receber:</td>
+                        <td align="right" style="border-top:1px solid #cbd5e1;padding-top:8px;font-weight:800;color:#8a1515;font-size:15px;">${formatCurrency(valorLiq)}</td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+              </table>
+
+              <!-- Aviso do PDF Anexo -->
+              <div style="background:#ecfdf5;border:1px solid #a7f3d0;border-radius:8px;padding:14px 16px;margin-bottom:24px;display:flex;align-items:center;">
+                <span style="font-size:18px;margin-right:10px;">📎</span>
+                <span style="font-size:13px;color:#065f46;line-height:1.5;">
+                  O demonstrativo detalhado oficial com o detalhamento dos lançamentos está <strong>anexado a este e-mail em formato PDF</strong>.
+                </span>
+              </div>
+
+              <!-- Dados Cadastrais / Faturamento da Santa Casa -->
+              <div style="margin-top:24px;border:1px solid #e2e8f0;border-radius:10px;overflow:hidden;">
+                <div style="background:#f8fafc;padding:10px 16px;border-bottom:1px solid #e2e8f0;font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:0.8px;">
+                  🏢 Dados da Instituição para Emissão / Contato
+                </div>
+                <div style="padding:14px 16px;background:#ffffff;font-size:12.5px;color:#334155;line-height:1.7;">
+                  <div><strong>RAZÃO SOCIAL:</strong> SANTA CASA DE MISERICORDIA DE ARAGUARI</div>
+                  <div><strong>CNPJ:</strong> 16.826.067/0001-10</div>
+                  <div><strong>ENDEREÇO:</strong> PRAÇA DOM ALMIR MARQUES, Nº 2 - BAIRRO ROSÁRIO</div>
+                  <div><strong>CEP:</strong> 38440-036 - ARAGUARI/MG</div>
+                  <div style="margin-top:6px;padding-top:6px;border-top:1px dashed #e2e8f0;">
+                    <div><strong>E-MAIL FINANCEIRO:</strong> <a href="mailto:contasapagar@santacasaaraguari.org.br" style="color:#8a1515;text-decoration:none;font-weight:600;">contasapagar@santacasaaraguari.org.br</a></div>
+                    <div><strong>CONTATO / WHATSAPP:</strong> <span style="font-weight:600;color:#0f172a;">(34) 98852-1601</span> (Edna e/ou Poliana)</div>
+                  </div>
+                </div>
+              </div>
+
+              <p style="margin:20px 0 0;color:#64748b;font-size:12.5px;line-height:1.6;">
+                Em caso de dúvidas ou divergências nas informações, favor entrar em contato através dos canais acima.
+              </p>
+            </td>
+          </tr>
+
+          <!-- Rodapé Institucional -->
+          <tr>
+            <td style="background:#f1f5f9;padding:20px 32px;border-top:1px solid #e2e8f0;text-align:center;">
+              <p style="margin:0 0 4px;color:#64748b;font-size:12px;font-weight:600;">
+                Hospital Santa Casa de Misericórdia de Araguari
+              </p>
+              <p style="margin:0;color:#94a3b8;font-size:11px;">
+                E-mail automático enviado pelo Setor Financeiro • contasapagar@santacasaaraguari.org.br
+              </p>
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
+}
+
 // ---------- Handler Deno Server ----------
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
@@ -410,8 +550,18 @@ Deno.serve(async (req: Request) => {
     }
 
     const smtp = await getSmtpConfig();
-    const subject = `Demonstrativo de Plantões e Honorários Médicos - ${payload.periodoReferencia} | Santa Casa de Araguari`;
-    const html = buildPlantaoEmailHtml(payload);
+    const isRepasse = payload.tipoModulo === 'repasse';
+    
+    const defaultSubject = isRepasse
+      ? `Demonstrativo de Repasse Médico - ${payload.convenio ? payload.convenio + ' - ' : ''}${payload.periodoReferencia} | Santa Casa de Araguari`
+      : `Demonstrativo de Plantões e Honorários Médicos - ${payload.periodoReferencia} | Santa Casa de Araguari`;
+      
+    const subject = payload.subject || defaultSubject;
+    const html = isRepasse ? buildRepasseEmailHtml(payload) : buildPlantaoEmailHtml(payload);
+    
+    const defaultPdfFilename = isRepasse
+      ? `Demonstrativo_Repasse_${payload.nomeMedico.replace(/\s+/g, '_')}_${payload.periodoReferencia.replace(/[\/\s]/g, '-')}.pdf`
+      : `Demonstrativo_Plantao_${payload.nomeMedico.replace(/\s+/g, '_')}.pdf`;
 
     await sendEmailViaSMTP(
       smtp, 
@@ -419,7 +569,7 @@ Deno.serve(async (req: Request) => {
       subject, 
       html, 
       payload.pdfBase64, 
-      payload.pdfFilename || `Demonstrativo_Plantao_${payload.nomeMedico.replace(/\s+/g, '_')}.pdf`
+      payload.pdfFilename || defaultPdfFilename
     );
 
     return new Response(JSON.stringify({ success: true, recipientsCount: recipients.length }), { headers: corsHeaders });

@@ -4,7 +4,8 @@ import {
   Stethoscope, DollarSign, Users, FileText, Search, Plus, 
   FileSpreadsheet, RefreshCw, Calendar, Edit3, Trash2, Building2,
   ChevronRight, ArrowUpRight, Check, AlertCircle, Sparkles,
-  Download, FileCheck, Layers, Eye, Wrench, Construction, ArrowLeft, ShieldAlert, Clock
+  Download, FileCheck, Layers, Eye, Wrench, Construction, ArrowLeft, ShieldAlert, Clock,
+  Send, CheckCircle2
 } from 'lucide-react';
 import { 
   repasseService, 
@@ -15,6 +16,7 @@ import {
 import { DetalhamentoSetorModal } from './DetalhamentoSetorModal';
 import { ImportarExcelModal } from './ImportarExcelModal';
 import { NovoItemModal } from './NovoItemModal';
+import { EnviarRelatorioFinanceiroModal } from './EnviarRelatorioFinanceiroModal';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
@@ -123,6 +125,9 @@ const RepassesMedicos: React.FC = () => {
   const [novoItemModalOpen, setNovoItemModalOpen] = useState<boolean>(false);
   const [itemParaEdicao, setItemParaEdicao] = useState<RepasseItem | null>(null);
 
+  // Modal de Envio do Relatório Consolidado ao Financeiro
+  const [enviarRelatorioModalOpen, setEnviarRelatorioModalOpen] = useState<boolean>(false);
+
   // Estado de exportação do PDF
   const [exportandoPdf, setExportandoPdf] = useState<boolean>(false);
 
@@ -130,6 +135,14 @@ const RepassesMedicos: React.FC = () => {
   const [isEditingNF, setIsEditingNF] = useState<boolean>(false);
   const [inputNFNum, setInputNFNum] = useState<string>('');
   const [inputNFVal, setInputNFVal] = useState<string>('');
+
+  // Formatação de data e hora padrão brasileiro
+  const formatDateTime = (dateStr?: string | null) => {
+    if (!dateStr) return '';
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return dateStr;
+    return `${d.toLocaleDateString('pt-BR')} às ${d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`;
+  };
 
   // Formatação de data padrão brasileiro (DD/MM/AAAA)
   const formatDateBR = (dateStr: string) => {
@@ -714,6 +727,29 @@ const RepassesMedicos: React.FC = () => {
           </button>
 
 
+          {/* Badge de Status de Envio ao Financeiro */}
+          {competenciaAtual?.email_enviado && (
+            <div 
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-700 dark:text-emerald-400 text-xs font-semibold shadow-2xs"
+              title={`✓ Enviado em ${formatDateTime(competenciaAtual.email_enviado_em)}\nDestinatário(s): ${competenciaAtual.email_enviado_para?.join(', ')}`}
+            >
+              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+              <span>Enviado ao Financeiro</span>
+            </div>
+          )}
+
+          {/* Botão Enviar ao Financeiro */}
+          <button
+            type="button"
+            onClick={() => setEnviarRelatorioModalOpen(true)}
+            disabled={itens.length === 0}
+            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold rounded-xl bg-primary text-white hover:bg-primary/90 shadow-2xs transition-colors disabled:opacity-50 cursor-pointer"
+            title="Enviar relatório oficial em PDF por e-mail ao Setor Financeiro"
+          >
+            <Send className="w-3.5 h-3.5" />
+            <span>Enviar ao Financeiro</span>
+          </button>
+
           <button
             type="button"
             onClick={handleExportarPDF}
@@ -1028,6 +1064,8 @@ const RepassesMedicos: React.FC = () => {
               </button>
             </div>
 
+
+
             {/* Busca textual */}
             <div className="relative flex-1 sm:w-64">
               <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
@@ -1194,7 +1232,7 @@ const RepassesMedicos: React.FC = () => {
                         <button
                           type="button"
                           onClick={() => handleExcluirItem(item)}
-                          className="p-1 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+                          className="p-1 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors cursor-pointer"
                           title="Remover linha da planilha"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
@@ -1253,7 +1291,7 @@ const RepassesMedicos: React.FC = () => {
           competenciaId={competenciaAtual.id}
           setoresDisponiveis={setoresDisponiveis}
           medicosDisponiveis={medicosDisponiveis}
-          onImportado={recarregarItens}
+          onImportado={carregarDadosCompetencia}
         />
       )}
 
@@ -1280,6 +1318,20 @@ const RepassesMedicos: React.FC = () => {
               return [...prev, salvo];
             });
           }}
+        />
+      )}
+
+      {/* 4. Modal de Envio do Relatório Consolidado ao Financeiro */}
+      {competenciaAtual && (
+        <EnviarRelatorioFinanceiroModal
+          isOpen={enviarRelatorioModalOpen}
+          onClose={() => setEnviarRelatorioModalOpen(false)}
+          competencia={competenciaAtual}
+          itens={itens}
+          totalBruto={itens.reduce((acc, c) => acc + (c.valor_bruto || 0), 0)}
+          totalRetencao={itens.reduce((acc, c) => acc + (c.desconto_valor || 0), 0)}
+          totalLiquido={totalRepassesLiquido}
+          onEnviadoComSucesso={carregarDadosCompetencia}
         />
       )}
     </motion.div>

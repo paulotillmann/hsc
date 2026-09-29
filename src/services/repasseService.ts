@@ -8,6 +8,9 @@ export interface RepasseCompetencia {
   valor_nota_fiscal: number;
   status: 'em_andamento' | 'finalizado' | 'cancelado';
   observacoes: string | null;
+  email_enviado?: boolean;
+  email_enviado_em?: string | null;
+  email_enviado_para?: string[];
   created_at?: string;
   updated_at?: string;
 }
@@ -24,6 +27,9 @@ export interface RepasseItem {
   desconto_valor: number;
   valor_liquido: number;
   possui_detalhes: boolean;
+  email_enviado?: boolean;
+  email_enviado_em?: string | null;
+  email_enviado_para?: string[];
   ordem: number;
   created_at?: string;
   updated_at?: string;
@@ -541,6 +547,31 @@ export const repasseService = {
     }
 
     return Array.from(conveniosSet).sort();
+  },
+
+  // ── 6. REGISTRO DE ENVIO DE E-MAIL AO FINANCEIRO ───────────────────────────
+  async registrarEnvioEmailCompetencia(competenciaId: string, destinatarios: string[]): Promise<boolean> {
+    const nowIso = new Date().toISOString();
+    try {
+      const { error } = await supabase
+        .from('repasse_competencias')
+        .update({
+          email_enviado: true,
+          email_enviado_em: nowIso,
+          email_enviado_para: destinatarios || [],
+          updated_at: nowIso
+        })
+        .eq('id', competenciaId);
+
+      if (error) {
+        console.error('Erro ao registrar envio de email da competência:', error);
+        return false;
+      }
+      return true;
+    } catch (e) {
+      console.error('Exceção ao registrar envio de email da competência:', e);
+      return false;
+    }
   }
 };
 
