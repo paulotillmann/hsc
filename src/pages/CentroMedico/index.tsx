@@ -1,5 +1,4 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Stethoscope,
@@ -1079,18 +1078,6 @@ export default function CentroMedico() {
                 {filteredEscalas.length}
               </span>
             </button>
-
-            <Link
-              to="/pacientes-confirmados"
-              className="flex items-center justify-center gap-2 px-3 sm:px-4 py-2 rounded-xl font-medium text-xs sm:text-sm transition-all duration-200 whitespace-nowrap shrink-0 text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/15 border border-emerald-500/25 shadow-xs"
-              title="Acessar tela independente de Pacientes Confirmados (Confirmação de Consulta)"
-            >
-              <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-500" />
-              <span>Pacientes Confirmados</span>
-              <span className="ml-0.5 px-2 py-0.5 rounded-full text-[10px] font-bold border bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 border-emerald-500/30">
-                {consultas.filter(c => c.confirmadoPeloPaciente || confirmedPatientsMap[c.id]?.confirmadoPeloPaciente).length}
-              </span>
-            </Link>
           </div>
 
           {/* Lado Direito: Controle de Datas e Especialidades */}
