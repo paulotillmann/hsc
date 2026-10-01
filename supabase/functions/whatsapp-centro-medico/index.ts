@@ -101,7 +101,9 @@ Deno.serve(async (req: Request) => {
     const recipient = body.recipient || DEFAULT_RECIPIENT;
     // Permite usar a instância HSC TI (número 34988511343)
     const instance = body.instance || SENDER_INSTANCE;
-    const messageText = body.text || DEFAULT_MESSAGE;
+    let messageText = body.text || DEFAULT_MESSAGE;
+    // Formatar datas no padrão brasileiro DD/MM/AAAA (dia, mês e ano)
+    messageText = messageText.replace(/(\d{4})-(\d{2})-(\d{2})/g, '$3/$2/$1');
 
     // 2. Se as credenciais da Evolution API não estiverem disponíveis (ex: ambiente local sem secrets)
     if (!EVOLUTION_API_URL || !EVOLUTION_API_KEY) {

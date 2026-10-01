@@ -45,16 +45,29 @@ interface AgendamentoPayload {
   origin?: string;
 }
 
+function formatDateToBR(dateStr?: string): string {
+  if (!dateStr) return 'Data informada no agendamento';
+  const trimmed = dateStr.trim();
+  if (/^\d{2}\/\d{2}\/\d{4}$/.test(trimmed)) return trimmed;
+  const clean = trimmed.split('T')[0];
+  const parts = clean.split('-');
+  if (parts.length === 3 && parts[0].length === 4) {
+    return `${parts[2]}/${parts[1]}/${parts[0]}`;
+  }
+  return trimmed;
+}
+
 function buildAppointmentMessage(data: AgendamentoPayload): string {
   if (data.text || data.mensagem) {
-    return (data.text || data.mensagem) as string;
+    const raw = (data.text || data.mensagem) as string;
+    return raw.replace(/(\d{4})-(\d{2})-(\d{2})/g, '$3/$2/$1');
   }
 
   const paciente = data.paciente || 'Paciente';
   const medico = data.medico || 'Médico(a) do Centro Médico';
   const crmInfo = data.crm ? ` (CRM: ${data.crm})` : '';
   const especialidade = data.especialidade ? ` - ${data.especialidade}` : '';
-  const dataConsulta = data.data || 'Data informada no agendamento';
+  const dataConsulta = formatDateToBR(data.data);
   const horario = data.horario || 'Horário agendado';
   const consultorio = data.consultorio || 'Centro Médico';
   const convenio = data.convenio ? `\n📄 *Convênio:* ${data.convenio}` : '';
