@@ -265,9 +265,9 @@ export default function ConfirmarConsultaPublica() {
                 </p>
 
                 {/* Endereço */}
-                <p className="text-emerald-100 font-medium pt-0.5 flex items-center justify-center gap-1 text-center">
-                  <MapPin className="h-3.5 w-3.5 text-emerald-300 shrink-0" />
-                  <span>Araguari-MG, Praça Dom Almir Marques, n.º 2, Rosário, CEP 38.440-036</span>
+                <p className="text-emerald-100 font-medium pt-1 text-center leading-snug px-2">
+                  <MapPin className="h-3.5 w-3.5 text-emerald-300 shrink-0 inline-block align-middle mr-1.5 -mt-0.5" />
+                  <span className="align-middle">Araguari-MG, Praça Dom Almir Marques, n.º 2, Rosário, CEP 38.440-036</span>
                 </p>
               </div>
             </div>
@@ -393,11 +393,11 @@ export default function ConfirmarConsultaPublica() {
               </div>
             </div>
 
-            <div className="bg-slate-800/60 p-2.5 rounded-xl border border-slate-700/50 flex items-center gap-2">
-              <MapPin className="h-4 w-4 text-emerald-400 shrink-0" />
+            <div className="bg-slate-800/60 p-2.5 rounded-xl border border-slate-700/50 flex items-start gap-2.5">
+              <MapPin className="h-4 w-4 text-emerald-400 shrink-0 mt-0.5" />
               <div>
                 <p className="text-[10px] text-slate-400">Endereço</p>
-                <p className="text-white text-xs leading-tight">Araguari-MG, Praça Dom Almir Marques, n.º 2, Rosário, CEP 38.440-036</p>
+                <p className="text-white text-xs leading-snug">Araguari-MG, Praça Dom Almir Marques, n.º 2, Rosário, CEP 38.440-036</p>
               </div>
             </div>
           </div>
