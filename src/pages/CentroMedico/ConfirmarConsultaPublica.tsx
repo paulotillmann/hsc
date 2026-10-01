@@ -19,6 +19,7 @@ import { INITIAL_CONSULTAS } from './consultasData';
 
 const KANBAN_CONFIRMED_KEY = 'hsc_centro_medico_confirmacoes_v1';
 const KANBAN_STORAGE_KEY = 'hsc_centro_medico_kanban_manual_status_v1';
+const KANBAN_ADDED_ORDER_KEY = 'hsc_centro_medico_kanban_added_order_v1';
 
 export default function ConfirmarConsultaPublica() {
   const [searchParams] = useSearchParams();
@@ -90,20 +91,30 @@ export default function ConfirmarConsultaPublica() {
       statusMap[cardId] = 'Confirmadas';
       localStorage.setItem(KANBAN_STORAGE_KEY, JSON.stringify(statusMap));
 
-      // 3. Salva no Supabase se houver tabela
+      // 3. Salva a sequência/ordem em que for sendo adicionado
+      const now = Date.now();
+      try {
+        let orderMap: Record<string, number> = {};
+        const rawOrder = localStorage.getItem(KANBAN_ADDED_ORDER_KEY);
+        if (rawOrder) orderMap = JSON.parse(rawOrder);
+        orderMap[cardId] = now;
+        localStorage.setItem(KANBAN_ADDED_ORDER_KEY, JSON.stringify(orderMap));
+      } catch {}
+
+      // 4. Salva no Supabase se houver tabela
       try {
         await supabase.from('centro_medico_kanban_cards').upsert({
           card_id: cardId,
           status: 'Confirmadas',
           confirmado_pelo_paciente: true,
-          updated_at: new Date().toISOString()
+          updated_at: new Date(now).toISOString()
         }, { onConflict: 'card_id' });
       } catch {}
 
       // Dispara evento global para atualizar o Centro Médico em tempo real se estiver aberto
       window.dispatchEvent(
         new CustomEvent('consulta_confirmada_evento', {
-          detail: { cardId, confirmado: true, timestamp }
+          detail: { cardId, confirmado: true, timestamp, addedAt: now }
         })
       );
 

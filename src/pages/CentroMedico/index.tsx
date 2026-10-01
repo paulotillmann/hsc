@@ -67,6 +67,7 @@ export interface ConsultaAgendada {
   observacoes?: string;
   confirmadoPeloPaciente?: boolean;
   confirmadoEm?: string;
+  addedAt?: number;
 }
 
 // Configuração das Colunas do Kanban
@@ -475,6 +476,7 @@ const INITIAL_CONSULTAS: ConsultaAgendada[] = [
 // ── GERENCIAMENTO DE PERSISTÊNCIA MANUAL DO KANBAN E CONFIRMAÇÕES ────────────
 const KANBAN_STORAGE_KEY = 'hsc_centro_medico_kanban_manual_status_v1';
 const KANBAN_CONFIRMED_KEY = 'hsc_centro_medico_confirmacoes_v1';
+const KANBAN_ADDED_ORDER_KEY = 'hsc_centro_medico_kanban_added_order_v1';
 
 // Lê o mapa de status manuais do localStorage
 export const getStoredManualStatusMap = (): Record<string, KanbanStatus> => {
@@ -496,15 +498,39 @@ export const getStoredConfirmedPatientsMap = (): Record<string, { confirmadoPelo
   }
 };
 
+// Lê o mapa da sequência/ordem em que os cards foram sendo adicionados (timestamp em ms)
+export const getStoredAddedOrderMap = (): Record<string, number> => {
+  try {
+    const raw = localStorage.getItem(KANBAN_ADDED_ORDER_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+};
+
+// Grava o timestamp de adição de um card
+export const recordCardAddedOrder = (cardId: string, timestamp: number = Date.now()): Record<string, number> => {
+  try {
+    const current = getStoredAddedOrderMap();
+    current[cardId] = timestamp;
+    localStorage.setItem(KANBAN_ADDED_ORDER_KEY, JSON.stringify(current));
+    return current;
+  } catch {
+    return {};
+  }
+};
+
 // Salva a confirmação no localStorage e Supabase
 export const persistConfirmedPatient = async (cardId: string, confirmado: boolean) => {
   try {
     const current = getStoredConfirmedPatientsMap();
+    const now = Date.now();
     if (confirmado) {
       current[cardId] = {
         confirmadoPeloPaciente: true,
         confirmadoEm: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
       };
+      recordCardAddedOrder(cardId, now);
     } else {
       delete current[cardId];
     }
@@ -515,12 +541,12 @@ export const persistConfirmedPatient = async (cardId: string, confirmado: boolea
         card_id: cardId,
         status: confirmado ? 'Confirmadas' : 'Agendamentos',
         confirmado_pelo_paciente: confirmado,
-        updated_at: new Date().toISOString()
+        updated_at: new Date(now).toISOString()
       }, { onConflict: 'card_id' });
     } catch {}
 
     // Notifica outros componentes da tela
-    window.dispatchEvent(new CustomEvent('consulta_confirmada_evento', { detail: { cardId, confirmado } }));
+    window.dispatchEvent(new CustomEvent('consulta_confirmada_evento', { detail: { cardId, confirmado, addedAt: now } }));
   } catch (e) {
     console.warn('Erro ao persistir confirmação do paciente:', e);
   }
@@ -533,10 +559,16 @@ export const persistCardManualStatus = async (
   cardData?: Partial<ConsultaAgendada>
 ) => {
   try {
+    const now = Date.now();
     // 1. Persistência imediata no navegador (localStorage)
     const currentMap = getStoredManualStatusMap();
     currentMap[cardId] = newStatus;
     localStorage.setItem(KANBAN_STORAGE_KEY, JSON.stringify(currentMap));
+
+    // Se estiver sendo adicionado/movido para Confirmadas, grava a ordem de adição
+    if (newStatus === 'Confirmadas') {
+      recordCardAddedOrder(cardId, now);
+    }
 
     // 2. Persistência remota assíncrona no Supabase
     try {
@@ -545,7 +577,7 @@ export const persistCardManualStatus = async (
         status: newStatus,
         paciente: cardData?.paciente || null,
         data_consulta: cardData?.data || null,
-        updated_at: new Date().toISOString()
+        updated_at: new Date(now).toISOString()
       }, { onConflict: 'card_id' });
     } catch {
       // Ignora falhas de conexão se a tabela remota for inacessível
@@ -563,32 +595,44 @@ export default function CentroMedico() {
   const [selectedEspecialidade, setSelectedEspecialidade] = useState<string>('TODAS');
   const [selectedStatus, setSelectedStatus] = useState<string>('TODOS');
   
-  // Mapa de pacientes confirmados
+  // Mapa de pacientes confirmados e mapa de ordem de adição
   const [confirmedPatientsMap, setConfirmedPatientsMap] = useState(getStoredConfirmedPatientsMap);
+  const [addedOrderMap, setAddedOrderMap] = useState<Record<string, number>>(getStoredAddedOrderMap);
 
-  // Estados de Dados inicializados respeitando o status fixado e confirmações
+  // Estados de Dados inicializados respeitando o status fixado, confirmações e sequência de adição
   const [escalas, setEscalas] = useState<EscalaMedica[]>(INITIAL_ESCALAS);
   const [consultas, setConsultas] = useState<ConsultaAgendada[]>(() => {
     const manualMap = getStoredManualStatusMap();
     const confMap = getStoredConfirmedPatientsMap();
+    const orderMap = getStoredAddedOrderMap();
     return INITIAL_CONSULTAS.map(c => ({
       ...c,
       status: manualMap[c.id] || (confMap[c.id]?.confirmadoPeloPaciente ? 'Confirmadas' : c.status),
       confirmadoPeloPaciente: Boolean(confMap[c.id]?.confirmadoPeloPaciente),
-      confirmadoEm: confMap[c.id]?.confirmadoEm
+      confirmadoEm: confMap[c.id]?.confirmadoEm,
+      addedAt: orderMap[c.id]
     }));
   });
 
   // Listener para sincronização em tempo real de confirmações
   useEffect(() => {
-    const handleRemoteConfirmEvent = () => {
-      const updated = getStoredConfirmedPatientsMap();
-      setConfirmedPatientsMap(updated);
+    const handleRemoteConfirmEvent = (e?: any) => {
+      const updatedConf = getStoredConfirmedPatientsMap();
+      const updatedOrder = getStoredAddedOrderMap();
+
+      if (e?.detail?.cardId && e?.detail?.addedAt) {
+        updatedOrder[e.detail.cardId] = e.detail.addedAt;
+      }
+
+      setConfirmedPatientsMap(updatedConf);
+      setAddedOrderMap(updatedOrder);
+
       setConsultas(prev => prev.map(c => ({
         ...c,
-        confirmadoPeloPaciente: Boolean(updated[c.id]?.confirmadoPeloPaciente),
-        confirmadoEm: updated[c.id]?.confirmadoEm,
-        status: updated[c.id]?.confirmadoPeloPaciente ? 'Confirmadas' : c.status
+        confirmadoPeloPaciente: Boolean(updatedConf[c.id]?.confirmadoPeloPaciente),
+        confirmadoEm: updatedConf[c.id]?.confirmadoEm,
+        status: updatedConf[c.id]?.confirmadoPeloPaciente ? 'Confirmadas' : c.status,
+        addedAt: updatedOrder[c.id] ?? c.addedAt
       })));
     };
 
@@ -606,20 +650,33 @@ export default function CentroMedico() {
       try {
         const { data, error } = await supabase
           .from('centro_medico_kanban_cards')
-          .select('card_id, status');
+          .select('card_id, status, updated_at');
 
         if (!error && data && data.length > 0) {
           const currentMap = getStoredManualStatusMap();
+          const currentOrderMap = getStoredAddedOrderMap();
+
           data.forEach((row: any) => {
             if (row.card_id && row.status) {
               currentMap[row.card_id] = row.status as KanbanStatus;
             }
+            if (row.card_id && row.updated_at && !currentOrderMap[row.card_id]) {
+              currentOrderMap[row.card_id] = new Date(row.updated_at).getTime();
+            }
           });
-          localStorage.setItem(KANBAN_STORAGE_KEY, JSON.stringify(currentMap));
 
+          localStorage.setItem(KANBAN_STORAGE_KEY, JSON.stringify(currentMap));
+          localStorage.setItem(KANBAN_ADDED_ORDER_KEY, JSON.stringify(currentOrderMap));
+
+          setAddedOrderMap(currentOrderMap);
           setConsultas(prev => prev.map(c => {
             const manualStatus = currentMap[c.id];
-            return manualStatus ? { ...c, status: manualStatus } : c;
+            const addedTimestamp = currentOrderMap[c.id];
+            return {
+              ...c,
+              ...(manualStatus ? { status: manualStatus } : {}),
+              ...(addedTimestamp ? { addedAt: addedTimestamp } : {})
+            };
           }));
         }
       } catch {
@@ -744,8 +801,27 @@ export default function CentroMedico() {
     const targetCard = consultas.find(c => c.id === cardId);
     if (!targetCard) return;
 
-    // Atualiza o estado da coluna no Kanban
-    setConsultas(prev => prev.map(c => c.id === cardId ? { ...c, status: newStatus } : c));
+    const now = Date.now();
+    const timeStr = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+
+    // Atualiza o estado da coluna no Kanban registrando a data/hora de movimentação
+    setConsultas(prev => prev.map(c => {
+      if (c.id === cardId) {
+        return {
+          ...c,
+          status: newStatus,
+          addedAt: now,
+          ...(newStatus === 'Confirmadas' && !c.confirmadoEm ? { confirmadoEm: timeStr } : {})
+        };
+      }
+      return c;
+    }));
+
+    if (newStatus === 'Confirmadas') {
+      recordCardAddedOrder(cardId, now);
+      setAddedOrderMap(prev => ({ ...prev, [cardId]: now }));
+    }
+
     showToast('success', `Paciente ${targetCard.paciente} movido para "${newStatus}".`);
 
     // Fixa a movimentação permanentemente no localStorage e Supabase até nova movimentação manual
@@ -839,6 +915,8 @@ export default function CentroMedico() {
     const isCurrentlyConfirmed = Boolean(target.confirmadoPeloPaciente || confirmedPatientsMap[cardId]?.confirmadoPeloPaciente);
     const newConfirmedState = !isCurrentlyConfirmed;
 
+    const now = Date.now();
+
     // Atualiza estado de confirmação persistido
     await persistConfirmedPatient(cardId, newConfirmedState);
     const updatedMap = getStoredConfirmedPatientsMap();
@@ -848,6 +926,8 @@ export default function CentroMedico() {
     const newStatus: KanbanStatus = newConfirmedState ? 'Confirmadas' : target.status;
     if (newConfirmedState) {
       persistCardManualStatus(cardId, 'Confirmadas', target);
+      recordCardAddedOrder(cardId, now);
+      setAddedOrderMap(prev => ({ ...prev, [cardId]: now }));
     }
 
     setConsultas(prev => prev.map(c => {
@@ -856,7 +936,8 @@ export default function CentroMedico() {
           ...c,
           status: newStatus,
           confirmadoPeloPaciente: newConfirmedState,
-          confirmadoEm: newConfirmedState ? updatedMap[cardId]?.confirmadoEm : undefined
+          confirmadoEm: newConfirmedState ? updatedMap[cardId]?.confirmadoEm : undefined,
+          addedAt: newConfirmedState ? now : c.addedAt
         };
       }
       return c;
@@ -1166,7 +1247,20 @@ export default function CentroMedico() {
               {/* Grid das Colunas Kanban (Com largura mínima confortável para cards respirarem) */}
               <div className="flex 2xl:grid 2xl:grid-cols-5 gap-3.5 items-start overflow-x-auto pb-4 custom-scrollbar">
                 {KANBAN_COLUMNS.map(col => {
-                  const colCards = filteredConsultas.filter(c => c.status === col.id);
+                  let colCards = filteredConsultas.filter(c => c.status === col.id);
+
+                  // Na coluna "Confirmadas", colocar na sequência que for sendo adicionado (ordem cronológica de adição)
+                  if (col.id === 'Confirmadas') {
+                    colCards = [...colCards].sort((a, b) => {
+                      const orderA = addedOrderMap[a.id] ?? a.addedAt ?? 0;
+                      const orderB = addedOrderMap[b.id] ?? b.addedAt ?? 0;
+                      if (orderA !== orderB) {
+                        return orderA - orderB;
+                      }
+                      return 0;
+                    });
+                  }
+
                   const isOver = dragOverColumn === col.id;
 
                   return (

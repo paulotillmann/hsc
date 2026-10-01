@@ -33,10 +33,12 @@ export interface ConsultaAgendada {
   observacoes?: string;
   confirmadoPeloPaciente?: boolean;
   confirmadoEm?: string;
+  addedAt?: number;
 }
 
 export const KANBAN_STORAGE_KEY = 'hsc_centro_medico_kanban_manual_status_v1';
 export const KANBAN_CONFIRMED_KEY = 'hsc_centro_medico_confirmacoes_v1';
+export const KANBAN_ADDED_ORDER_KEY = 'hsc_centro_medico_kanban_added_order_v1';
 
 export const KANBAN_COLUMNS: {
   id: KanbanStatus;
