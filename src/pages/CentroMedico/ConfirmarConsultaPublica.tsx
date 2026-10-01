@@ -91,10 +91,10 @@ export default function ConfirmarConsultaPublica() {
       data: searchParams.get('data') || c?.data || 'Hoje',
       consultorio: searchParams.get('consultorio') || c?.consultorio || 'Centro Médico',
       convenio: searchParams.get('convenio') || c?.convenio || 'Particular / Convênio',
-      telefone: searchParams.get('tel') || c?.telefone || '(34) 3513-2213',
+      telefone: '(34) 3249-1500',
       local: searchParams.get('local') || 'Centro Médico Santa Casa',
-      endereco: searchParams.get('end') || 'Rua Joaquim Aníbal, 204',
-      bairro: searchParams.get('bairro') || 'Centro'
+      endereco: 'Araguari-MG, Praça Dom Almir Marques, n.º 2, Rosário, CEP 38.440-036',
+      bairro: 'Rosário'
     };
   }, [consultaAtual, selectedId, searchParams]);
 
@@ -261,18 +261,13 @@ export default function ConfirmarConsultaPublica() {
                 {/* Telefone */}
                 <p className="font-mono text-emerald-200 font-bold text-xs flex items-center justify-center gap-1.5 pt-0.5">
                   <Phone className="h-3.5 w-3.5 text-emerald-300" />
-                  <span>{patientData.telefone}</span>
+                  <span>(34) 3249-1500</span>
                 </p>
 
                 {/* Endereço */}
-                <p className="text-emerald-100 font-medium pt-0.5 flex items-center justify-center gap-1">
+                <p className="text-emerald-100 font-medium pt-0.5 flex items-center justify-center gap-1 text-center">
                   <MapPin className="h-3.5 w-3.5 text-emerald-300 shrink-0" />
-                  <span>{patientData.endereco}</span>
-                </p>
-
-                {/* Bairro */}
-                <p className="text-emerald-300 font-black uppercase tracking-widest text-[11px]">
-                  {patientData.bairro}
+                  <span>Araguari-MG, Praça Dom Almir Marques, n.º 2, Rosário, CEP 38.440-036</span>
                 </p>
               </div>
             </div>
@@ -390,15 +385,21 @@ export default function ConfirmarConsultaPublica() {
               </div>
             </div>
 
-            {patientData.telefone && (
-              <div className="bg-slate-800/60 p-2.5 rounded-xl border border-slate-700/50 flex items-center gap-2">
-                <Phone className="h-4 w-4 text-emerald-400 shrink-0" />
-                <div>
-                  <p className="text-[10px] text-slate-400">Telefone / Contato</p>
-                  <p className="font-mono text-white text-xs">{patientData.telefone}</p>
-                </div>
+            <div className="bg-slate-800/60 p-2.5 rounded-xl border border-slate-700/50 flex items-center gap-2">
+              <Phone className="h-4 w-4 text-emerald-400 shrink-0" />
+              <div>
+                <p className="text-[10px] text-slate-400">Telefone / Contato</p>
+                <p className="font-mono text-white text-xs">(34) 3249-1500</p>
               </div>
-            )}
+            </div>
+
+            <div className="bg-slate-800/60 p-2.5 rounded-xl border border-slate-700/50 flex items-center gap-2">
+              <MapPin className="h-4 w-4 text-emerald-400 shrink-0" />
+              <div>
+                <p className="text-[10px] text-slate-400">Endereço</p>
+                <p className="text-white text-xs leading-tight">Araguari-MG, Praça Dom Almir Marques, n.º 2, Rosário, CEP 38.440-036</p>
+              </div>
+            </div>
           </div>
 
           {/* ── BOTÃO "CONFIRMAR" ── */}
