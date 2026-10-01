@@ -38,6 +38,5 @@ export const pageRegistry: Record<string, React.LazyExoticComponent<React.Compon
   'gestao-novidades': lazy(() => import('../pages/GestaoNovidades/index')),
   'nps-dashboard': lazy(() => import('../pages/NpsDashboard/index')),
   'centro-medico': lazy(() => import('../pages/CentroMedico/index')),
-  'pacientes-confirmados': lazy(() => import('../pages/CentroMedico/PacientesConfirmados')),
   // 'relatorios': lazy(() => import('../pages/Relatorios')),
 };

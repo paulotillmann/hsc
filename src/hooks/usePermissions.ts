@@ -70,7 +70,6 @@ export function usePermissions(): UsePermissionsReturn {
   const canAccess = useCallback(
     (slug: string): boolean => {
       if (slug === 'gestao-prontuarios') return true;
-      if (slug === 'pacientes-confirmados') return userModules.some(m => m.slug === 'centro-medico' && m.is_active);
       return userModules.some(m => m.slug === slug && m.is_active);
     },
     [userModules]

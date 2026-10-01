@@ -24,7 +24,7 @@ const Sidebar: React.FC = () => {
     if (window.location.pathname.startsWith('/financeiro')) return 'financeiro';
     if (window.location.pathname.startsWith('/gestao-escuta-santa-casa')) return 'gestao-escuta-santa-casa';
     if (window.location.pathname.startsWith('/gestao-prontuarios')) return 'gestao-prontuarios';
-    if (window.location.pathname.startsWith('/centro-medico') || window.location.pathname.startsWith('/pacientes-confirmados')) return 'centro-medico';
+    if (window.location.pathname.startsWith('/centro-medico')) return 'centro-medico';
     if (window.location.pathname.startsWith('/plantao-ti') || window.location.pathname.startsWith('/ordem-servico') || window.location.pathname.startsWith('/ordem-servico-mobile') || window.location.pathname.startsWith('/equipamentos')) return 'tecnologia-informacao';
     if (window.location.pathname.startsWith('/dashboard') || window.location.pathname.startsWith('/holerites') || window.location.pathname.startsWith('/informes')) return 'recursos-humanos';
     if (window.location.pathname.startsWith('/internato-secretaria') || window.location.pathname.startsWith('/internato-notas') || window.location.pathname.startsWith('/internato-agenda')) return 'internato';
@@ -63,7 +63,7 @@ const Sidebar: React.FC = () => {
       setExpandedMenu('gestao-escuta-santa-casa');
     } else if (location.pathname.startsWith('/gestao-prontuarios')) {
       setExpandedMenu('gestao-prontuarios');
-    } else if (location.pathname.startsWith('/centro-medico') || location.pathname.startsWith('/pacientes-confirmados')) {
+    } else if (location.pathname.startsWith('/centro-medico')) {
       setExpandedMenu('centro-medico');
     } else if (location.pathname.startsWith('/plantao-ti') || location.pathname.startsWith('/ordem-servico') || location.pathname.startsWith('/ordem-servico-mobile') || location.pathname.startsWith('/equipamentos')) {
       setExpandedMenu('tecnologia-informacao');
@@ -1067,7 +1067,7 @@ const Sidebar: React.FC = () => {
             }
 
             if (module.slug === 'centro-medico') {
-              const isActiveLocal = location.pathname.startsWith('/centro-medico') || location.pathname.startsWith('/pacientes-confirmados');
+              const isActiveLocal = location.pathname.startsWith('/centro-medico');
               return (
                 <div key={module.slug} className="flex flex-col">
                   {isCollapsed ? (
@@ -1110,17 +1110,6 @@ const Sidebar: React.FC = () => {
                         }
                       >
                         Agendamentos
-                      </NavLink>
-                      <NavLink
-                        to="/pacientes-confirmados"
-                        className={({ isActive }) =>
-                          `text-sm px-3 py-2 rounded-md transition-colors ${isActive
-                            ? 'bg-primary text-primary-foreground shadow-sm font-medium'
-                            : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
-                          }`
-                        }
-                      >
-                        Pacientes Confirmados
                       </NavLink>
                       <a
                         href="/confirmar-consulta"

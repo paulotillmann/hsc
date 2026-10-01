@@ -21,7 +21,6 @@ import PainelTVPA from './pages/ProntoAtendimento/PainelTVPA';
 import EscutaLanding from './pages/EscutaSantaCasa/EscutaLanding';
 import NovaDenuncia from './pages/EscutaSantaCasa/NovaDenuncia';
 import ConfirmarConsultaPublica from './pages/CentroMedico/ConfirmarConsultaPublica';
-import PacientesConfirmados from './pages/CentroMedico/PacientesConfirmados';
 
 const App: React.FC = () => {
   // Configuração Global de Tema
@@ -80,9 +79,6 @@ const App: React.FC = () => {
 
               {/* Rota Painel Atendente de Senhas */}
               <Route path="/senhas-atendente" element={<PainelAtendente />} />
-
-              {/* Rota dedicada de Pacientes Confirmados (Canal Seguro) */}
-              <Route path="/pacientes-confirmados" element={<PacientesConfirmados />} />
 
               {/* Rota dinâmica: resolve qualquer módulo cadastrado no banco */}
               {/* A permissão e o componente são resolvidos em DynamicRoute */}
