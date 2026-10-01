@@ -38,6 +38,19 @@ const getAvailableConsultas = (): ConsultaAgendada[] => {
   return INITIAL_CONSULTAS;
 };
 
+// Função para formatar data na sequência: dia, mês e ano (DD/MM/AAAA)
+const formatDateToBR = (dateStr?: string): string => {
+  if (!dateStr) return '';
+  if (/^\d{2}\/\d{2}\/\d{4}$/.test(dateStr)) return dateStr;
+
+  const parts = dateStr.split('-');
+  if (parts.length === 3 && parts[0].length === 4) {
+    const [year, month, day] = parts;
+    return `${day.padStart(2, '0')}/${month.padStart(2, '0')}/${year}`;
+  }
+  return dateStr;
+};
+
 export default function ConfirmarConsultaPublica() {
   const [searchParams] = useSearchParams();
   const params = useParams<{ id: string }>();
@@ -79,6 +92,9 @@ export default function ConfirmarConsultaPublica() {
   // Monta os dados completos do agendamento do paciente respeitando a fonte de cada paciente
   const patientData = useMemo(() => {
     const c = consultaAtual;
+    const rawDate = searchParams.get('data') || c?.data || new Date().toISOString().split('T')[0];
+    const formattedDate = formatDateToBR(rawDate);
+
     return {
       id: c?.id || selectedId,
       paciente: searchParams.get('paciente') || c?.paciente || 'Paciente do Centro Médico',
@@ -88,7 +104,7 @@ export default function ConfirmarConsultaPublica() {
       crm: searchParams.get('crm') || c?.crm || 'CRM/MG',
       especialidade: searchParams.get('esp') || c?.especialidade || 'Consulta Especializada',
       horario: searchParams.get('hora') || c?.horario || '11:30',
-      data: searchParams.get('data') || c?.data || 'Hoje',
+      data: formattedDate,
       consultorio: searchParams.get('consultorio') || c?.consultorio || 'Centro Médico',
       convenio: searchParams.get('convenio') || c?.convenio || 'Particular / Convênio',
       telefone: '(34) 3249-1500',

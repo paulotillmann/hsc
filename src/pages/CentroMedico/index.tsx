@@ -152,6 +152,17 @@ const formatDateLabel = (dateStr: string): string => {
   return `${daysOfWeek[dateObj.getDay()]} (${formattedStr})`;
 };
 
+export const formatDateToBR = (dateStr?: string): string => {
+  if (!dateStr) return '';
+  if (/^\d{2}\/\d{2}\/\d{4}$/.test(dateStr)) return dateStr;
+  const parts = dateStr.split('-');
+  if (parts.length === 3 && parts[0].length === 4) {
+    const [year, month, day] = parts;
+    return `${day.padStart(2, '0')}/${month.padStart(2, '0')}/${year}`;
+  }
+  return dateStr;
+};
+
 const TODAY = getDateOffset(0);
 const YESTERDAY = getDateOffset(-1);
 const TWO_DAYS_AGO = getDateOffset(-2);
@@ -848,9 +859,10 @@ export default function CentroMedico() {
         const linkConfirmacao = `${cleanBaseUrl}/confirmar-consulta/${targetCard.id}`;
 
         // Mensagem contextual com link de confirmação isolado quando movido para Confirmadas
+        const dataFormatada = formatDateToBR(targetCard.data);
         const customText = isConfirmacao
-          ? `🏥 *Centro Médico - Hospital Santa Casa*\nOlá, *${targetCard.paciente}*!\n\nConfirmamos os dados da sua consulta no Centro Médico:\n📅 *Data:* ${targetCard.data}\n⏰ *Horário:* ${targetCard.horario}\n👨‍⚕️ *Médico(a):* ${targetCard.medico}${targetCard.crm ? ` (CRM: ${targetCard.crm})` : ''} - ${targetCard.especialidade}\n📍 *Local:* Centro Médico da Santa Casa${targetCard.convenio ? `\n📄 *Convênio:* ${targetCard.convenio}` : ''}\n\n🔗 *Confirmação de Consulta:*\n\n${linkConfirmacao}\n\n• Por favor, chegue com 15 minutos de antecedência portando documento oficial com foto e carteirinha do convênio (se aplicável).\n• Em caso de dúvidas ou necessidade de reagendamento, entre em contato conosco.\n\n_Hospital Santa Casa de Misericórdia_`
-          : `🏥 *Centro Médico - Hospital Santa Casa*\nOlá, *${targetCard.paciente}*!\n\nVocê tem uma consulta agendada no Centro Médico:\n👨‍⚕️ *Médico(a):* ${targetCard.medico}${targetCard.crm ? ` (CRM: ${targetCard.crm})` : ''} - ${targetCard.especialidade}\n📅 *Data:* ${targetCard.data}\n⏰ *Horário:* ${targetCard.horario}\n📍 *Local:* Centro Médico da Santa Casa${targetCard.convenio ? `\n📄 *Convênio:* ${targetCard.convenio}` : ''}\n\n• Por favor, chegue com 15 minutos de antecedência portando documento oficial com foto e carteirinha do convênio (se aplicável).\n• Em caso de dúvidas ou necessidade de reagendamento, entre em contato conosco.\n\n_Hospital Santa Casa de Misericórdia_`;
+          ? `🏥 *Centro Médico - Hospital Santa Casa*\nOlá, *${targetCard.paciente}*!\n\nConfirmamos os dados da sua consulta no Centro Médico:\n📅 *Data:* ${dataFormatada}\n⏰ *Horário:* ${targetCard.horario}\n👨‍⚕️ *Médico(a):* ${targetCard.medico}${targetCard.crm ? ` (CRM: ${targetCard.crm})` : ''} - ${targetCard.especialidade}\n📍 *Local:* Centro Médico da Santa Casa${targetCard.convenio ? `\n📄 *Convênio:* ${targetCard.convenio}` : ''}\n\n🔗 *Confirmação de Consulta:*\n\n${linkConfirmacao}\n\n• Por favor, chegue com 15 minutos de antecedência portando documento oficial com foto e carteirinha do convênio (se aplicável).\n• Em caso de dúvidas ou necessidade de reagendamento, entre em contato conosco.\n\n_Hospital Santa Casa de Misericórdia_`
+          : `🏥 *Centro Médico - Hospital Santa Casa*\nOlá, *${targetCard.paciente}*!\n\nVocê tem uma consulta agendada no Centro Médico:\n👨‍⚕️ *Médico(a):* ${targetCard.medico}${targetCard.crm ? ` (CRM: ${targetCard.crm})` : ''} - ${targetCard.especialidade}\n📅 *Data:* ${dataFormatada}\n⏰ *Horário:* ${targetCard.horario}\n📍 *Local:* Centro Médico da Santa Casa${targetCard.convenio ? `\n📄 *Convênio:* ${targetCard.convenio}` : ''}\n\n• Por favor, chegue com 15 minutos de antecedência portando documento oficial com foto e carteirinha do convênio (se aplicável).\n• Em caso de dúvidas ou necessidade de reagendamento, entre em contato conosco.\n\n_Hospital Santa Casa de Misericórdia_`;
 
         // Dispara a Edge Function especializada whatsapp-agendamento-enviado
         let res = await supabase.functions.invoke('whatsapp-agendamento-enviado', {
