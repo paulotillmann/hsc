@@ -284,15 +284,6 @@ export default function ConfirmarConsultaPublica() {
               <span className="leading-snug">O agendamento deste paciente já está completamente verde no Centro Médico</span>
             </div>
 
-            {/* Opção para voltar/desfazer se necessário */}
-            <div className="pt-1">
-              <button
-                onClick={() => setConfirmed(false)}
-                className="text-xs text-emerald-200 hover:text-white underline transition-colors cursor-pointer"
-              >
-                Visualizar detalhes do agendamento
-              </button>
-            </div>
           </motion.div>
 
           {/* Rodapé Oficial */}
