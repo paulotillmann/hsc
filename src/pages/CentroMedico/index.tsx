@@ -614,6 +614,13 @@ export default function CentroMedico() {
     }));
   });
 
+  // Salva cache de consultas para acesso pela tela de confirmação de consulta
+  useEffect(() => {
+    try {
+      localStorage.setItem('hsc_centro_medico_consultas_cache_v1', JSON.stringify(consultas));
+    } catch {}
+  }, [consultas]);
+
   // Listener para sincronização em tempo real de confirmações
   useEffect(() => {
     const handleRemoteConfirmEvent = (e?: any) => {

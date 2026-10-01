@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { useSearchParams, useParams } from 'react-router-dom';
+import React, { useState, useEffect, useMemo } from 'react';
+import { useSearchParams, useParams, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Stethoscope,
@@ -12,61 +12,115 @@ import {
   MapPin,
   Sparkles,
   ArrowRight,
-  User
+  User,
+  CreditCard,
+  ChevronDown
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
-import { INITIAL_CONSULTAS } from './consultasData';
+import { INITIAL_CONSULTAS, ConsultaAgendada } from './consultasData';
 
 const KANBAN_CONFIRMED_KEY = 'hsc_centro_medico_confirmacoes_v1';
 const KANBAN_STORAGE_KEY = 'hsc_centro_medico_kanban_manual_status_v1';
 const KANBAN_ADDED_ORDER_KEY = 'hsc_centro_medico_kanban_added_order_v1';
+const KANBAN_CONSULTAS_CACHE_KEY = 'hsc_centro_medico_consultas_cache_v1';
+
+// Função para buscar lista completa de consultas (cache dinâmico do Centro Médico + mock inicial)
+const getAvailableConsultas = (): ConsultaAgendada[] => {
+  try {
+    const raw = localStorage.getItem(KANBAN_CONSULTAS_CACHE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return parsed;
+      }
+    }
+  } catch {}
+  return INITIAL_CONSULTAS;
+};
 
 export default function ConfirmarConsultaPublica() {
   const [searchParams] = useSearchParams();
   const params = useParams<{ id: string }>();
-  const cardId = params.id || searchParams.get('id') || 'cons-101';
+  const navigate = useNavigate();
 
-  // Busca dados na base caso não venha tudo via querystring
-  const consultaEncontrada = INITIAL_CONSULTAS.find(c => c.id === cardId);
+  // Lista de todas as consultas disponíveis no sistema
+  const [consultasList, setConsultasList] = useState<ConsultaAgendada[]>(getAvailableConsultas);
+
+  // ID selecionado (via URL param :id, query param ?id, ou primeiro paciente da lista)
+  const initialId = params.id || searchParams.get('id') || consultasList[0]?.id || 'cons-101';
+  const [selectedId, setSelectedId] = useState<string>(initialId);
 
   const [loading, setLoading] = useState(false);
   const [confirmed, setConfirmed] = useState(false);
 
-  // Formatação dos dados com suporte a parâmetros, busca por ID ou valores padrão solicitados
-  const [patientData] = useState<any>({
-    id: cardId,
-    paciente: searchParams.get('paciente') || consultaEncontrada?.paciente || 'Paciente do Centro Médico',
-    medico: searchParams.get('medico') || consultaEncontrada?.medico || 'Dr. Diogo Martins de Deus',
-    crm: searchParams.get('crm') || consultaEncontrada?.crm || 'CRM/MG',
-    especialidade: searchParams.get('esp') || consultaEncontrada?.especialidade || 'Consulta Médica Especializada',
-    horario: searchParams.get('hora') || consultaEncontrada?.horario || '11:30',
-    data: searchParams.get('data') || consultaEncontrada?.data || 'Segunda, 10/08/2026',
-    convenio: searchParams.get('convenio') || consultaEncontrada?.convenio || 'Particular / Convênio',
-    local: searchParams.get('local') || 'Humani - Medicina e Cuidado',
-    telefone: searchParams.get('tel') || '(34) 3513-2213',
-    endereco: searchParams.get('end') || 'Rua Joaquim Aníbal, 204',
-    bairro: searchParams.get('bairro') || 'Centro'
-  });
-
+  // Sincroniza quando a URL muda
   useEffect(() => {
-    // Verifica se já está confirmado no localStorage
+    if (params.id && params.id !== selectedId) {
+      setSelectedId(params.id);
+    } else if (searchParams.get('id') && searchParams.get('id') !== selectedId) {
+      setSelectedId(searchParams.get('id')!);
+    }
+  }, [params.id, searchParams]);
+
+  // Recarrega lista se houver atualização em cache
+  useEffect(() => {
+    const handleStorageUpdate = () => {
+      setConsultasList(getAvailableConsultas());
+    };
+    window.addEventListener('storage', handleStorageUpdate);
+    return () => window.removeEventListener('storage', handleStorageUpdate);
+  }, []);
+
+  // Agendamento do paciente atual encontrado
+  const consultaAtual = useMemo(() => {
+    return consultasList.find(c => c.id === selectedId) || consultasList[0];
+  }, [consultasList, selectedId]);
+
+  // Monta os dados completos do agendamento do paciente respeitando a fonte de cada paciente
+  const patientData = useMemo(() => {
+    const c = consultaAtual;
+    return {
+      id: c?.id || selectedId,
+      paciente: searchParams.get('paciente') || c?.paciente || 'Paciente do Centro Médico',
+      prontuario: searchParams.get('prontuario') || c?.prontuario || 'PRONT-00000',
+      idade: c?.idade || 0,
+      medico: searchParams.get('medico') || c?.medico || 'Médico Plantonista',
+      crm: searchParams.get('crm') || c?.crm || 'CRM/MG',
+      especialidade: searchParams.get('esp') || c?.especialidade || 'Consulta Especializada',
+      horario: searchParams.get('hora') || c?.horario || '11:30',
+      data: searchParams.get('data') || c?.data || 'Hoje',
+      consultorio: searchParams.get('consultorio') || c?.consultorio || 'Centro Médico - Geral',
+      convenio: searchParams.get('convenio') || c?.convenio || 'Particular / Convênio',
+      telefone: searchParams.get('tel') || c?.telefone || '(34) 3513-2213',
+      local: searchParams.get('local') || (c?.consultorio ? `Humani - Medicina e Cuidado (${c.consultorio})` : 'Humani - Medicina e Cuidado'),
+      endereco: searchParams.get('end') || 'Rua Joaquim Aníbal, 204',
+      bairro: searchParams.get('bairro') || 'Centro'
+    };
+  }, [consultaAtual, selectedId, searchParams]);
+
+  // Verifica se o paciente atual já está confirmado
+  useEffect(() => {
     try {
       const stored = localStorage.getItem(KANBAN_CONFIRMED_KEY);
       if (stored) {
         const map = JSON.parse(stored);
-        if (map[cardId]?.confirmadoPeloPaciente) {
-          setConfirmed(true);
-        }
+        setConfirmed(Boolean(map[selectedId]?.confirmadoPeloPaciente));
+      } else {
+        setConfirmed(false);
       }
     } catch {
-      // Ignora erro de leitura local
+      setConfirmed(false);
     }
-  }, [cardId]);
+  }, [selectedId]);
 
+  // Handler de Confirmação da Consulta
   const handleConfirmar = async () => {
     setLoading(true);
 
     try {
+      const now = Date.now();
+      const timeStr = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+
       // 1. Atualiza no localStorage as confirmações
       let confMap: Record<string, any> = {};
       try {
@@ -74,10 +128,9 @@ export default function ConfirmarConsultaPublica() {
         if (raw) confMap = JSON.parse(raw);
       } catch {}
 
-      const timestamp = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-      confMap[cardId] = {
+      confMap[selectedId] = {
         confirmadoPeloPaciente: true,
-        confirmadoEm: timestamp,
+        confirmadoEm: timeStr,
         data: new Date().toISOString()
       };
       localStorage.setItem(KANBAN_CONFIRMED_KEY, JSON.stringify(confMap));
@@ -88,40 +141,39 @@ export default function ConfirmarConsultaPublica() {
         const rawStatus = localStorage.getItem(KANBAN_STORAGE_KEY);
         if (rawStatus) statusMap = JSON.parse(rawStatus);
       } catch {}
-      statusMap[cardId] = 'Confirmadas';
+      statusMap[selectedId] = 'Confirmadas';
       localStorage.setItem(KANBAN_STORAGE_KEY, JSON.stringify(statusMap));
 
-      // 3. Salva a sequência/ordem em que for sendo adicionado
-      const now = Date.now();
+      // 3. Salva a sequência/ordem em que for sendo adicionado (mais recente no topo)
       try {
         let orderMap: Record<string, number> = {};
         const rawOrder = localStorage.getItem(KANBAN_ADDED_ORDER_KEY);
         if (rawOrder) orderMap = JSON.parse(rawOrder);
-        orderMap[cardId] = now;
+        orderMap[selectedId] = now;
         localStorage.setItem(KANBAN_ADDED_ORDER_KEY, JSON.stringify(orderMap));
       } catch {}
 
       // 4. Salva no Supabase se houver tabela
       try {
         await supabase.from('centro_medico_kanban_cards').upsert({
-          card_id: cardId,
+          card_id: selectedId,
           status: 'Confirmadas',
           confirmado_pelo_paciente: true,
           updated_at: new Date(now).toISOString()
         }, { onConflict: 'card_id' });
       } catch {}
 
-      // Dispara evento global para atualizar o Centro Médico em tempo real se estiver aberto
+      // Dispara evento global para atualizar o Centro Médico em tempo real
       window.dispatchEvent(
         new CustomEvent('consulta_confirmada_evento', {
-          detail: { cardId, confirmado: true, timestamp, addedAt: now }
+          detail: { cardId: selectedId, confirmado: true, timestamp: timeStr, addedAt: now }
         })
       );
 
       setTimeout(() => {
         setConfirmed(true);
         setLoading(false);
-      }, 500);
+      }, 400);
 
     } catch (err) {
       console.error('Erro ao registrar confirmação:', err);
@@ -129,7 +181,42 @@ export default function ConfirmarConsultaPublica() {
     }
   };
 
-  // ── SE JÁ ESTÁ CONFIRMADO: RENDERIZA A TELA TOTALMENTE EM VERDE COM A MENSAGEM SOLICITADA ──
+  // Seletor de Paciente (quando acessado sem id direto na rota)
+  const renderPatientSelector = (isSuccessScreen = false) => {
+    if (params.id) return null; // Se veio por rota com :id do paciente, não precisa do dropdown
+    return (
+      <div className={`p-3 rounded-2xl border text-xs space-y-1.5 ${
+        isSuccessScreen 
+          ? 'bg-emerald-900/60 border-emerald-500/40 text-emerald-100'
+          : 'bg-slate-900/90 border-slate-800 text-slate-300'
+      }`}>
+        <label className="font-semibold flex items-center justify-between">
+          <span className="flex items-center gap-1.5">
+            <User className="h-3.5 w-3.5 text-emerald-400" />
+            <span>Paciente Agendado:</span>
+          </span>
+          <span className="text-[10px] opacity-75 font-mono">({consultasList.length} pacientes)</span>
+        </label>
+        <select
+          value={selectedId}
+          onChange={e => setSelectedId(e.target.value)}
+          className={`w-full rounded-xl px-3 py-2 font-medium focus:outline-none border text-xs cursor-pointer ${
+            isSuccessScreen
+              ? 'bg-emerald-800 border-emerald-400 text-white'
+              : 'bg-slate-800 border-slate-700 text-white focus:ring-2 focus:ring-emerald-500'
+          }`}
+        >
+          {consultasList.map(c => (
+            <option key={c.id} value={c.id} className="bg-slate-900 text-white">
+              {c.paciente} • {c.horario} ({c.medico} - {c.especialidade})
+            </option>
+          ))}
+        </select>
+      </div>
+    );
+  };
+
+  // ── SE JÁ ESTÁ CONFIRMADO: RENDERIZA A TELA TOTALMENTE EM VERDE COM OS DADOS DO AGENDAMENTO DESTE PACIENTE ──
   if (confirmed) {
     return (
       <div className="min-h-screen bg-gradient-to-b from-emerald-600 via-emerald-700 to-emerald-950 text-white flex flex-col items-center justify-center p-4 selection:bg-white selection:text-emerald-900 relative overflow-hidden">
@@ -137,124 +224,152 @@ export default function ConfirmarConsultaPublica() {
         <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-emerald-400/25 rounded-full blur-3xl pointer-events-none" />
         <div className="absolute bottom-10 right-10 w-80 h-80 bg-teal-400/20 rounded-full blur-3xl pointer-events-none" />
 
-        <motion.div
-          initial={{ opacity: 0, scale: 0.9, y: 25 }}
-          animate={{ opacity: 1, scale: 1, y: 0 }}
-          transition={{ duration: 0.45, ease: 'easeOut' }}
-          className="max-w-md w-full bg-emerald-800/90 border-2 border-emerald-400/60 rounded-3xl p-6 sm:p-8 shadow-2xl shadow-emerald-950/60 backdrop-blur-md text-center space-y-6 relative z-10"
-        >
-          {/* Ícone de Sucesso Animado */}
-          <div className="relative mx-auto w-20 h-20">
-            <div className="absolute inset-0 rounded-full bg-emerald-300/40 animate-ping" />
-            <div className="relative w-20 h-20 rounded-full bg-emerald-500 text-white flex items-center justify-center shadow-xl border-2 border-white">
-              <CheckCircle2 className="h-10 w-10 text-white" />
-            </div>
-          </div>
+        <div className="max-w-md w-full space-y-4 relative z-10">
+          {/* Seletor de Paciente quando acessado pelo menu */}
+          {renderPatientSelector(true)}
 
-          {/* Título Principal Exato */}
-          <div className="space-y-1">
-            <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-white drop-shadow-sm">
-              Consulta Confirmada
-            </h1>
-            <p className="text-xs text-emerald-100 font-medium">
-              Sua consulta foi confirmada com sucesso!
-            </p>
-          </div>
-
-          {/* Card com as informações exatas solicitadas */}
-          <div className="bg-emerald-900/85 border border-emerald-400/40 rounded-2xl p-5 text-center space-y-3.5 shadow-inner">
-            {/* Nome do Médico */}
-            <div className="text-lg sm:text-xl font-black text-white tracking-wide">
-              {patientData.medico}
+          <motion.div
+            initial={{ opacity: 0, scale: 0.9, y: 25 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            transition={{ duration: 0.45, ease: 'easeOut' }}
+            className="w-full bg-emerald-800/90 border-2 border-emerald-400/60 rounded-3xl p-6 sm:p-8 shadow-2xl shadow-emerald-950/60 backdrop-blur-md text-center space-y-5"
+          >
+            {/* Ícone de Sucesso Animado */}
+            <div className="relative mx-auto w-16 h-16">
+              <div className="absolute inset-0 rounded-full bg-emerald-300/40 animate-ping" />
+              <div className="relative w-16 h-16 rounded-full bg-emerald-500 text-white flex items-center justify-center shadow-xl border-2 border-white">
+                <CheckCircle2 className="h-9 w-9 text-white" />
+              </div>
             </div>
 
-            {/* Data e Horário */}
-            <div className="text-sm font-bold text-emerald-100 flex items-center justify-center gap-2">
-              <Calendar className="h-4 w-4 text-emerald-300" />
-              <span>
-                {patientData.data} às {patientData.horario}
-              </span>
-            </div>
-
-            {/* Linha Divisória */}
-            <div className="pt-3 border-t border-emerald-600/60 space-y-1.5 text-xs">
-              {/* Clínica / Local */}
-              <p className="font-extrabold text-white text-sm sm:text-base flex items-center justify-center gap-1.5">
-                <Building2 className="h-4 w-4 text-emerald-300 shrink-0" />
-                <span>{patientData.local}</span>
-              </p>
-
-              {/* Telefone */}
-              <p className="font-mono text-emerald-200 font-bold text-xs flex items-center justify-center gap-1.5 pt-0.5">
-                <Phone className="h-3.5 w-3.5 text-emerald-300" />
-                <span>{patientData.telefone}</span>
-              </p>
-
-              {/* Endereço */}
-              <p className="text-emerald-100 font-medium pt-0.5 flex items-center justify-center gap-1">
-                <MapPin className="h-3.5 w-3.5 text-emerald-300 shrink-0" />
-                <span>{patientData.endereco}</span>
-              </p>
-
-              {/* Bairro */}
-              <p className="text-emerald-300 font-black uppercase tracking-widest text-[11px]">
-                {patientData.bairro}
+            {/* Título Principal */}
+            <div className="space-y-1">
+              <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-white drop-shadow-sm">
+                Consulta Confirmada
+              </h1>
+              <p className="text-xs text-emerald-100 font-medium">
+                Presença confirmada com sucesso para este agendamento!
               </p>
             </div>
-          </div>
 
-          {/* Instruções Adicionais */}
-          <div className="p-3 bg-emerald-900/50 border border-emerald-500/30 rounded-xl text-[11px] text-emerald-100/90 space-y-1">
-            <p>• Chegue com 15 minutos de antecedência.</p>
-            <p>• Apresente seu documento oficial com foto na recepção.</p>
-          </div>
+            {/* Card com os dados do agendamento do paciente */}
+            <div className="bg-emerald-900/85 border border-emerald-400/40 rounded-2xl p-5 text-center space-y-3.5 shadow-inner">
+              {/* DADOS DO PACIENTE */}
+              <div className="space-y-0.5 border-b border-emerald-700/60 pb-3">
+                <span className="text-[10px] uppercase font-bold tracking-widest text-emerald-300">
+                  Paciente
+                </span>
+                <h2 className="text-xl sm:text-2xl font-black text-white tracking-wide">
+                  {patientData.paciente}
+                </h2>
+                <div className="flex items-center justify-center gap-2 text-xs text-emerald-200">
+                  {patientData.prontuario && <span className="font-mono">{patientData.prontuario}</span>}
+                  {patientData.idade ? <span>• {patientData.idade} anos</span> : null}
+                  {patientData.convenio && <span>• {patientData.convenio}</span>}
+                </div>
+              </div>
 
-          {/* Selo de Confirmação no Centro Médico */}
-          <div className="flex items-center justify-center gap-1.5 text-[11px] text-emerald-200 font-semibold">
-            <span className="h-2 w-2 rounded-full bg-emerald-300 animate-pulse" />
-            <span>O agendamento já está verde na tela Centro Médico</span>
-          </div>
+              {/* MÉDICO E ESPECIALIDADE DO AGENDAMENTO */}
+              <div className="space-y-1">
+                <div className="text-lg sm:text-xl font-black text-white tracking-wide">
+                  {patientData.medico}
+                </div>
+                <p className="text-xs font-semibold text-emerald-200">
+                  {patientData.especialidade} {patientData.crm ? `• ${patientData.crm}` : ''}
+                </p>
+              </div>
 
-          {/* Opção para voltar/desfazer se necessário */}
-          <div className="pt-1">
-            <button
-              onClick={() => setConfirmed(false)}
-              className="text-xs text-emerald-200 hover:text-white underline transition-colors cursor-pointer"
-            >
-              Visualizar dados do agendamento
-            </button>
-          </div>
-        </motion.div>
+              {/* DATA E HORÁRIO DO AGENDAMENTO */}
+              <div className="text-sm font-bold text-emerald-100 flex items-center justify-center gap-2 bg-emerald-800/80 py-2 px-3 rounded-xl border border-emerald-600/50">
+                <Calendar className="h-4 w-4 text-emerald-300 shrink-0" />
+                <span>
+                  {patientData.data} às {patientData.horario}
+                </span>
+              </div>
 
-        {/* Rodapé Oficial */}
-        <div className="mt-6 text-center text-emerald-200/80 text-xs">
-          Hospital Santa Casa de Misericórdia • Confirmação de Consulta
+              {/* LOCALIZAÇÃO, TELEFONE E ENDEREÇO */}
+              <div className="pt-2 border-t border-emerald-600/60 space-y-1.5 text-xs">
+                {/* Clínica / Consultório */}
+                <p className="font-extrabold text-white text-sm sm:text-base flex items-center justify-center gap-1.5">
+                  <Building2 className="h-4 w-4 text-emerald-300 shrink-0" />
+                  <span>{patientData.consultorio ? `${patientData.consultorio} • ${patientData.local}` : patientData.local}</span>
+                </p>
+
+                {/* Telefone */}
+                <p className="font-mono text-emerald-200 font-bold text-xs flex items-center justify-center gap-1.5 pt-0.5">
+                  <Phone className="h-3.5 w-3.5 text-emerald-300" />
+                  <span>{patientData.telefone}</span>
+                </p>
+
+                {/* Endereço */}
+                <p className="text-emerald-100 font-medium pt-0.5 flex items-center justify-center gap-1">
+                  <MapPin className="h-3.5 w-3.5 text-emerald-300 shrink-0" />
+                  <span>{patientData.endereco}</span>
+                </p>
+
+                {/* Bairro */}
+                <p className="text-emerald-300 font-black uppercase tracking-widest text-[11px]">
+                  {patientData.bairro}
+                </p>
+              </div>
+            </div>
+
+            {/* Instruções Adicionais */}
+            <div className="p-3 bg-emerald-900/50 border border-emerald-500/30 rounded-xl text-[11px] text-emerald-100/90 space-y-1">
+              <p>• Chegue com 15 minutos de antecedência.</p>
+              <p>• Apresente seu documento oficial com foto e carteirinha na recepção.</p>
+            </div>
+
+            {/* Selo de Confirmação no Centro Médico */}
+            <div className="flex items-center justify-center gap-1.5 text-[11px] text-emerald-200 font-semibold">
+              <span className="h-2 w-2 rounded-full bg-emerald-300 animate-pulse" />
+              <span>O agendamento deste paciente já está completamente verde no Centro Médico</span>
+            </div>
+
+            {/* Opção para voltar/desfazer se necessário */}
+            <div className="pt-1">
+              <button
+                onClick={() => setConfirmed(false)}
+                className="text-xs text-emerald-200 hover:text-white underline transition-colors cursor-pointer"
+              >
+                Visualizar detalhes do agendamento
+              </button>
+            </div>
+          </motion.div>
+
+          {/* Rodapé Oficial */}
+          <div className="text-center text-emerald-200/80 text-xs">
+            Hospital Santa Casa de Misericórdia • Centro Médico
+          </div>
         </div>
       </div>
     );
   }
 
-  // ── SE AINDA NÃO CONFIRMOU: EXIBE A TELA DE CONFIRMAÇÃO COM O BOTÃO "CONFIRMAR" ──
+  // ── SE AINDA NÃO CONFIRMOU: EXIBE A TELA DE CONFIRMAÇÃO COM OS DADOS DE CADA PACIENTE E O BOTÃO "CONFIRMAR" ──
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col items-center justify-center p-4 selection:bg-emerald-500 selection:text-white relative overflow-hidden">
       {/* Background Decorativo Glassmorphism */}
       <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
       <div className="absolute bottom-10 right-10 w-80 h-80 bg-primary/10 rounded-full blur-3xl pointer-events-none" />
 
-      <div className="max-w-md w-full space-y-6 relative z-10">
+      <div className="max-w-md w-full space-y-4 relative z-10">
+        {/* Seletor de Paciente quando acessado pelo menu */}
+        {renderPatientSelector(false)}
+
         {/* Header com Identidade da Santa Casa */}
-        <div className="text-center space-y-2">
-          <div className="inline-flex items-center justify-center h-14 w-14 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 shadow-inner mb-1">
-            <Stethoscope className="h-8 w-8" />
+        <div className="text-center space-y-1.5">
+          <div className="inline-flex items-center justify-center h-12 w-12 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 shadow-inner mb-0.5">
+            <Stethoscope className="h-6 w-6" />
           </div>
           <h1 className="text-2xl font-bold tracking-tight text-white flex items-center justify-center gap-2">
             Confirmação de Consulta
             <span className="text-[11px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-medium">
-              Santa Casa
+              Centro Médico
             </span>
           </h1>
           <p className="text-xs text-slate-400">
-            Validação de presença e horário de atendimento
+            Validação de presença e horário do agendamento
           </p>
         </div>
 
@@ -264,26 +379,28 @@ export default function ConfirmarConsultaPublica() {
           animate={{ opacity: 1, y: 0 }}
           className="bg-slate-900/80 border border-slate-800/80 rounded-2xl p-6 shadow-2xl backdrop-blur-md space-y-5"
         >
-          {/* Dados do Paciente */}
+          {/* Dados do Paciente do Agendamento */}
           <div className="space-y-1 border-b border-slate-800 pb-4">
             <span className="text-[10px] uppercase font-bold tracking-wider text-slate-400">
               Dados do Paciente
             </span>
-            <h2 className="text-lg font-bold text-white">
+            <h2 className="text-xl font-black text-white">
               {patientData.paciente}
             </h2>
-            <p className="text-xs text-slate-400">
-              Convênio: <span className="text-slate-200 font-medium">{patientData.convenio}</span>
-            </p>
+            <div className="flex flex-wrap items-center gap-2 text-xs text-slate-400 pt-0.5">
+              <span className="font-mono text-slate-300">{patientData.prontuario}</span>
+              {patientData.idade ? <span>• {patientData.idade} anos</span> : null}
+              <span>• Convênio: <strong className="text-slate-200">{patientData.convenio}</strong></span>
+            </div>
           </div>
 
-          {/* Informações da Consulta */}
+          {/* Informações da Consulta e Médico */}
           <div className="space-y-3 text-xs">
             <div className="flex items-start gap-2.5">
               <Stethoscope className="h-4 w-4 text-emerald-400 mt-0.5 shrink-0" />
               <div>
-                <p className="font-semibold text-white">{patientData.medico}</p>
-                <p className="text-slate-400">{patientData.especialidade} • {patientData.crm}</p>
+                <p className="font-bold text-white text-sm">{patientData.medico}</p>
+                <p className="text-slate-400">{patientData.especialidade} {patientData.crm ? `• ${patientData.crm}` : ''}</p>
               </div>
             </div>
 
@@ -308,10 +425,20 @@ export default function ConfirmarConsultaPublica() {
             <div className="bg-slate-800/60 p-2.5 rounded-xl border border-slate-700/50 flex items-center gap-2">
               <Building2 className="h-4 w-4 text-emerald-400 shrink-0" />
               <div>
-                <p className="text-[10px] text-slate-400">Local de Atendimento</p>
-                <p className="font-bold text-white text-xs">{patientData.local}</p>
+                <p className="text-[10px] text-slate-400">Consultório / Local</p>
+                <p className="font-bold text-white text-xs">{patientData.consultorio ? `${patientData.consultorio} • ${patientData.local}` : patientData.local}</p>
               </div>
             </div>
+
+            {patientData.telefone && (
+              <div className="bg-slate-800/60 p-2.5 rounded-xl border border-slate-700/50 flex items-center gap-2">
+                <Phone className="h-4 w-4 text-emerald-400 shrink-0" />
+                <div>
+                  <p className="text-[10px] text-slate-400">Telefone / Contato</p>
+                  <p className="font-mono text-white text-xs">{patientData.telefone}</p>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* ── BOTÃO "CONFIRMAR" ── */}
