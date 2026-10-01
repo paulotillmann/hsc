@@ -89,10 +89,10 @@ export default function ConfirmarConsultaPublica() {
       especialidade: searchParams.get('esp') || c?.especialidade || 'Consulta Especializada',
       horario: searchParams.get('hora') || c?.horario || '11:30',
       data: searchParams.get('data') || c?.data || 'Hoje',
-      consultorio: searchParams.get('consultorio') || c?.consultorio || 'Centro Médico - Geral',
+      consultorio: searchParams.get('consultorio') || c?.consultorio || 'Centro Médico',
       convenio: searchParams.get('convenio') || c?.convenio || 'Particular / Convênio',
       telefone: searchParams.get('tel') || c?.telefone || '(34) 3513-2213',
-      local: searchParams.get('local') || (c?.consultorio ? `Humani - Medicina e Cuidado (${c.consultorio})` : 'Humani - Medicina e Cuidado'),
+      local: searchParams.get('local') || 'Centro Médico Santa Casa',
       endereco: searchParams.get('end') || 'Rua Joaquim Aníbal, 204',
       bairro: searchParams.get('bairro') || 'Centro'
     };
@@ -289,10 +289,10 @@ export default function ConfirmarConsultaPublica() {
 
               {/* LOCALIZAÇÃO, TELEFONE E ENDEREÇO */}
               <div className="pt-2 border-t border-emerald-600/60 space-y-1.5 text-xs">
-                {/* Clínica / Consultório */}
+                {/* Local de Atendimento */}
                 <p className="font-extrabold text-white text-sm sm:text-base flex items-center justify-center gap-1.5">
                   <Building2 className="h-4 w-4 text-emerald-300 shrink-0" />
-                  <span>{patientData.consultorio ? `${patientData.consultorio} • ${patientData.local}` : patientData.local}</span>
+                  <span>Centro Médico Santa Casa</span>
                 </p>
 
                 {/* Telefone */}
@@ -425,8 +425,8 @@ export default function ConfirmarConsultaPublica() {
             <div className="bg-slate-800/60 p-2.5 rounded-xl border border-slate-700/50 flex items-center gap-2">
               <Building2 className="h-4 w-4 text-emerald-400 shrink-0" />
               <div>
-                <p className="text-[10px] text-slate-400">Consultório / Local</p>
-                <p className="font-bold text-white text-xs">{patientData.consultorio ? `${patientData.consultorio} • ${patientData.local}` : patientData.local}</p>
+                <p className="text-[10px] text-slate-400">Local de Atendimento</p>
+                <p className="font-bold text-white text-xs">Centro Médico Santa Casa</p>
               </div>
             </div>
 
