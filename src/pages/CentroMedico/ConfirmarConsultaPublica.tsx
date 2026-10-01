@@ -226,9 +226,7 @@ export default function ConfirmarConsultaPublica() {
                   {patientData.paciente}
                 </h2>
                 <div className="flex items-center justify-center gap-2 text-xs text-emerald-200">
-                  {patientData.prontuario && <span className="font-mono">{patientData.prontuario}</span>}
-                  {patientData.idade ? <span>• {patientData.idade} anos</span> : null}
-                  {patientData.convenio && <span>• {patientData.convenio}</span>}
+                  {patientData.convenio && <span>Convênio: {patientData.convenio}</span>}
                 </div>
               </div>
 
@@ -333,9 +331,7 @@ export default function ConfirmarConsultaPublica() {
               {patientData.paciente}
             </h2>
             <div className="flex flex-wrap items-center gap-2 text-xs text-slate-400 pt-0.5">
-              <span className="font-mono text-slate-300">{patientData.prontuario}</span>
-              {patientData.idade ? <span>• {patientData.idade} anos</span> : null}
-              <span>• Convênio: <strong className="text-slate-200">{patientData.convenio}</strong></span>
+              <span>Convênio: <strong className="text-slate-200">{patientData.convenio}</strong></span>
             </div>
           </div>
 
