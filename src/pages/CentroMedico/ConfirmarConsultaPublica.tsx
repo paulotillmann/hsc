@@ -181,41 +181,6 @@ export default function ConfirmarConsultaPublica() {
     }
   };
 
-  // Seletor de Paciente (quando acessado sem id direto na rota)
-  const renderPatientSelector = (isSuccessScreen = false) => {
-    if (params.id) return null; // Se veio por rota com :id do paciente, não precisa do dropdown
-    return (
-      <div className={`p-3 rounded-2xl border text-xs space-y-1.5 ${
-        isSuccessScreen 
-          ? 'bg-emerald-900/60 border-emerald-500/40 text-emerald-100'
-          : 'bg-slate-900/90 border-slate-800 text-slate-300'
-      }`}>
-        <label className="font-semibold flex items-center justify-between">
-          <span className="flex items-center gap-1.5">
-            <User className="h-3.5 w-3.5 text-emerald-400" />
-            <span>Paciente Agendado:</span>
-          </span>
-          <span className="text-[10px] opacity-75 font-mono">({consultasList.length} pacientes)</span>
-        </label>
-        <select
-          value={selectedId}
-          onChange={e => setSelectedId(e.target.value)}
-          className={`w-full rounded-xl px-3 py-2 font-medium focus:outline-none border text-xs cursor-pointer ${
-            isSuccessScreen
-              ? 'bg-emerald-800 border-emerald-400 text-white'
-              : 'bg-slate-800 border-slate-700 text-white focus:ring-2 focus:ring-emerald-500'
-          }`}
-        >
-          {consultasList.map(c => (
-            <option key={c.id} value={c.id} className="bg-slate-900 text-white">
-              {c.paciente} • {c.horario} ({c.medico} - {c.especialidade})
-            </option>
-          ))}
-        </select>
-      </div>
-    );
-  };
-
   // ── SE JÁ ESTÁ CONFIRMADO: RENDERIZA A TELA TOTALMENTE EM VERDE COM OS DADOS DO AGENDAMENTO DESTE PACIENTE ──
   if (confirmed) {
     return (
@@ -225,8 +190,6 @@ export default function ConfirmarConsultaPublica() {
         <div className="absolute bottom-10 right-10 w-80 h-80 bg-teal-400/20 rounded-full blur-3xl pointer-events-none" />
 
         <div className="max-w-md w-full space-y-4 relative z-10">
-          {/* Seletor de Paciente quando acessado pelo menu */}
-          {renderPatientSelector(true)}
 
           <motion.div
             initial={{ opacity: 0, scale: 0.9, y: 25 }}
@@ -354,9 +317,6 @@ export default function ConfirmarConsultaPublica() {
       <div className="absolute bottom-10 right-10 w-80 h-80 bg-primary/10 rounded-full blur-3xl pointer-events-none" />
 
       <div className="max-w-md w-full space-y-4 relative z-10">
-        {/* Seletor de Paciente quando acessado pelo menu */}
-        {renderPatientSelector(false)}
-
         {/* Header com Identidade da Santa Casa */}
         <div className="text-center space-y-1.5">
           <div className="inline-flex items-center justify-center h-12 w-12 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 shadow-inner mb-0.5">
