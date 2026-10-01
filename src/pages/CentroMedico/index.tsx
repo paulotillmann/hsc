@@ -1249,13 +1249,13 @@ export default function CentroMedico() {
                 {KANBAN_COLUMNS.map(col => {
                   let colCards = filteredConsultas.filter(c => c.status === col.id);
 
-                  // Na coluna "Confirmadas", colocar na sequência que for sendo adicionado (ordem cronológica de adição)
+                  // Na coluna "Confirmadas", à medida que for adicionando deve ir ficando em cima (mais recente no topo)
                   if (col.id === 'Confirmadas') {
                     colCards = [...colCards].sort((a, b) => {
                       const orderA = addedOrderMap[a.id] ?? a.addedAt ?? 0;
                       const orderB = addedOrderMap[b.id] ?? b.addedAt ?? 0;
                       if (orderA !== orderB) {
-                        return orderA - orderB;
+                        return orderB - orderA;
                       }
                       return 0;
                     });
