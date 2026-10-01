@@ -276,10 +276,7 @@ export default function ConfirmarConsultaPublica() {
               <p>• Apresente seu documento oficial com foto e carteirinha na recepção.</p>
             </div>
 
-            {/* Selo de Confirmação no Centro Médico */}
-            <p className="text-[11px] text-emerald-200 font-semibold text-center leading-snug">
-              O agendamento deste paciente já está completamente verde no Centro Médico
-            </p>
+
 
           </motion.div>
 
