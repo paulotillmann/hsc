@@ -279,10 +279,9 @@ export default function ConfirmarConsultaPublica() {
             </div>
 
             {/* Selo de Confirmação no Centro Médico */}
-            <div className="flex items-center justify-center gap-2 text-[11px] text-emerald-200 font-semibold text-center">
-              <span className="h-2 w-2 rounded-full bg-emerald-300 animate-pulse shrink-0 inline-block" />
-              <span className="leading-snug">O agendamento deste paciente já está completamente verde no Centro Médico</span>
-            </div>
+            <p className="text-[11px] text-emerald-200 font-semibold text-center leading-snug">
+              O agendamento deste paciente já está completamente verde no Centro Médico
+            </p>
 
           </motion.div>
 
