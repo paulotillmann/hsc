@@ -20,6 +20,8 @@ import ProntoAtendimento from './pages/ProntoAtendimento';
 import PainelTVPA from './pages/ProntoAtendimento/PainelTVPA';
 import EscutaLanding from './pages/EscutaSantaCasa/EscutaLanding';
 import NovaDenuncia from './pages/EscutaSantaCasa/NovaDenuncia';
+import ConfirmarConsultaPublica from './pages/CentroMedico/ConfirmarConsultaPublica';
+import PacientesConfirmados from './pages/CentroMedico/PacientesConfirmados';
 
 const App: React.FC = () => {
   // Configuração Global de Tema
@@ -42,6 +44,10 @@ const App: React.FC = () => {
           {/* Canal de Escuta Público e Formulário (Totalmente Públicos - Sem Login) */}
           <Route path="/escuta-santa-casa" element={<EscutaLanding />} />
           <Route path="/escuta-santa-casa/nova-denuncia" element={<NovaDenuncia />} />
+
+          {/* Tela Pública e Independente de Confirmação de Consulta do Paciente */}
+          <Route path="/confirmar-consulta" element={<ConfirmarConsultaPublica />} />
+          <Route path="/confirmar-consulta/:id" element={<ConfirmarConsultaPublica />} />
 
           {/* Rotas protegidas — exigem sessão ativa */}
           <Route element={<PrivateRoute />}>
@@ -74,6 +80,9 @@ const App: React.FC = () => {
 
               {/* Rota Painel Atendente de Senhas */}
               <Route path="/senhas-atendente" element={<PainelAtendente />} />
+
+              {/* Rota dedicada de Pacientes Confirmados (Canal Seguro) */}
+              <Route path="/pacientes-confirmados" element={<PacientesConfirmados />} />
 
               {/* Rota dinâmica: resolve qualquer módulo cadastrado no banco */}
               {/* A permissão e o componente são resolvidos em DynamicRoute */}

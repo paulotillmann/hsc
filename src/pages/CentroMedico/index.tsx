@@ -1,4 +1,5 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Stethoscope,
@@ -65,6 +66,8 @@ export interface ConsultaAgendada {
   statusReal?: string;
   telefone?: string;
   observacoes?: string;
+  confirmadoPeloPaciente?: boolean;
+  confirmadoEm?: string;
 }
 
 // Configuração das Colunas do Kanban
@@ -470,17 +473,163 @@ const INITIAL_CONSULTAS: ConsultaAgendada[] = [
   }
 ];
 
+// ── GERENCIAMENTO DE PERSISTÊNCIA MANUAL DO KANBAN E CONFIRMAÇÕES ────────────
+const KANBAN_STORAGE_KEY = 'hsc_centro_medico_kanban_manual_status_v1';
+const KANBAN_CONFIRMED_KEY = 'hsc_centro_medico_confirmacoes_v1';
+
+// Lê o mapa de status manuais do localStorage
+export const getStoredManualStatusMap = (): Record<string, KanbanStatus> => {
+  try {
+    const raw = localStorage.getItem(KANBAN_STORAGE_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+};
+
+// Lê o mapa de confirmações do paciente
+export const getStoredConfirmedPatientsMap = (): Record<string, { confirmadoPeloPaciente: boolean; confirmadoEm?: string }> => {
+  try {
+    const raw = localStorage.getItem(KANBAN_CONFIRMED_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+};
+
+// Salva a confirmação no localStorage e Supabase
+export const persistConfirmedPatient = async (cardId: string, confirmado: boolean) => {
+  try {
+    const current = getStoredConfirmedPatientsMap();
+    if (confirmado) {
+      current[cardId] = {
+        confirmadoPeloPaciente: true,
+        confirmadoEm: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+      };
+    } else {
+      delete current[cardId];
+    }
+    localStorage.setItem(KANBAN_CONFIRMED_KEY, JSON.stringify(current));
+
+    try {
+      await supabase.from('centro_medico_kanban_cards').upsert({
+        card_id: cardId,
+        status: confirmado ? 'Confirmadas' : 'Agendamentos',
+        confirmado_pelo_paciente: confirmado,
+        updated_at: new Date().toISOString()
+      }, { onConflict: 'card_id' });
+    } catch {}
+
+    // Notifica outros componentes da tela
+    window.dispatchEvent(new CustomEvent('consulta_confirmada_evento', { detail: { cardId, confirmado } }));
+  } catch (e) {
+    console.warn('Erro ao persistir confirmação do paciente:', e);
+  }
+};
+
+// Salva o novo status no localStorage e opcionalmente no Supabase
+export const persistCardManualStatus = async (
+  cardId: string,
+  newStatus: KanbanStatus,
+  cardData?: Partial<ConsultaAgendada>
+) => {
+  try {
+    // 1. Persistência imediata no navegador (localStorage)
+    const currentMap = getStoredManualStatusMap();
+    currentMap[cardId] = newStatus;
+    localStorage.setItem(KANBAN_STORAGE_KEY, JSON.stringify(currentMap));
+
+    // 2. Persistência remota assíncrona no Supabase
+    try {
+      await supabase.from('centro_medico_kanban_cards').upsert({
+        card_id: cardId,
+        status: newStatus,
+        paciente: cardData?.paciente || null,
+        data_consulta: cardData?.data || null,
+        updated_at: new Date().toISOString()
+      }, { onConflict: 'card_id' });
+    } catch {
+      // Ignora falhas de conexão se a tabela remota for inacessível
+    }
+  } catch (err) {
+    console.warn('[Kanban] Falha ao persistir status manual:', err);
+  }
+};
+
 export default function CentroMedico() {
-  // Estados Principais
+  // Estados Principais: Kanban e Escalas Médicas
   const [activeTab, setActiveTab] = useState<'escalas' | 'kanban'>('kanban');
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedDate, setSelectedDate] = useState<string>(() => new Date().toISOString().split('T')[0]);
   const [selectedEspecialidade, setSelectedEspecialidade] = useState<string>('TODAS');
   const [selectedStatus, setSelectedStatus] = useState<string>('TODOS');
   
-  // Estados de Dados
+  // Mapa de pacientes confirmados
+  const [confirmedPatientsMap, setConfirmedPatientsMap] = useState(getStoredConfirmedPatientsMap);
+
+  // Estados de Dados inicializados respeitando o status fixado e confirmações
   const [escalas, setEscalas] = useState<EscalaMedica[]>(INITIAL_ESCALAS);
-  const [consultas, setConsultas] = useState<ConsultaAgendada[]>(INITIAL_CONSULTAS);
+  const [consultas, setConsultas] = useState<ConsultaAgendada[]>(() => {
+    const manualMap = getStoredManualStatusMap();
+    const confMap = getStoredConfirmedPatientsMap();
+    return INITIAL_CONSULTAS.map(c => ({
+      ...c,
+      status: manualMap[c.id] || (confMap[c.id]?.confirmadoPeloPaciente ? 'Confirmadas' : c.status),
+      confirmadoPeloPaciente: Boolean(confMap[c.id]?.confirmadoPeloPaciente),
+      confirmadoEm: confMap[c.id]?.confirmadoEm
+    }));
+  });
+
+  // Listener para sincronização em tempo real de confirmações
+  useEffect(() => {
+    const handleRemoteConfirmEvent = () => {
+      const updated = getStoredConfirmedPatientsMap();
+      setConfirmedPatientsMap(updated);
+      setConsultas(prev => prev.map(c => ({
+        ...c,
+        confirmadoPeloPaciente: Boolean(updated[c.id]?.confirmadoPeloPaciente),
+        confirmadoEm: updated[c.id]?.confirmadoEm,
+        status: updated[c.id]?.confirmadoPeloPaciente ? 'Confirmadas' : c.status
+      })));
+    };
+
+    window.addEventListener('consulta_confirmada_evento', handleRemoteConfirmEvent);
+    window.addEventListener('storage', handleRemoteConfirmEvent);
+    return () => {
+      window.removeEventListener('consulta_confirmada_evento', handleRemoteConfirmEvent);
+      window.removeEventListener('storage', handleRemoteConfirmEvent);
+    };
+  }, []);
+
+  // Efeito ao carregar o componente para sincronizar posições salvas no Supabase
+  useEffect(() => {
+    const syncRemoteKanbanStatus = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('centro_medico_kanban_cards')
+          .select('card_id, status');
+
+        if (!error && data && data.length > 0) {
+          const currentMap = getStoredManualStatusMap();
+          data.forEach((row: any) => {
+            if (row.card_id && row.status) {
+              currentMap[row.card_id] = row.status as KanbanStatus;
+            }
+          });
+          localStorage.setItem(KANBAN_STORAGE_KEY, JSON.stringify(currentMap));
+
+          setConsultas(prev => prev.map(c => {
+            const manualStatus = currentMap[c.id];
+            return manualStatus ? { ...c, status: manualStatus } : c;
+          }));
+        }
+      } catch {
+        // Fallback silencioso mantendo o localStorage
+      }
+    };
+
+    syncRemoteKanbanStatus();
+  }, []);
   
   // Estados de Drag and Drop
   const [draggedCardId, setDraggedCardId] = useState<string | null>(null);
@@ -519,12 +668,13 @@ export default function CentroMedico() {
         if (response.escalas) setEscalas(response.escalas);
         if (response.consultas) {
           setConsultas(prev => {
-            const manualStatusMap = new Map(prev.map(c => [c.id, c.status]));
+            const currentMemMap = new Map(prev.map(c => [c.id, c.status]));
+            const localSavedMap = getStoredManualStatusMap();
+
             return response.consultas.map((incoming: any) => {
-              const currentStatus = manualStatusMap.get(incoming.id);
-              // A única sincronização de entrada no Kanban é em 'Agendamentos'
-              const targetColumn: KanbanStatus = currentStatus || 'Agendamentos';
-              // Captura o status real do paciente vindo do sistema/webhook
+              // Mantém estritamente fixo o que foi movido manualmente, mesmo ao atualizar
+              const manualStatus = localSavedMap[incoming.id] || currentMemMap.get(incoming.id);
+              const targetColumn: KanbanStatus = manualStatus || 'Agendamentos';
               const realStatus = incoming.statusReal || incoming.status || 'Agendado';
 
               return {
@@ -539,11 +689,26 @@ export default function CentroMedico() {
         showToast('success', `Dados de ${formatDateLabel(targetDate)} sincronizados!`);
       } else {
         setUsingMock(true);
+        // Aplica e mantém as posições manuais fixadas mesmo no fallback do mock
+        setConsultas(prev => {
+          const localSavedMap = getStoredManualStatusMap();
+          return prev.map(c => ({
+            ...c,
+            status: localSavedMap[c.id] || c.status
+          }));
+        });
         showToast('info', `Exibindo agendamentos para ${formatDateLabel(targetDate)}.`);
       }
     } catch (error: any) {
       console.warn('Falha no webhook n8n:', error);
       setUsingMock(true);
+      setConsultas(prev => {
+        const localSavedMap = getStoredManualStatusMap();
+        return prev.map(c => ({
+          ...c,
+          status: localSavedMap[c.id] || c.status
+        }));
+      });
       showToast('info', `Exibindo agendamentos para ${formatDateLabel(targetDate)}.`);
     } finally {
       setIsSyncing(false);
@@ -584,12 +749,29 @@ export default function CentroMedico() {
     setConsultas(prev => prev.map(c => c.id === cardId ? { ...c, status: newStatus } : c));
     showToast('success', `Paciente ${targetCard.paciente} movido para "${newStatus}".`);
 
-    // Quando movido para a coluna "Enviadas", dispara o envio do WhatsApp via Edge Function
-    if (newStatus === 'Enviadas') {
-      try {
-        showToast('info', `Enviando WhatsApp para ${targetCard.paciente}...`);
+    // Fixa a movimentação permanentemente no localStorage e Supabase até nova movimentação manual
+    persistCardManualStatus(cardId, newStatus, targetCard);
 
-        const { data, error } = await supabase.functions.invoke('whatsapp-centro-medico', {
+    // Disparo de WhatsApp ao mover para "Enviadas" ou "Confirmadas"
+    if (newStatus === 'Enviadas' || newStatus === 'Confirmadas') {
+      const isConfirmacao = newStatus === 'Confirmadas';
+      const actionLabel = isConfirmacao ? 'confirmação' : 'agendamento';
+
+      try {
+        showToast('info', `Disparando ${actionLabel} por WhatsApp para ${targetCard.paciente}...`);
+
+        // Monta o link da tela de confirmação de consulta do paciente de forma limpa e direta
+        const publicBaseUrl = (import.meta.env.VITE_PUBLIC_APP_URL as string) || (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000');
+        const cleanBaseUrl = publicBaseUrl.replace(/\/+$/, '');
+        const linkConfirmacao = `${cleanBaseUrl}/confirmar-consulta/${targetCard.id}`;
+
+        // Mensagem contextual com link de confirmação isolado quando movido para Confirmadas
+        const customText = isConfirmacao
+          ? `🏥 *Centro Médico - Hospital Santa Casa*\nOlá, *${targetCard.paciente}*!\n\nConfirmamos os dados da sua consulta no Centro Médico:\n📅 *Data:* ${targetCard.data}\n⏰ *Horário:* ${targetCard.horario}\n👨‍⚕️ *Médico(a):* ${targetCard.medico}${targetCard.crm ? ` (CRM: ${targetCard.crm})` : ''} - ${targetCard.especialidade}\n📍 *Local:* Centro Médico da Santa Casa${targetCard.convenio ? `\n📄 *Convênio:* ${targetCard.convenio}` : ''}\n\n🔗 *Confirmação de Consulta:*\n\n${linkConfirmacao}\n\n• Por favor, chegue com 15 minutos de antecedência portando documento oficial com foto e carteirinha do convênio (se aplicável).\n• Em caso de dúvidas ou necessidade de reagendamento, entre em contato conosco.\n\n_Hospital Santa Casa de Misericórdia_`
+          : `🏥 *Centro Médico - Hospital Santa Casa*\nOlá, *${targetCard.paciente}*!\n\nVocê tem uma consulta agendada no Centro Médico:\n👨‍⚕️ *Médico(a):* ${targetCard.medico}${targetCard.crm ? ` (CRM: ${targetCard.crm})` : ''} - ${targetCard.especialidade}\n📅 *Data:* ${targetCard.data}\n⏰ *Horário:* ${targetCard.horario}\n📍 *Local:* Centro Médico da Santa Casa${targetCard.convenio ? `\n📄 *Convênio:* ${targetCard.convenio}` : ''}\n\n• Por favor, chegue com 15 minutos de antecedência portando documento oficial com foto e carteirinha do convênio (se aplicável).\n• Em caso de dúvidas ou necessidade de reagendamento, entre em contato conosco.\n\n_Hospital Santa Casa de Misericórdia_`;
+
+        // Dispara a Edge Function especializada whatsapp-agendamento-enviado
+        let res = await supabase.functions.invoke('whatsapp-agendamento-enviado', {
           body: {
             cardId: targetCard.id,
             paciente: targetCard.paciente,
@@ -601,24 +783,90 @@ export default function CentroMedico() {
             horario: targetCard.horario,
             data: targetCard.data,
             convenio: targetCard.convenio,
-            sender: '34988511343',
+            telefone: targetCard.telefone || '34988511343',
             recipient: '5584998444889',
-            text: 'Você tem uma consulta no Centro Médico da Santa Casa'
+            status: newStatus,
+            tipo: isConfirmacao ? 'confirmacao' : 'envio',
+            linkConfirmacao: linkConfirmacao,
+            origin: origin,
+            text: customText
           }
         });
 
+        // Fallback para whatsapp-centro-medico se necessário
+        if (res.error) {
+          console.warn('[WhatsApp Agendamento] Tentando fallback para whatsapp-centro-medico:', res.error);
+          res = await supabase.functions.invoke('whatsapp-centro-medico', {
+            body: {
+              cardId: targetCard.id,
+              paciente: targetCard.paciente,
+              prontuario: targetCard.prontuario,
+              medico: targetCard.medico,
+              crm: targetCard.crm,
+              especialidade: targetCard.especialidade,
+              consultorio: targetCard.consultorio,
+              horario: targetCard.horario,
+              data: targetCard.data,
+              convenio: targetCard.convenio,
+              sender: '34988511343',
+              recipient: '5584998444889',
+              text: customText || 'Você tem uma consulta no Centro Médico da Santa Casa'
+            }
+          });
+        }
+
+        const { data, error } = res;
+
         if (error) {
-          console.warn('[WhatsApp Centro Médico] Erro ao invocar Edge Function:', error);
+          console.warn('[WhatsApp Agendamento] Erro ao invocar Edge Function:', error);
           showToast('error', `Falha no envio do WhatsApp: ${error.message || 'Erro de comunicação'}`);
         } else if (data?.success) {
-          showToast('success', `WhatsApp enviado com sucesso para ${targetCard.paciente}!`);
+          showToast('success', `WhatsApp de ${actionLabel} enviado com sucesso para ${targetCard.paciente}!`);
         } else {
           showToast('info', data?.message || 'Notificação processada.');
         }
       } catch (err: any) {
-        console.error('[WhatsApp Centro Médico] Falha na requisição:', err);
+        console.error('[WhatsApp Agendamento] Falha na requisição:', err);
         showToast('error', `Erro ao disparar WhatsApp: ${err.message}`);
       }
+    }
+  };
+
+  // Ação de Confirmação de Consulta do Paciente
+  const handleToggleConfirmPatient = async (cardId: string) => {
+    const target = consultas.find(c => c.id === cardId);
+    if (!target) return;
+
+    const isCurrentlyConfirmed = Boolean(target.confirmadoPeloPaciente || confirmedPatientsMap[cardId]?.confirmadoPeloPaciente);
+    const newConfirmedState = !isCurrentlyConfirmed;
+
+    // Atualiza estado de confirmação persistido
+    await persistConfirmedPatient(cardId, newConfirmedState);
+    const updatedMap = getStoredConfirmedPatientsMap();
+    setConfirmedPatientsMap(updatedMap);
+
+    // Se confirmou pelo paciente, move também a coluna do Kanban para "Confirmadas"
+    const newStatus: KanbanStatus = newConfirmedState ? 'Confirmadas' : target.status;
+    if (newConfirmedState) {
+      persistCardManualStatus(cardId, 'Confirmadas', target);
+    }
+
+    setConsultas(prev => prev.map(c => {
+      if (c.id === cardId) {
+        return {
+          ...c,
+          status: newStatus,
+          confirmadoPeloPaciente: newConfirmedState,
+          confirmadoEm: newConfirmedState ? updatedMap[cardId]?.confirmadoEm : undefined
+        };
+      }
+      return c;
+    }));
+
+    if (newConfirmedState) {
+      showToast('success', `Consulta de ${target.paciente} confirmada com sucesso! O agendamento agora está completamente verde no Centro Médico.`);
+    } else {
+      showToast('info', `Confirmação de ${target.paciente} desfeita.`);
     }
   };
 
@@ -831,6 +1079,18 @@ export default function CentroMedico() {
                 {filteredEscalas.length}
               </span>
             </button>
+
+            <Link
+              to="/pacientes-confirmados"
+              className="flex items-center justify-center gap-2 px-3 sm:px-4 py-2 rounded-xl font-medium text-xs sm:text-sm transition-all duration-200 whitespace-nowrap shrink-0 text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/15 border border-emerald-500/25 shadow-xs"
+              title="Acessar tela independente de Pacientes Confirmados (Confirmação de Consulta)"
+            >
+              <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-500" />
+              <span>Pacientes Confirmados</span>
+              <span className="ml-0.5 px-2 py-0.5 rounded-full text-[10px] font-bold border bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 border-emerald-500/30">
+                {consultas.filter(c => c.confirmadoPeloPaciente || confirmedPatientsMap[c.id]?.confirmadoPeloPaciente).length}
+              </span>
+            </Link>
           </div>
 
           {/* Lado Direito: Controle de Datas e Especialidades */}
@@ -969,104 +1229,165 @@ export default function CentroMedico() {
                             Nenhum paciente
                           </div>
                         ) : (
-                          colCards.map(card => (
-                            <div
-                              key={card.id}
-                              draggable
-                              onDragStart={e => handleDragStart(e, card.id)}
-                              className="bg-card border border-border/80 hover:border-primary/50 p-3.5 rounded-xl shadow-xs hover:shadow-md transition-all cursor-grab active:cursor-grabbing space-y-2.5 relative group"
-                            >
-                              {/* Header do Card: Paciente, Prontuário, Idade, Horário e Tag de Status Real */}
-                              <div className="flex items-start justify-between gap-2">
-                                <div className="space-y-1 min-w-0 flex-1">
-                                  <div className="flex flex-wrap items-center gap-1.5">
-                                    <h4 className="font-bold text-sm text-foreground leading-snug group-hover:text-primary transition-colors break-words">
-                                      {card.paciente}
-                                    </h4>
-                                    {card.statusReal && (
-                                      <span
-                                        className={`text-[10px] font-bold px-2 py-0.5 rounded-full border flex items-center gap-1 shrink-0 ${getRealStatusBadgeStyle(card.statusReal)}`}
-                                        title={`Status Real no Sistema: ${card.statusReal}`}
-                                      >
-                                        <span className="h-1.5 w-1.5 rounded-full bg-current" />
-                                        {card.statusReal}
-                                      </span>
+                          colCards.map(card => {
+                            const isConfirmed = Boolean(card.confirmadoPeloPaciente || confirmedPatientsMap[card.id]?.confirmadoPeloPaciente);
+
+                            return (
+                              <div
+                                key={card.id}
+                                draggable
+                                onDragStart={e => handleDragStart(e, card.id)}
+                                className={`p-3.5 rounded-xl transition-all cursor-grab active:cursor-grabbing space-y-2.5 relative group ${
+                                  isConfirmed
+                                    ? 'bg-emerald-600 dark:bg-emerald-600 text-white border-2 border-emerald-300 shadow-xl shadow-emerald-950/30 ring-2 ring-emerald-300/40'
+                                    : 'bg-card border border-border/80 hover:border-primary/50 shadow-xs hover:shadow-md'
+                                }`}
+                              >
+                                {/* Selo em destaque caso o paciente tenha confirmado */}
+                                {isConfirmed && (
+                                  <div className="flex items-center justify-between gap-1.5 bg-emerald-800/90 text-white px-2.5 py-1 rounded-lg border border-emerald-300 text-[10px] font-bold shadow-xs">
+                                    <div className="flex items-center gap-1.5">
+                                      <CheckCircle2 className="h-3.5 w-3.5 text-emerald-300 animate-pulse" />
+                                      <span>PACIENTE CONFIRMOU PRESENÇA</span>
+                                    </div>
+                                    {card.confirmadoEm && (
+                                      <span className="text-emerald-200 font-mono text-[9px]">{card.confirmadoEm}</span>
                                     )}
                                   </div>
-                                  <p className="text-[11px] text-muted-foreground font-mono">
-                                    {card.prontuario} • {card.idade} anos
-                                  </p>
-                                </div>
-                                <span className="text-[11px] font-semibold text-primary bg-primary/10 px-2 py-0.5 rounded border border-primary/20 flex-shrink-0 whitespace-nowrap">
-                                  {card.horario}
-                                </span>
-                              </div>
+                                )}
 
-                              {/* Info Médica Completa: Médico (sem corte), CRM, Especialidade e Consultório */}
-                              <div className="space-y-1.5 text-xs text-muted-foreground border-t border-border/50 pt-2">
-                                <div className="space-y-0.5">
-                                  <div className="flex items-start gap-1.5 text-foreground font-medium">
-                                    <Stethoscope className="h-3.5 w-3.5 text-primary flex-shrink-0 mt-0.5" />
-                                    <span className="break-words leading-tight">{card.medico}</span>
-                                  </div>
-                                  {card.crm && (
-                                    <p className="text-[10px] text-muted-foreground/80 font-mono pl-5">
-                                      {card.crm}
+                                {/* Header do Card: Paciente, Prontuário, Idade, Horário e Tag de Status Real */}
+                                <div className="flex items-start justify-between gap-2">
+                                  <div className="space-y-1 min-w-0 flex-1">
+                                    <div className="flex flex-wrap items-center gap-1.5">
+                                      <h4 className={`font-bold text-sm leading-snug break-words transition-colors ${
+                                        isConfirmed ? 'text-white font-extrabold' : 'text-foreground group-hover:text-primary'
+                                      }`}>
+                                        {card.paciente}
+                                      </h4>
+                                      {card.statusReal && !isConfirmed && (
+                                        <span
+                                          className={`text-[10px] font-bold px-2 py-0.5 rounded-full border flex items-center gap-1 shrink-0 ${getRealStatusBadgeStyle(card.statusReal)}`}
+                                          title={`Status Real no Sistema: ${card.statusReal}`}
+                                        >
+                                          <span className="h-1.5 w-1.5 rounded-full bg-current" />
+                                          {card.statusReal}
+                                        </span>
+                                      )}
+                                    </div>
+                                    <p className={`text-[11px] font-mono ${
+                                      isConfirmed ? 'text-emerald-100' : 'text-muted-foreground'
+                                    }`}>
+                                      {card.prontuario} • {card.idade} anos
                                     </p>
-                                  )}
-                                </div>
-
-                                <div className="flex flex-wrap items-center justify-between gap-1 text-[11px] pt-0.5">
-                                  <span className="text-foreground/80 font-medium">{card.especialidade}</span>
-                                  <span className="font-mono text-muted-foreground flex items-center gap-1 bg-muted/40 px-1.5 py-0.5 rounded">
-                                    <Building2 className="h-3 w-3 text-muted-foreground/70" />
-                                    {card.consultorio}
+                                  </div>
+                                  <span className={`text-[11px] font-semibold px-2 py-0.5 rounded border flex-shrink-0 whitespace-nowrap ${
+                                    isConfirmed
+                                      ? 'text-white bg-emerald-800 border-emerald-400 shadow-xs'
+                                      : 'text-primary bg-primary/10 border-primary/20'
+                                  }`}>
+                                    {card.horario}
                                   </span>
                                 </div>
-                              </div>
 
-                              {/* Telefone e Observações (quando existirem) */}
-                              {(card.telefone || card.observacoes) && (
-                                <div className="space-y-1.5 border-t border-border/40 pt-2 text-[11px]">
-                                  {card.telefone && (
-                                    <div className="flex items-center gap-1.5 text-muted-foreground">
-                                      <Phone className="h-3 w-3 text-primary/70 flex-shrink-0" />
-                                      <span className="font-mono">{card.telefone}</span>
+                                {/* Info Médica Completa: Médico (sem corte), CRM, Especialidade e Consultório */}
+                                <div className={`space-y-1.5 text-xs border-t pt-2 ${
+                                  isConfirmed ? 'border-emerald-500/50 text-emerald-100' : 'border-border/50 text-muted-foreground'
+                                }`}>
+                                  <div className="space-y-0.5">
+                                    <div className={`flex items-start gap-1.5 font-medium ${
+                                      isConfirmed ? 'text-white' : 'text-foreground'
+                                    }`}>
+                                      <Stethoscope className={`h-3.5 w-3.5 flex-shrink-0 mt-0.5 ${
+                                        isConfirmed ? 'text-emerald-200' : 'text-primary'
+                                      }`} />
+                                      <span className="break-words leading-tight">{card.medico}</span>
                                     </div>
-                                  )}
-                                  {card.observacoes && (
-                                    <div className="flex items-start gap-1.5 bg-muted/40 p-2 rounded-lg border border-border/50 text-foreground/90">
-                                      <FileText className="h-3 w-3 text-muted-foreground/80 mt-0.5 flex-shrink-0" />
-                                      <span className="leading-tight break-words">{card.observacoes}</span>
-                                    </div>
-                                  )}
+                                    {card.crm && (
+                                      <p className={`text-[10px] font-mono pl-5 ${
+                                        isConfirmed ? 'text-emerald-200' : 'text-muted-foreground/80'
+                                      }`}>
+                                        {card.crm}
+                                      </p>
+                                    )}
+                                  </div>
+
+                                  <div className="flex flex-wrap items-center justify-between gap-1 text-[11px] pt-0.5">
+                                    <span className={`font-medium ${isConfirmed ? 'text-white' : 'text-foreground/80'}`}>
+                                      {card.especialidade}
+                                    </span>
+                                    <span className={`font-mono flex items-center gap-1 px-1.5 py-0.5 rounded ${
+                                      isConfirmed ? 'bg-emerald-700/80 text-emerald-100' : 'bg-muted/40 text-muted-foreground'
+                                    }`}>
+                                      <Building2 className={`h-3 w-3 ${isConfirmed ? 'text-emerald-200' : 'text-muted-foreground/70'}`} />
+                                      {card.consultorio}
+                                    </span>
+                                  </div>
                                 </div>
-                              )}
 
-                              {/* Footer do Card com Convênio e Ação de Mover */}
-                              <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-border/50 text-[11px]">
-                                <span className="px-2 py-0.5 rounded bg-muted text-foreground font-medium break-words">
-                                  {card.convenio}
-                                </span>
+                                {/* Telefone e Observações (quando existirem) */}
+                                {(card.telefone || card.observacoes) && (
+                                  <div className={`space-y-1.5 border-t pt-2 text-[11px] ${
+                                    isConfirmed ? 'border-emerald-500/50' : 'border-border/40'
+                                  }`}>
+                                    {card.telefone && (
+                                      <div className={`flex items-center gap-1.5 ${
+                                        isConfirmed ? 'text-emerald-100' : 'text-muted-foreground'
+                                      }`}>
+                                        <Phone className={`h-3 w-3 flex-shrink-0 ${
+                                          isConfirmed ? 'text-emerald-200' : 'text-primary/70'
+                                        }`} />
+                                        <span className="font-mono">{card.telefone}</span>
+                                      </div>
+                                    )}
+                                    {card.observacoes && (
+                                      <div className={`flex items-start gap-1.5 p-2 rounded-lg border leading-tight break-words ${
+                                        isConfirmed
+                                          ? 'bg-emerald-700/60 border-emerald-400 text-white'
+                                          : 'bg-muted/40 border-border/50 text-foreground/90'
+                                      }`}>
+                                        <FileText className={`h-3 w-3 mt-0.5 flex-shrink-0 ${
+                                          isConfirmed ? 'text-emerald-200' : 'text-muted-foreground/80'
+                                        }`} />
+                                        <span>{card.observacoes}</span>
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
 
-                                {/* Controles de Movimentação Rápida */}
-                                <div className="flex items-center gap-1">
-                                  <select
-                                    value={card.status}
-                                    onChange={e => moveCardToStatus(card.id, e.target.value as KanbanStatus)}
-                                    className="text-[10px] bg-background border border-border/80 rounded px-1.5 py-1 text-foreground focus:outline-none cursor-pointer"
-                                    title="Mover paciente para..."
-                                  >
-                                    {KANBAN_COLUMNS.map(c => (
-                                      <option key={c.id} value={c.id}>
-                                        Mover: {c.label}
-                                      </option>
-                                    ))}
-                                  </select>
+                                {/* Footer do Card com Convênio e Ação de Mover */}
+                                <div className={`flex flex-wrap items-center justify-between gap-2 pt-2 border-t text-[11px] ${
+                                  isConfirmed ? 'border-emerald-500/50' : 'border-border/50'
+                                }`}>
+                                  <span className={`px-2 py-0.5 rounded font-medium break-words ${
+                                    isConfirmed ? 'bg-emerald-700 text-white font-semibold' : 'bg-muted text-foreground'
+                                  }`}>
+                                    {card.convenio}
+                                  </span>
+
+                                  {/* Controles de Movimentação Rápida */}
+                                  <div className="flex items-center gap-1">
+                                    <select
+                                      value={card.status}
+                                      onChange={e => moveCardToStatus(card.id, e.target.value as KanbanStatus)}
+                                      className={`text-[10px] rounded px-1.5 py-1 focus:outline-none cursor-pointer border ${
+                                        isConfirmed
+                                          ? 'bg-emerald-700 border-emerald-400 text-white font-medium'
+                                          : 'bg-background border-border/80 text-foreground'
+                                      }`}
+                                      title="Mover paciente para..."
+                                    >
+                                      {KANBAN_COLUMNS.map(c => (
+                                        <option key={c.id} value={c.id} className="bg-background text-foreground">
+                                          Mover: {c.label}
+                                        </option>
+                                      ))}
+                                    </select>
+                                  </div>
                                 </div>
                               </div>
-                            </div>
-                          ))
+                            );
+                          })
                         )}
                       </div>
                     </div>
@@ -1142,8 +1463,6 @@ export default function CentroMedico() {
               )}
             </div>
           )}
-
-
         </div>
       </div>
   );
