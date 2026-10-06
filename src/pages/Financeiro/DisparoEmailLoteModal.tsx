@@ -106,6 +106,7 @@ export const DisparoEmailLoteModal: React.FC<DisparoEmailLoteModalProps> = ({
           to: emails,
           nomeMedico: item.MEDICO,
           periodoReferencia,
+          tipoPlantao: item.TIPO_PLANTAO,
           resumo: {
             totalPlantoes: item.QTD_PLANTOES,
             valorPlantoes: basePlantao,
@@ -113,7 +114,8 @@ export const DisparoEmailLoteModal: React.FC<DisparoEmailLoteModalProps> = ({
             valorTotalGeral: item.VALOR_TOTAL,
             valorPago: item.valorPago || 0,
             valorPendente: item.valorPendente || 0,
-            status: item.status
+            status: item.status,
+            tipoPlantao: item.TIPO_PLANTAO
           },
           sinteticoItem: item
         });

@@ -595,6 +595,63 @@ const Tesouraria: React.FC = () => {
     }
   };
 
+  // Filtrar lançamentos cancelados/estornados para o PDF
+  const getTransacoesValidasParaPDF = (lista: TransacaoFaturamento[]): TransacaoFaturamento[] => {
+    // Agrupar por atendimento
+    const porAtendimento = new Map<number, TransacaoFaturamento[]>();
+    lista.forEach(t => {
+      const arr = porAtendimento.get(t.nrAtendimento) || [];
+      arr.push({ ...t });
+      porAtendimento.set(t.nrAtendimento, arr);
+    });
+
+    const resultadoFinal: TransacaoFaturamento[] = [];
+
+    porAtendimento.forEach((itens) => {
+      // Separar negativos (cancelamentos/estornos) e positivos
+      const negativos = itens.filter(item => item.valorConta < 0);
+      
+      if (negativos.length === 0) {
+        resultadoFinal.push(...itens);
+        return;
+      }
+
+      const positivos = itens.filter(item => item.valorConta >= 0);
+      const anuladosIndices = new Set<number>();
+
+      negativos.forEach(neg => {
+        const valorAbsoluto = Math.abs(neg.valorConta);
+        // Procurar primeiro um lançamento positivo com mesmo valor e sem recebimento (vlRecebido <= 0)
+        let matchIdx = positivos.findIndex((pos, idx) => 
+          !anuladosIndices.has(idx) && 
+          Math.abs(pos.valorConta - valorAbsoluto) < 0.01 && 
+          (pos.vlRecebido === 0 || pos.detalhesRecebimento?.every(d => d.valor === 0))
+        );
+
+        // Se não achou com recebido zerado, busca por valor da conta equivalente
+        if (matchIdx === -1) {
+          matchIdx = positivos.findIndex((pos, idx) => 
+            !anuladosIndices.has(idx) && 
+            Math.abs(pos.valorConta - valorAbsoluto) < 0.01
+          );
+        }
+
+        if (matchIdx !== -1) {
+          anuladosIndices.add(matchIdx);
+        }
+      });
+
+      // Inclui apenas os positivos que não foram anulados por nenhum cancelamento
+      positivos.forEach((item, idx) => {
+        if (!anuladosIndices.has(idx)) {
+          resultadoFinal.push(item);
+        }
+      });
+    });
+
+    return resultadoFinal;
+  };
+
   // Exportar PDF Executivo
   const handleExportPDF = async () => {
     const doc = new jsPDF();
@@ -634,6 +691,24 @@ const Tesouraria: React.FC = () => {
       doc.text(`Filtros: ${activeFilters.join(' | ')}`, 14, 43);
     }
 
+    // Filtrar desconsiderando cancelamentos/estornos para o PDF
+    const transacoesParaPDF = getTransacoesValidasParaPDF(transacoesFiltradas);
+
+    // Recalcular KPIs específicos para o PDF desconsiderando os cancelados
+    let pdfTotalFaturado = 0;
+    let pdfTotalRecebido = 0;
+    let pdfTotalPendente = 0;
+
+    transacoesParaPDF.forEach(t => {
+      pdfTotalFaturado += t.valorConta;
+      const exibidos = getExibidosRecebimentos(t, tipoRecebimentoFilter);
+      const recEfetivo = exibidos.reduce((sum, d) => sum + d.valor, 0);
+      const recTotal = t.vlRecebido > 0 ? t.vlRecebido : (t.ieStatusAcerto === 2 ? t.valorConta : 0);
+
+      pdfTotalRecebido += recEfetivo;
+      pdfTotalPendente += Math.max(0, t.valorConta - recTotal);
+    });
+
     doc.setFontSize(11);
     doc.setFont('helvetica', 'bold');
     doc.setTextColor(0);
@@ -643,10 +718,10 @@ const Tesouraria: React.FC = () => {
       startY: 56,
       head: [['Total Faturado', 'Total Recebido (Pago)', 'Total Pendente', 'Total Atendimentos']],
       body: [[
-        formatCurrency(kpis.totalFaturado),
-        formatCurrency(kpis.totalRecebido),
-        formatCurrency(kpis.totalPendente),
-        kpis.totalAtendimentos.toString()
+        formatCurrency(pdfTotalFaturado),
+        formatCurrency(pdfTotalRecebido),
+        formatCurrency(pdfTotalPendente),
+        transacoesParaPDF.length.toString()
       ]],
       theme: 'grid',
       headStyles: { fillColor: [90, 16, 16], halign: 'center' },
@@ -661,7 +736,7 @@ const Tesouraria: React.FC = () => {
     const nextY = (doc as any).lastAutoTable.finalY + 12;
     doc.text('Lista de Contas por Atendimento', 14, nextY);
 
-    const tableBody = transacoesFiltradas.map(t => {
+    const tableBody = transacoesParaPDF.map(t => {
       const exibidos = getExibidosRecebimentos(t, tipoRecebimentoFilter);
       const vlsStr = exibidos.map(d => formatCurrency(d.valor)).join('\n');
       const tiposStr = exibidos.map(d => d.tipo).join('\n');
