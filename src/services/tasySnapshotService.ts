@@ -111,6 +111,31 @@ export const tasySnapshotService = {
   },
 
   /**
+   * Dispara a Edge Function de sincronização do snapshot no backend (Supabase)
+   */
+  async dispararSyncBackend(dataReferencia?: string): Promise<{ success: boolean; data?: TasyDailySnapshot; error?: string }> {
+    try {
+      const { data, error } = await supabase.functions.invoke('sync-tasy-snapshot', {
+        body: { data_referencia: dataReferencia }
+      });
+
+      if (error) {
+        console.error('[tasySnapshotService] Erro ao invocar sync-tasy-snapshot:', error);
+        return { success: false, error: error.message };
+      }
+
+      return {
+        success: data?.success ?? true,
+        data: data?.data as TasyDailySnapshot | undefined,
+        error: data?.error
+      };
+    } catch (err: any) {
+      console.error('[tasySnapshotService] Erro inesperado ao invocar Edge Function:', err);
+      return { success: false, error: err.message || 'Erro de conexão com o backend.' };
+    }
+  },
+
+  /**
    * Faz upload da imagem/print do snapshot para o Supabase Storage (bucket 'tasy-snapshots')
    */
   async uploadPrintSnapshot(dataReferencia: string, imageBlob: Blob): Promise<string | null> {
@@ -150,3 +175,4 @@ export const tasySnapshotService = {
     }
   }
 };
+
