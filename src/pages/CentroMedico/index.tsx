@@ -1451,43 +1451,13 @@ export default function CentroMedico() {
         <div className="absolute top-0 right-0 -mt-8 -mr-8 w-40 h-40 bg-primary/5 rounded-full blur-3xl pointer-events-none" />
 
         <div className="flex flex-col xl:flex-row items-stretch xl:items-center justify-between gap-3.5 relative z-10 w-full min-w-0">
-          {/* Lado Esquerdo: Abas de Navegação */}
-          <div className="flex items-center bg-muted/60 p-1.5 rounded-2xl border border-border/50 shadow-inner gap-1 max-w-full w-full sm:w-auto shrink-0">
-            <button
-              onClick={() => {
-                setActiveTab('kanban');
-                setSelectedStatus('TODOS');
-              }}
-              className={`flex-1 sm:flex-initial flex items-center justify-center gap-2 px-3 sm:px-4 py-2 rounded-xl font-medium text-xs sm:text-sm transition-all duration-200 whitespace-nowrap shrink-0 ${
-                activeTab === 'kanban'
-                  ? 'bg-background text-primary shadow-sm font-bold border border-border/60 ring-1 ring-black/5 dark:ring-white/10 scale-[1.01]'
-                  : 'text-muted-foreground hover:text-foreground hover:bg-background/50'
-              }`}
-            >
-              <Kanban className="h-4 w-4 shrink-0 text-primary" />
-              <span>Agenda</span>
-              <span className="ml-0.5 px-2 py-0.5 rounded-full text-[10px] bg-primary/10 text-primary font-bold border border-primary/20">
-                {filteredConsultas.length}
-              </span>
-            </button>
-
-            <button
-              onClick={() => {
-                setActiveTab('escalas');
-                setSelectedStatus('TODOS');
-              }}
-              className={`flex-1 sm:flex-initial flex items-center justify-center gap-2 px-3 sm:px-4 py-2 rounded-xl font-medium text-xs sm:text-sm transition-all duration-200 whitespace-nowrap shrink-0 ${
-                activeTab === 'escalas'
-                  ? 'bg-background text-primary shadow-sm font-bold border border-border/60 ring-1 ring-black/5 dark:ring-white/10 scale-[1.01]'
-                  : 'text-muted-foreground hover:text-foreground hover:bg-background/50'
-              }`}
-            >
-              <Users className="h-4 w-4 shrink-0 text-primary" />
-              <span>Escalas Médicas</span>
-              <span className="ml-0.5 px-2 py-0.5 rounded-full text-[10px] bg-primary/10 text-primary font-bold border border-primary/20">
-                {filteredEscalas.length}
-              </span>
-            </button>
+          {/* Lado Esquerdo: Identificação da Agenda */}
+          <div className="flex items-center gap-2 px-3 sm:px-4 py-2 rounded-2xl bg-muted/60 border border-border/50 text-foreground font-bold text-xs sm:text-sm shrink-0 shadow-xs">
+            <Kanban className="h-4 w-4 shrink-0 text-primary" />
+            <span>Agenda</span>
+            <span className="ml-0.5 px-2 py-0.5 rounded-full text-[10px] bg-primary/10 text-primary font-bold border border-primary/20">
+              {filteredConsultas.length}
+            </span>
           </div>
 
           {/* Lado Direito: Controle de Datas e Especialidades Fluido */}
