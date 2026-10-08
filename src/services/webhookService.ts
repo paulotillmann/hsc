@@ -126,7 +126,7 @@ export const webhookService = {
       });
 
       if (!response.ok) {
-        throw new Error(`Error triggering webhook: ${response.statusText}`);
+        throw new Error(`Error triggering webhook (${response.status}): ${response.statusText}`);
       }
 
       const data = await response.json();
@@ -138,6 +138,38 @@ export const webhookService = {
   },
 
   /**
+   * Trigger the "Consulta Centro Médico" webhook
+   * @param payload Data containing filters like dateFrom, dateTo, medico, especialidade, etc.
+   */
+  async triggerConsultaCentroMedico(payload: any = {}): Promise<any> {
+    const webhookUrl = import.meta.env.VITE_N8N_WEBHOOK_CENTRO_MEDICO || 'https://n8n-n8n.7woir1.easypanel.host/webhook/centro_medico';
+    
+    if (!webhookUrl) {
+      console.error('Webhook URL (VITE_N8N_WEBHOOK_CENTRO_MEDICO) is not configured.');
+      return null;
+    }
+
+    try {
+      const response = await fetch(webhookUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Error triggering webhook (${response.status}): ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      return data;
+    } catch (error) {
+      console.error('Error in webhook triggerConsultaCentroMedico:', error);
+      return null;
+    }
+  },
+
   /**
    * Trigger the "Indicadores Qualidade" webhook
    * @param payload { indicador: string, data_inicio: string, data_fim: string }

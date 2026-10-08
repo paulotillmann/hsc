@@ -296,7 +296,11 @@ export default function GestaoProntuarios() {
           novoStatusSelecionado === 'Rejeitado' ? justificativa : undefined
         );
 
-        mostrarNotificacao('sucesso', 'Solicitação de acesso atualizada com sucesso pelo gestor.');
+        if (novoStatusSelecionado === 'Aprovado') {
+          mostrarNotificacao('sucesso', 'Solicitação de acesso aprovada com sucesso! O webhook de WhatsApp foi disparado.');
+        } else {
+          mostrarNotificacao('sucesso', 'Solicitação de acesso atualizada com sucesso pelo gestor.');
+        }
         setIsModalOpen(false);
         carregarDados();
       } catch (err: any) {

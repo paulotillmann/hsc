@@ -8,6 +8,9 @@ export interface RepasseCompetencia {
   valor_nota_fiscal: number;
   status: 'em_andamento' | 'finalizado' | 'cancelado';
   observacoes: string | null;
+  email_enviado?: boolean;
+  email_enviado_em?: string | null;
+  email_enviado_para?: string[];
   created_at?: string;
   updated_at?: string;
 }
@@ -24,6 +27,9 @@ export interface RepasseItem {
   desconto_valor: number;
   valor_liquido: number;
   possui_detalhes: boolean;
+  email_enviado?: boolean;
+  email_enviado_em?: string | null;
+  email_enviado_para?: string[];
   ordem: number;
   created_at?: string;
   updated_at?: string;
@@ -485,6 +491,87 @@ export const repasseService = {
       }
     });
 
+    // Ordenar alfabeticamente
+    medicos.sort((a, b) => a.nome.localeCompare(b.nome));
+    setores.sort((a, b) => a.nome.localeCompare(b.nome));
+
     return { medicos, setores };
+  },
+
+  // ── 5. CARREGAMENTO DE CONVÊNIOS HISTÓRICOS E REGISTRADOS ─────────────────────
+  async carregarConveniosDisponiveis(): Promise<string[]> {
+    const conveniosSet = new Set<string>([
+      'UNIMED',
+      'IPSEMG',
+      'CASSI',
+      'BRADESCO SAÚDE',
+      'SULAMERICA',
+      'SUS',
+      'GOLDEN CROSS',
+      'ALLIANZ SAÚDE',
+      'PARTICULAR'
+    ]);
+
+    // 1. Tentar pegar convênios já cadastrados nas competências de repasse
+    try {
+      const { data: compConvenios } = await supabase
+        .from('repasse_competencias')
+        .select('convenio');
+
+      if (compConvenios) {
+        compConvenios.forEach(c => {
+          if (c.convenio && c.convenio.trim()) {
+            conveniosSet.add(c.convenio.trim().toUpperCase());
+          }
+        });
+      }
+    } catch (e) {
+      console.warn('Erro ao carregar convenios de repasse_competencias:', e);
+    }
+
+    // 2. Tentar resgatar da sessão do ConsultaFaturamentos se houver
+    try {
+      const cacheStr = sessionStorage.getItem('hsc_faturamentos_cache_data');
+      if (cacheStr) {
+        const parsed = JSON.parse(cacheStr);
+        if (Array.isArray(parsed)) {
+          parsed.forEach((item: any) => {
+            if (item.convenio && typeof item.convenio === 'string') {
+              conveniosSet.add(item.convenio.trim().toUpperCase());
+            }
+          });
+        }
+      }
+    } catch (e) {
+      // silencioso
+    }
+
+    return Array.from(conveniosSet).sort();
+  },
+
+  // ── 6. REGISTRO DE ENVIO DE E-MAIL AO FINANCEIRO ───────────────────────────
+  async registrarEnvioEmailCompetencia(competenciaId: string, destinatarios: string[]): Promise<boolean> {
+    const nowIso = new Date().toISOString();
+    try {
+      const { error } = await supabase
+        .from('repasse_competencias')
+        .update({
+          email_enviado: true,
+          email_enviado_em: nowIso,
+          email_enviado_para: destinatarios || [],
+          updated_at: nowIso
+        })
+        .eq('id', competenciaId);
+
+      if (error) {
+        console.error('Erro ao registrar envio de email da competência:', error);
+        return false;
+      }
+      return true;
+    } catch (e) {
+      console.error('Exceção ao registrar envio de email da competência:', e);
+      return false;
+    }
   }
 };
+
