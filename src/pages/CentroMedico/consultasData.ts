@@ -51,7 +51,7 @@ export const KANBAN_COLUMNS: {
 }[] = [
   {
     id: 'Agendamentos',
-    label: 'Agendamentos',
+    label: 'Agenda',
     color: 'text-blue-600 dark:text-blue-400',
     badgeBg: 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/30',
     border: 'border-blue-500/30',
@@ -60,7 +60,7 @@ export const KANBAN_COLUMNS: {
   },
   {
     id: 'Enviadas',
-    label: 'Enviadas',
+    label: 'Confirmação de agendamento',
     color: 'text-purple-600 dark:text-purple-400',
     badgeBg: 'bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/30',
     border: 'border-purple-500/30',
@@ -68,7 +68,7 @@ export const KANBAN_COLUMNS: {
   },
   {
     id: 'Confirmadas',
-    label: 'Confirmadas',
+    label: 'Envio de confirmação',
     color: 'text-emerald-600 dark:text-emerald-400',
     badgeBg: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30',
     border: 'border-emerald-500/30',

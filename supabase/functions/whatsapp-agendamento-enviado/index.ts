@@ -83,16 +83,13 @@ Olá, *${paciente}*!
 Confirmamos os dados da sua consulta no Centro Médico:
 
 📅 *Data:* ${dataConsulta}
-⏰ *Horário:* ${horario}
+⏰ *Horário:* O atendimento é realizado por ordem de chegada.
 👨‍⚕️ *Médico(a):* ${medico}${crmInfo}${especialidade}
-📍 *Local:* Centro Médico da Santa Casa${convenio}
+📍 *Local:* Centro Médico da Santa Casa
 
 🔗 *Confirmação de Consulta:*
 
 ${linkConfirmacao}
-
-• Por favor, chegue com 15 minutos de antecedência portando documento oficial com foto e carteirinha do convênio (se aplicável).
-• Em caso de dúvidas ou necessidade de reagendamento, entre em contato conosco.
 
 _Hospital Santa Casa de Misericórdia_`;
   }
@@ -105,11 +102,8 @@ Você tem uma consulta agendada no Centro Médico:
 
 👨‍⚕️ *Médico(a):* ${medico}${crmInfo}${especialidade}
 📅 *Data:* ${dataConsulta}
-⏰ *Horário:* ${horario}
-📍 *Local:* Centro Médico da Santa Casa${convenio}
-
-• Por favor, chegue com 15 minutos de antecedência portando documento oficial com foto e carteirinha do convênio (se aplicável).
-• Em caso de dúvidas ou necessidade de reagendamento, entre em contato conosco.
+⏰ *Horário:* O atendimento é realizado por ordem de chegada.
+📍 *Local:* Centro Médico da Santa Casa
 
 _Hospital Santa Casa de Misericórdia_`;
 }

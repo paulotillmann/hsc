@@ -241,9 +241,6 @@ export default function ConfirmarConsultaPublica() {
                 <h2 className="text-xl sm:text-2xl font-black text-white tracking-wide">
                   {patientData.paciente}
                 </h2>
-                <div className="flex items-center justify-center gap-2 text-xs text-emerald-200">
-                  {patientData.convenio && <span>Convênio: {patientData.convenio}</span>}
-                </div>
               </div>
 
               {/* MÉDICO E ESPECIALIDADE DO AGENDAMENTO */}
@@ -257,10 +254,14 @@ export default function ConfirmarConsultaPublica() {
               </div>
 
               {/* DATA E HORÁRIO DO AGENDAMENTO */}
-              <div className="text-sm font-bold text-emerald-100 flex items-center justify-center gap-2 bg-emerald-800/80 py-2 px-3 rounded-xl border border-emerald-600/50">
-                <Calendar className="h-4 w-4 text-emerald-300 shrink-0" />
-                <span>
-                  {patientData.data} às {patientData.horario}
+              <div className="text-sm font-bold text-emerald-100 flex flex-col sm:flex-row items-center justify-center gap-1.5 bg-emerald-800/80 py-2.5 px-3 rounded-xl border border-emerald-600/50 text-center">
+                <div className="flex items-center gap-1.5">
+                  <Calendar className="h-4 w-4 text-emerald-300 shrink-0" />
+                  <span>{patientData.data}</span>
+                </div>
+                <span className="hidden sm:inline text-emerald-300/80">•</span>
+                <span className="text-xs text-emerald-200">
+                  Por ordem de chegada
                 </span>
               </div>
 
@@ -343,9 +344,6 @@ export default function ConfirmarConsultaPublica() {
             <h2 className="text-xl font-black text-white">
               {patientData.paciente}
             </h2>
-            <div className="flex flex-wrap items-center gap-2 text-xs text-slate-400 pt-0.5">
-              <span>Convênio: <strong className="text-slate-200">{patientData.convenio}</strong></span>
-            </div>
           </div>
 
           {/* Informações da Consulta e Médico */}
@@ -358,7 +356,7 @@ export default function ConfirmarConsultaPublica() {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-2 pt-1">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
               <div className="bg-slate-800/60 p-2.5 rounded-xl border border-slate-700/50 flex items-center gap-2">
                 <Calendar className="h-4 w-4 text-emerald-400 shrink-0" />
                 <div>
@@ -371,7 +369,7 @@ export default function ConfirmarConsultaPublica() {
                 <Clock className="h-4 w-4 text-emerald-400 shrink-0" />
                 <div>
                   <p className="text-[10px] text-slate-400">Horário</p>
-                  <p className="font-bold text-white text-xs">{patientData.horario}</p>
+                  <p className="font-bold text-white text-xs leading-tight">Por ordem de chegada</p>
                 </div>
               </div>
             </div>

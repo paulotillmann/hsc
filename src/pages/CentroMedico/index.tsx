@@ -27,7 +27,8 @@ import {
   MoveRight,
   GripVertical,
   ChevronRight,
-  ChevronLeft
+  ChevronLeft,
+  MessageCircle
 } from 'lucide-react';
 import { webhookService } from '../../services/webhookService';
 import { supabase } from '../../lib/supabase';
@@ -82,7 +83,7 @@ const KANBAN_COLUMNS: {
 }[] = [
   {
     id: 'Agendamentos',
-    label: 'Agendamentos',
+    label: 'Agenda',
     color: 'text-blue-600 dark:text-blue-400',
     badgeBg: 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/30',
     border: 'border-blue-500/30',
@@ -91,7 +92,7 @@ const KANBAN_COLUMNS: {
   },
   {
     id: 'Enviadas',
-    label: 'Enviadas',
+    label: 'Confirmação de agendamento',
     color: 'text-purple-600 dark:text-purple-400',
     badgeBg: 'bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/30',
     border: 'border-purple-500/30',
@@ -99,19 +100,11 @@ const KANBAN_COLUMNS: {
   },
   {
     id: 'Confirmadas',
-    label: 'Confirmadas',
+    label: 'Envio de confirmação',
     color: 'text-emerald-600 dark:text-emerald-400',
     badgeBg: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30',
     border: 'border-emerald-500/30',
     dotColor: 'bg-emerald-500'
-  },
-  {
-    id: 'Concluídas',
-    label: 'Concluídas',
-    color: 'text-teal-600 dark:text-teal-400',
-    badgeBg: 'bg-teal-500/10 text-teal-600 dark:text-teal-400 border-teal-500/30',
-    border: 'border-teal-500/30',
-    dotColor: 'bg-teal-500'
   },
   {
     id: 'Canceladas',
@@ -119,9 +112,17 @@ const KANBAN_COLUMNS: {
     color: 'text-rose-600 dark:text-rose-400',
     badgeBg: 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/30',
     border: 'border-rose-500/30',
-    dotColor: 'bg-rose-500'
+    dotColor: 'bg-rose-500',
+    isSynced: true
   }
 ];
+
+// Helper para verificar se a consulta veio com status cancelado do Tasy
+const isStatusCanceladoTasy = (statusReal?: string, statusOriginal?: string): boolean => {
+  const s1 = (statusReal || '').trim().toLowerCase();
+  const s2 = (statusOriginal || '').trim().toLowerCase();
+  return s1.includes('cancelad') || s2.includes('cancelad');
+};
 
 // Funções auxiliares para datas
 const getDateOffset = (days: number): string => {
@@ -152,7 +153,7 @@ const formatDateLabel = (dateStr: string): string => {
   return `${daysOfWeek[dateObj.getDay()]} (${formattedStr})`;
 };
 
-export const formatDateToBR = (dateStr?: string): string => {
+const formatDateToBR = (dateStr?: string): string => {
   if (!dateStr) return '';
   if (/^\d{2}\/\d{2}\/\d{4}$/.test(dateStr)) return dateStr;
   const parts = dateStr.split('-');
@@ -488,9 +489,10 @@ const INITIAL_CONSULTAS: ConsultaAgendada[] = [
 const KANBAN_STORAGE_KEY = 'hsc_centro_medico_kanban_manual_status_v1';
 const KANBAN_CONFIRMED_KEY = 'hsc_centro_medico_confirmacoes_v1';
 const KANBAN_ADDED_ORDER_KEY = 'hsc_centro_medico_kanban_added_order_v1';
+const KANBAN_LAST_SYNC_KEY = 'hsc_centro_medico_last_sync_v1';
 
 // Lê o mapa de status manuais do localStorage
-export const getStoredManualStatusMap = (): Record<string, KanbanStatus> => {
+const getStoredManualStatusMap = (): Record<string, KanbanStatus> => {
   try {
     const raw = localStorage.getItem(KANBAN_STORAGE_KEY);
     return raw ? JSON.parse(raw) : {};
@@ -500,7 +502,7 @@ export const getStoredManualStatusMap = (): Record<string, KanbanStatus> => {
 };
 
 // Lê o mapa de confirmações do paciente
-export const getStoredConfirmedPatientsMap = (): Record<string, { confirmadoPeloPaciente: boolean; confirmadoEm?: string }> => {
+const getStoredConfirmedPatientsMap = (): Record<string, { confirmadoPeloPaciente: boolean; confirmadoEm?: string }> => {
   try {
     const raw = localStorage.getItem(KANBAN_CONFIRMED_KEY);
     return raw ? JSON.parse(raw) : {};
@@ -510,7 +512,7 @@ export const getStoredConfirmedPatientsMap = (): Record<string, { confirmadoPelo
 };
 
 // Lê o mapa da sequência/ordem em que os cards foram sendo adicionados (timestamp em ms)
-export const getStoredAddedOrderMap = (): Record<string, number> => {
+const getStoredAddedOrderMap = (): Record<string, number> => {
   try {
     const raw = localStorage.getItem(KANBAN_ADDED_ORDER_KEY);
     return raw ? JSON.parse(raw) : {};
@@ -520,7 +522,7 @@ export const getStoredAddedOrderMap = (): Record<string, number> => {
 };
 
 // Grava o timestamp de adição de um card
-export const recordCardAddedOrder = (cardId: string, timestamp: number = Date.now()): Record<string, number> => {
+const recordCardAddedOrder = (cardId: string, timestamp: number = Date.now()): Record<string, number> => {
   try {
     const current = getStoredAddedOrderMap();
     current[cardId] = timestamp;
@@ -532,7 +534,7 @@ export const recordCardAddedOrder = (cardId: string, timestamp: number = Date.no
 };
 
 // Salva a confirmação no localStorage e Supabase
-export const persistConfirmedPatient = async (cardId: string, confirmado: boolean) => {
+const persistConfirmedPatient = async (cardId: string, confirmado: boolean) => {
   try {
     const current = getStoredConfirmedPatientsMap();
     const now = Date.now();
@@ -564,7 +566,7 @@ export const persistConfirmedPatient = async (cardId: string, confirmado: boolea
 };
 
 // Salva o novo status no localStorage e opcionalmente no Supabase
-export const persistCardManualStatus = async (
+const persistCardManualStatus = async (
   cardId: string,
   newStatus: KanbanStatus,
   cardData?: Partial<ConsultaAgendada>
@@ -598,6 +600,9 @@ export const persistCardManualStatus = async (
   }
 };
 
+// Referência persistente para reaproveitar a mesma aba do WhatsApp Web sem abrir múltiplas abas
+let whatsAppWindowRef: Window | null = null;
+
 export default function CentroMedico() {
   // Estados Principais: Kanban e Escalas Médicas
   const [activeTab, setActiveTab] = useState<'escalas' | 'kanban'>('kanban');
@@ -616,13 +621,20 @@ export default function CentroMedico() {
     const manualMap = getStoredManualStatusMap();
     const confMap = getStoredConfirmedPatientsMap();
     const orderMap = getStoredAddedOrderMap();
-    return INITIAL_CONSULTAS.map(c => ({
-      ...c,
-      status: manualMap[c.id] || (confMap[c.id]?.confirmadoPeloPaciente ? 'Confirmadas' : c.status),
-      confirmadoPeloPaciente: Boolean(confMap[c.id]?.confirmadoPeloPaciente),
-      confirmadoEm: confMap[c.id]?.confirmadoEm,
-      addedAt: orderMap[c.id]
-    }));
+    return INITIAL_CONSULTAS.map(c => {
+      const isCancelado = isStatusCanceladoTasy(c.statusReal, c.status);
+      const targetStatus: KanbanStatus = isCancelado
+        ? 'Canceladas'
+        : (manualMap[c.id] || (confMap[c.id]?.confirmadoPeloPaciente ? 'Confirmadas' : c.status));
+
+      return {
+        ...c,
+        status: targetStatus,
+        confirmadoPeloPaciente: Boolean(confMap[c.id]?.confirmadoPeloPaciente),
+        confirmadoEm: confMap[c.id]?.confirmadoEm,
+        addedAt: orderMap[c.id]
+      };
+    });
   });
 
   // Salva cache de consultas para acesso pela tela de confirmação de consulta
@@ -688,6 +700,9 @@ export default function CentroMedico() {
 
           setAddedOrderMap(currentOrderMap);
           setConsultas(prev => prev.map(c => {
+            if (isStatusCanceladoTasy(c.statusReal, c.status)) {
+              return { ...c, status: 'Canceladas' };
+            }
             const manualStatus = currentMap[c.id];
             const addedTimestamp = currentOrderMap[c.id];
             return {
@@ -712,11 +727,27 @@ export default function CentroMedico() {
   // Estados de Operação / Sincronização
   const [isSyncing, setIsSyncing] = useState(false);
   const [usingMock, setUsingMock] = useState(true);
+  const [lastSyncTime, setLastSyncTime] = useState<string | null>(() => {
+    return localStorage.getItem(KANBAN_LAST_SYNC_KEY) || null;
+  });
+  const [resendingCardId, setResendingCardId] = useState<string | null>(null);
+  const [isSendingAll, setIsSendingAll] = useState(false);
+  const [sendingProgress, setSendingProgress] = useState<{ current: number; total: number } | null>(null);
   const [toast, setToast] = useState<{ type: 'success' | 'error' | 'info'; message: string } | null>(null);
+  const [debugModalOpen, setDebugModalOpen] = useState(false);
+  const [debugData, setDebugData] = useState<{
+    url?: string;
+    method?: string;
+    timestamp?: string;
+    targetDate?: string;
+    count?: number;
+    raw?: any;
+    error?: string;
+  } | null>(null);
 
   const showToast = (type: 'success' | 'error' | 'info', message: string) => {
     setToast({ type, message });
-    setTimeout(() => setToast(null), 4500);
+    setTimeout(() => setToast(null), 5000);
   };
 
   // Lista de especialidades únicas para filtro
@@ -731,59 +762,239 @@ export default function CentroMedico() {
   const handleSyncWebhookForDate = async (targetDate: string) => {
     setIsSyncing(true);
     try {
-      showToast('info', `Buscando registros para ${formatDateLabel(targetDate)}...`);
-      const response = await webhookService.triggerConsultaCentroMedico({
-        date: targetDate,
-        especialidade: selectedEspecialidade,
-        search: searchTerm
+      showToast('info', `Consultando n8n para atualizar agendamentos de ${formatDateLabel(targetDate)}...`);
+      const [ano, mes, dia] = targetDate.split('-');
+      const dataBR = `${dia}/${mes}/${ano}`;
+
+      // Calcula o dia seguinte para garantir que o BETWEEN do Oracle cubra as 24h do dia
+      const dTarget = new Date(parseInt(ano, 10), parseInt(mes, 10) - 1, parseInt(dia, 10));
+      const dNext = new Date(dTarget);
+      dNext.setDate(dNext.getDate() + 1);
+      const nextDia = String(dNext.getDate()).padStart(2, '0');
+      const nextMes = String(dNext.getMonth() + 1).padStart(2, '0');
+      const nextAno = dNext.getFullYear();
+      const dataBRNext = `${nextDia}/${nextMes}/${nextAno}`;
+
+      const espFilter = selectedEspecialidade && selectedEspecialidade !== 'TODAS' ? selectedEspecialidade : undefined;
+      const searchFilter = searchTerm && searchTerm.trim() ? searchTerm.trim() : undefined;
+
+      // Payload exatamente compatível com a query SQL do n8n:
+      // AND a.DT_AGENDA BETWEEN TO_DATE(:dataini, 'DD/MM/YYYY') AND TO_DATE(:datafim, 'DD/MM/YYYY')
+      const payload = {
+        dataini: dataBR,               // '07/10/2026'
+        datafim: dataBRNext,           // '08/10/2026' (dia seguinte para cobrir todas as horas de 07/10/2026 no BETWEEN do Oracle)
+        dataini_dia: dataBR,
+        datafim_dia: dataBR,
+        DATAINI: dataBR,
+        DATAFIM: dataBRNext,
+        data_ini: dataBR,
+        data_fim: dataBRNext,
+        date: targetDate,              // '2026-10-07'
+        data: dataBR,                  // '07/10/2026'
+        data_br: dataBR,               // '07/10/2026'
+        dt_agenda: dataBR,             // '07/10/2026'
+        dt_agenda_br: dataBR,          // '07/10/2026'
+        data_inicio: dataBR,
+        dia,
+        mes,
+        ano,
+        cd_setor_atendimento: '109',
+        setor: '109',
+        ...(espFilter ? { especialidade: espFilter } : {}),
+        ...(searchFilter ? { search: searchFilter, busca: searchFilter } : {})
+      };
+
+      const result = await webhookService.triggerConsultaCentroMedico(payload);
+      console.log('[Centro Médico] Resposta bruta recebida:', result);
+
+      const responseData = (result && typeof result === 'object' && result.data !== undefined)
+        ? result.data
+        : result;
+
+      const endpointUrl = result?.url || 'https://n8n-n8n.7woir1.easypanel.host/webhook/d3f00b1e-9dac-4be8-ad07-f58ec85789e5';
+      const httpMethod = result?.method || 'POST';
+
+      // Detecta aviso de Workflow Started
+      const isWorkflowStartedNotice = 
+        responseData && 
+        typeof responseData === 'object' && 
+        !Array.isArray(responseData) && 
+        typeof responseData.message === 'string' && 
+        responseData.message.toLowerCase().includes('workflow started');
+
+      if (isWorkflowStartedNotice) {
+        setDebugData({
+          url: endpointUrl,
+          method: httpMethod,
+          timestamp: new Date().toLocaleTimeString('pt-BR'),
+          targetDate,
+          count: 0,
+          raw: responseData,
+          error: 'O nó Webhook do n8n está configurado com "Respond: Immediately". Altere para "Respond: When Last Node Finishes" no n8n para devolver a lista de agendamentos.'
+        });
+        showToast(
+          'error',
+          'O n8n iniciou o fluxo, mas o nó Webhook respondeu "Workflow started". No n8n, altere "Respond" para "When Last Node Finishes" para devolver as consultas.'
+        );
+        setIsSyncing(false);
+        return;
+      }
+
+      // 1. Extração universal de consultas e escalas da resposta
+      let rawConsultasList: any[] = [];
+      let rawEscalasList: any[] = [];
+
+      const extractItemsList = (data: any): any[] => {
+        if (!data) return [];
+        if (typeof data === 'string') {
+          try {
+            const parsed = JSON.parse(data);
+            return extractItemsList(parsed);
+          } catch {
+            return [];
+          }
+        }
+        if (Array.isArray(data)) return data;
+        if (typeof data === 'object') {
+          for (const key of ['consultas', 'agendamentos', 'agenda', 'data', 'items', 'result', 'results', 'rows', 'output', 'body', 'pacientes', 'consultas_agendadas']) {
+            if (Array.isArray(data[key])) return data[key];
+          }
+          if (data.json || data.nm_paciente || data.paciente || data.cd_agenda || data.NM_PACIENTE) {
+            return [data];
+          }
+        }
+        return [];
+      };
+
+      rawConsultasList = extractItemsList(responseData);
+
+      if (responseData && typeof responseData === 'object' && !Array.isArray(responseData)) {
+        if (Array.isArray(responseData.escalas)) rawEscalasList = responseData.escalas;
+        else if (Array.isArray(responseData.plantonistas)) rawEscalasList = responseData.plantonistas;
+      }
+
+      if (rawEscalasList.length > 0) {
+        setEscalas(rawEscalasList);
+      }
+
+      // Guarda informações no painel de debug para conferência imediata
+      setDebugData({
+        url: endpointUrl,
+        method: httpMethod,
+        timestamp: new Date().toLocaleTimeString('pt-BR'),
+        targetDate,
+        count: rawConsultasList.length,
+        raw: responseData
       });
 
-      if (response && (response.escalas || response.consultas)) {
-        if (response.escalas) setEscalas(response.escalas);
-        if (response.consultas) {
-          setConsultas(prev => {
-            const currentMemMap = new Map(prev.map(c => [c.id, c.status]));
-            const localSavedMap = getStoredManualStatusMap();
-
-            return response.consultas.map((incoming: any) => {
-              // Mantém estritamente fixo o que foi movido manualmente, mesmo ao atualizar
-              const manualStatus = localSavedMap[incoming.id] || currentMemMap.get(incoming.id);
-              const targetColumn: KanbanStatus = manualStatus || 'Agendamentos';
-              const realStatus = incoming.statusReal || incoming.status || 'Agendado';
-
-              return {
-                ...incoming,
-                status: targetColumn,
-                statusReal: realStatus
-              };
-            });
-          });
-        }
-        setUsingMock(false);
-        showToast('success', `Dados de ${formatDateLabel(targetDate)} sincronizados!`);
-      } else {
-        setUsingMock(true);
-        // Aplica e mantém as posições manuais fixadas mesmo no fallback do mock
+      if (rawConsultasList.length > 0) {
         setConsultas(prev => {
+          const currentMemMap = new Map(prev.map(c => [c.id, c.status]));
           const localSavedMap = getStoredManualStatusMap();
-          return prev.map(c => ({
-            ...c,
-            status: localSavedMap[c.id] || c.status
-          }));
+
+          return rawConsultasList.map((incoming: any, idx: number) => {
+            const target = incoming?.json && typeof incoming.json === 'object' 
+              ? { ...incoming.json, ...incoming } 
+              : incoming;
+
+            const getVal = (possibleKeys: string[], defaultVal: any = '') => {
+              if (!target || typeof target !== 'object') return defaultVal;
+              for (const key of possibleKeys) {
+                const foundKey = Object.keys(target).find(k => k.trim().toUpperCase() === key.toUpperCase());
+                if (foundKey !== undefined && target[foundKey] !== null && target[foundKey] !== undefined && target[foundKey] !== '') {
+                  return target[foundKey];
+                }
+              }
+              return defaultVal;
+            };
+
+            // Mapeamento exato das colunas retornadas pela query Oracle
+            const rawId = getVal(['NR_SEQUENCIA', 'id', 'cd_agenda', 'nr_atendimento', 'id_consulta'], `cons-tasy-${idx}`);
+            const paciente = String(getVal(['NM_PACIENTE', 'nm_pessoa_fisica', 'paciente', 'nome_paciente', 'nome'], 'Paciente Não Informado'));
+            const prontuario = String(getVal(['NR_PRONTUARIO', 'nr_sequencia', 'cd_pessoa_fisica', 'pront'], `SEQ-${rawId}`));
+            const idade = Number(getVal(['idade', 'nr_idade', 'age', 'qt_anos'], 0)) || 0;
+            const medico = String(getVal(['MEDICO', 'nm_medico', 'nm_prestador', 'prestador', 'profissional'], 'Médico Responsável'));
+            const crm = String(getVal(['crm', 'cd_crm', 'nr_crm', 'nr_registro'], ''));
+            const especialidade = String(getVal(['ESPECIALIDADE', 'ds_especialidade', 'specialty'], 'Clínica Geral'));
+            
+            // Tratamento de data
+            let rawData = String(getVal(['DT_AGENDA', 'data', 'dt_consulta', 'date'], targetDate)).trim();
+            if (/^\d{4}-\d{2}-\d{2}/.test(rawData)) rawData = rawData.slice(0, 10);
+            else if (/^\d{2}\/\d{2}\/\d{4}/.test(rawData)) {
+              const [d, m, y] = rawData.slice(0, 10).split('/');
+              rawData = `${y}-${m}-${d}`;
+            } else {
+              rawData = targetDate;
+            }
+
+            // Tratamento de horário a partir de DT_AGENDA (Oracle) ou campo específico
+            let rawHora = String(getVal(['horario', 'hr_agenda', 'hora', 'time', 'hora_agenda'], '')).trim();
+            if (!rawHora || rawHora === '') {
+              const dtOriginal = String(getVal(['DT_AGENDA', 'dt_consulta', 'dt_atendimento'], ''));
+              const horaMatch = dtOriginal.match(/\b([01]?\d|2[0-3]):([0-5]\d)(?::[0-5]\d)?\b/);
+              rawHora = horaMatch ? horaMatch[0].slice(0, 5) : '08:00';
+            } else if (/^\d{2}:\d{2}/.test(rawHora)) {
+              rawHora = rawHora.slice(0, 5);
+            }
+
+            // Setor / Consultório retornado da query
+            const consultorio = String(getVal(['SETOR', 'obter_desc_setor_atend', 'consultorio', 'ds_consultorio', 'ds_local', 'local'], 'Centro Médico (Setor 109)'));
+            
+            // Tipo de agendamento (Consulta, Retorno, Encaixe) da coluna DS_CLASSIFICACAO
+            const convenio = String(getVal(['DS_CLASSIFICACAO', 'convenio', 'ds_convenio', 'nm_convenio'], 'Consulta'));
+            
+            // Telefone da coluna NR_TELEFONE
+            const telefone = String(getVal(['NR_TELEFONE', 'telefone', 'nr_telefone_celular', 'nr_celular', 'phone', 'celular'], ''));
+            
+            // Status real da coluna DS_STATUS_AGENDA
+            const realStatus = String(getVal(['DS_STATUS_AGENDA', 'statusReal', 'status_real', 'ds_status', 'ie_status'], 'Normal'));
+
+            const isCancelado = isStatusCanceladoTasy(realStatus, target?.ds_status_agenda || target?.status);
+
+            const manualStatus = localSavedMap[rawId] || currentMemMap.get(rawId);
+            const targetColumn: KanbanStatus = isCancelado ? 'Canceladas' : (manualStatus || 'Agendamentos');
+
+            return {
+              id: String(rawId),
+              paciente,
+              prontuario,
+              idade,
+              medico,
+              crm,
+              especialidade,
+              horario: rawHora,
+              data: rawData,
+              consultorio,
+              convenio,
+              telefone,
+              status: targetColumn,
+              statusReal: realStatus
+            };
+          });
         });
-        showToast('info', `Exibindo agendamentos para ${formatDateLabel(targetDate)}.`);
+
+        setUsingMock(false);
+        const timeNow = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+        setLastSyncTime(timeNow);
+        localStorage.setItem(KANBAN_LAST_SYNC_KEY, timeNow);
+        showToast('success', `${rawConsultasList.length} agendamento(s) sincronizados via n8n com sucesso às ${timeNow}!`);
+      } else {
+        setUsingMock(false);
+        setConsultas([]);
+        showToast('info', `O n8n respondeu com sucesso, mas retornou 0 agendamentos para ${formatDateLabel(targetDate)}.`);
       }
     } catch (error: any) {
-      console.warn('Falha no webhook n8n:', error);
-      setUsingMock(true);
-      setConsultas(prev => {
-        const localSavedMap = getStoredManualStatusMap();
-        return prev.map(c => ({
-          ...c,
-          status: localSavedMap[c.id] || c.status
-        }));
+      console.error('[Centro Médico] Falha ao consultar n8n:', error);
+      const errMsg = error?.message || 'Falha de conexão com o webhook n8n';
+      setDebugData({
+        url: 'https://n8n-n8n.7woir1.easypanel.host/webhook/d3f00b1e-9dac-4be8-ad07-f58ec85789e5',
+        method: 'POST',
+        timestamp: new Date().toLocaleTimeString('pt-BR'),
+        targetDate,
+        count: 0,
+        error: errMsg
       });
-      showToast('info', `Exibindo agendamentos para ${formatDateLabel(targetDate)}.`);
+      showToast('error', `Erro na sincronização: ${errMsg}`);
     } finally {
       setIsSyncing(false);
     }
@@ -847,25 +1058,56 @@ export default function CentroMedico() {
 
     // Disparo de WhatsApp ao mover para "Enviadas" ou "Confirmadas"
     if (newStatus === 'Enviadas' || newStatus === 'Confirmadas') {
-      const isConfirmacao = newStatus === 'Confirmadas';
-      const actionLabel = isConfirmacao ? 'confirmação' : 'agendamento';
+      sendWhatsAppNotification(targetCard, newStatus, false);
+    }
+  };
 
-      try {
-        showToast('info', `Disparando ${actionLabel} por WhatsApp para ${targetCard.paciente}...`);
+  // Disparo / Reenvio de notificação de WhatsApp (utilizado no drag-and-drop e no botão de reenvio exclusivo do Kanban)
+  const sendWhatsAppNotification = async (targetCard: ConsultaAgendada, statusRef: KanbanStatus, isResend = false) => {
+    const isConfirmacao = statusRef === 'Confirmadas';
+    const actionLabel = isConfirmacao ? 'confirmação' : 'agendamento';
+    const verb = isResend ? 'Reenviando' : 'Disparando';
 
-        // Monta o link da tela de confirmação de consulta do paciente de forma limpa e direta
-        const publicBaseUrl = (import.meta.env.VITE_PUBLIC_APP_URL as string) || (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000');
-        const cleanBaseUrl = publicBaseUrl.replace(/\/+$/, '');
-        const linkConfirmacao = `${cleanBaseUrl}/confirmar-consulta/${targetCard.id}`;
+    try {
+      showToast('info', `${verb} mensagem de ${actionLabel} por WhatsApp para ${targetCard.paciente}...`);
 
-        // Mensagem contextual com link de confirmação isolado quando movido para Confirmadas
-        const dataFormatada = formatDateToBR(targetCard.data);
-        const customText = isConfirmacao
-          ? `🏥 *Centro Médico - Hospital Santa Casa*\nOlá, *${targetCard.paciente}*!\n\nConfirmamos os dados da sua consulta no Centro Médico:\n📅 *Data:* ${dataFormatada}\n⏰ *Horário:* ${targetCard.horario}\n👨‍⚕️ *Médico(a):* ${targetCard.medico}${targetCard.crm ? ` (CRM: ${targetCard.crm})` : ''} - ${targetCard.especialidade}\n📍 *Local:* Centro Médico da Santa Casa${targetCard.convenio ? `\n📄 *Convênio:* ${targetCard.convenio}` : ''}\n\n🔗 *Confirmação de Consulta:*\n\n${linkConfirmacao}\n\n• Por favor, chegue com 15 minutos de antecedência portando documento oficial com foto e carteirinha do convênio (se aplicável).\n• Em caso de dúvidas ou necessidade de reagendamento, entre em contato conosco.\n\n_Hospital Santa Casa de Misericórdia_`
-          : `🏥 *Centro Médico - Hospital Santa Casa*\nOlá, *${targetCard.paciente}*!\n\nVocê tem uma consulta agendada no Centro Médico:\n👨‍⚕️ *Médico(a):* ${targetCard.medico}${targetCard.crm ? ` (CRM: ${targetCard.crm})` : ''} - ${targetCard.especialidade}\n📅 *Data:* ${dataFormatada}\n⏰ *Horário:* ${targetCard.horario}\n📍 *Local:* Centro Médico da Santa Casa${targetCard.convenio ? `\n📄 *Convênio:* ${targetCard.convenio}` : ''}\n\n• Por favor, chegue com 15 minutos de antecedência portando documento oficial com foto e carteirinha do convênio (se aplicável).\n• Em caso de dúvidas ou necessidade de reagendamento, entre em contato conosco.\n\n_Hospital Santa Casa de Misericórdia_`;
+      const publicBaseUrl = (import.meta.env.VITE_PUBLIC_APP_URL as string) || (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000');
+      const cleanBaseUrl = publicBaseUrl.replace(/\/+$/, '');
+      const linkConfirmacao = `${cleanBaseUrl}/confirmar-consulta/${targetCard.id}`;
 
-        // Dispara a Edge Function especializada whatsapp-agendamento-enviado
-        let res = await supabase.functions.invoke('whatsapp-agendamento-enviado', {
+      const dataFormatada = formatDateToBR(targetCard.data);
+      const customText = isConfirmacao
+        ? `🏥 *Centro Médico - Hospital Santa Casa*\nOlá, *${targetCard.paciente}*!\n\nConfirmamos os dados da sua consulta no Centro Médico:\n📅 *Data:* ${dataFormatada}\n⏰ *Horário:* O atendimento é realizado por ordem de chegada.\n👨‍⚕️ *Médico(a):* ${targetCard.medico}${targetCard.crm ? ` (CRM: ${targetCard.crm})` : ''} - ${targetCard.especialidade}\n📍 *Local:* Centro Médico da Santa Casa\n\n🔗 *Confirmação de Consulta:*\n\n${linkConfirmacao}\n\n_Hospital Santa Casa de Misericórdia_`
+        : `🏥 *Centro Médico - Hospital Santa Casa*\nOlá, *${targetCard.paciente}*!\n\nVocê tem uma consulta agendada no Centro Médico:\n👨‍⚕️ *Médico(a):* ${targetCard.medico}${targetCard.crm ? ` (CRM: ${targetCard.crm})` : ''} - ${targetCard.especialidade}\n📅 *Data:* ${dataFormatada}\n⏰ *Horário:* O atendimento é realizado por ordem de chegada.\n📍 *Local:* Centro Médico da Santa Casa\n\n_Hospital Santa Casa de Misericórdia_`;
+
+      const appOrigin = typeof window !== 'undefined' ? window.location.origin : '';
+
+      let res = await supabase.functions.invoke('whatsapp-agendamento-enviado', {
+        body: {
+          cardId: targetCard.id,
+          paciente: targetCard.paciente,
+          prontuario: targetCard.prontuario,
+          medico: targetCard.medico,
+          crm: targetCard.crm,
+          especialidade: targetCard.especialidade,
+          consultorio: targetCard.consultorio,
+          horario: targetCard.horario,
+          data: dataFormatada,
+          convenio: targetCard.convenio,
+          telefone: targetCard.telefone || '34988511343',
+          recipient: '5584998444889',
+          status: statusRef,
+          tipo: isConfirmacao ? 'confirmacao' : 'envio',
+          linkConfirmacao: linkConfirmacao,
+          origin: appOrigin,
+          text: customText,
+          isResend: isResend
+        }
+      });
+
+      if (res.error) {
+        console.warn('[WhatsApp Agendamento] Tentando fallback para whatsapp-centro-medico:', res.error);
+        res = await supabase.functions.invoke('whatsapp-centro-medico', {
           body: {
             cardId: targetCard.id,
             paciente: targetCard.paciente,
@@ -877,53 +1119,146 @@ export default function CentroMedico() {
             horario: targetCard.horario,
             data: dataFormatada,
             convenio: targetCard.convenio,
-            telefone: targetCard.telefone || '34988511343',
+            sender: '34988511343',
             recipient: '5584998444889',
-            status: newStatus,
-            tipo: isConfirmacao ? 'confirmacao' : 'envio',
-            linkConfirmacao: linkConfirmacao,
-            origin: origin,
-            text: customText
+            text: customText || 'Você tem uma consulta no Centro Médico da Santa Casa'
           }
         });
+      }
 
-        // Fallback para whatsapp-centro-medico se necessário
-        if (res.error) {
-          console.warn('[WhatsApp Agendamento] Tentando fallback para whatsapp-centro-medico:', res.error);
-          res = await supabase.functions.invoke('whatsapp-centro-medico', {
-            body: {
-              cardId: targetCard.id,
-              paciente: targetCard.paciente,
-              prontuario: targetCard.prontuario,
-              medico: targetCard.medico,
-              crm: targetCard.crm,
-              especialidade: targetCard.especialidade,
-              consultorio: targetCard.consultorio,
-              horario: targetCard.horario,
-              data: dataFormatada,
-              convenio: targetCard.convenio,
-              sender: '34988511343',
-              recipient: '5584998444889',
-              text: customText || 'Você tem uma consulta no Centro Médico da Santa Casa'
-            }
-          });
+      const { data, error } = res;
+
+      if (error) {
+        console.warn('[WhatsApp Agendamento] Erro ao invocar Edge Function:', error);
+        showToast('error', `Falha no envio do WhatsApp: ${error.message || 'Erro de comunicação'}`);
+      } else if (data?.success) {
+        showToast('success', `WhatsApp de ${actionLabel} ${isResend ? 'reenviado' : 'enviado'} com sucesso para ${targetCard.paciente}!`);
+      } else {
+        showToast('info', data?.message || 'Notificação processada.');
+      }
+    } catch (err: any) {
+      console.error('[WhatsApp Agendamento] Falha na requisição:', err);
+      showToast('error', `Erro ao disparar WhatsApp: ${err.message}`);
+    }
+  };
+
+  // Reenvio manual exclusivo do Kanban para um card específico
+  const handleResendWhatsApp = async (card: ConsultaAgendada) => {
+    if (resendingCardId) return;
+    setResendingCardId(card.id);
+    try {
+      await sendWhatsAppNotification(card, card.status, true);
+    } finally {
+      setResendingCardId(null);
+    }
+  };
+
+  // Abrir conversa diretamente no WhatsApp Web reutilizando a aba caso já esteja aberta
+  const handleOpenWhatsAppChat = (card: ConsultaAgendada) => {
+    const rawTelefone = card.telefone ? String(card.telefone).trim() : '';
+    if (!rawTelefone) {
+      showToast('info', `O paciente ${card.paciente} não possui telefone cadastrado no Tasy.`);
+      return;
+    }
+
+    // Remove qualquer caractere não numérico
+    let cleanPhone = rawTelefone.replace(/\D/g, '');
+    if (!cleanPhone) {
+      showToast('error', `O telefone informado (${rawTelefone}) é inválido.`);
+      return;
+    }
+
+    // Se vier com 8 ou 9 dígitos (sem DDD), assume o DDD padrão regional (34)
+    if (cleanPhone.length === 8 || cleanPhone.length === 9) {
+      cleanPhone = `34${cleanPhone}`;
+    }
+
+    // Se tiver 10 ou 11 dígitos (DDD + número), adiciona o DDI do Brasil (55)
+    if (cleanPhone.length === 10 || cleanPhone.length === 11) {
+      cleanPhone = `55${cleanPhone}`;
+    }
+
+    const dataFormatada = formatDateToBR(card.data);
+    const defaultMsg = `🏥 *Centro Médico - Hospital Santa Casa*\nOlá, *${card.paciente}*!\n\nVocê tem uma consulta agendada no Centro Médico:\n👨‍⚕️ *Médico(a):* ${card.medico}${card.crm ? ` (CRM: ${card.crm})` : ''} - ${card.especialidade}\n📅 *Data:* ${dataFormatada}\n⏰ *Horário:* O atendimento é realizado por ordem de chegada.\n📍 *Local:* Centro Médico da Santa Casa\n\n_Hospital Santa Casa de Misericórdia_`;
+
+    // URL direta do WhatsApp Web com mensagem pré-preenchida
+    const url = `https://web.whatsapp.com/send?phone=${cleanPhone}&text=${encodeURIComponent(defaultMsg)}`;
+
+    try {
+      // Se a aba do WhatsApp já estiver aberta na sessão, foca nela e carrega a conversa do paciente
+      if (whatsAppWindowRef && !whatsAppWindowRef.closed) {
+        whatsAppWindowRef = window.open(url, 'hsc_whatsapp_web_tab');
+        if (whatsAppWindowRef) {
+          whatsAppWindowRef.focus();
         }
-
-        const { data, error } = res;
-
-        if (error) {
-          console.warn('[WhatsApp Agendamento] Erro ao invocar Edge Function:', error);
-          showToast('error', `Falha no envio do WhatsApp: ${error.message || 'Erro de comunicação'}`);
-        } else if (data?.success) {
-          showToast('success', `WhatsApp de ${actionLabel} enviado com sucesso para ${targetCard.paciente}!`);
-        } else {
-          showToast('info', data?.message || 'Notificação processada.');
+      } else {
+        // Se ainda não estiver aberta, cria a aba nomeada e traz o foco para ela
+        whatsAppWindowRef = window.open(url, 'hsc_whatsapp_web_tab');
+        if (whatsAppWindowRef) {
+          whatsAppWindowRef.focus();
         }
-      } catch (err: any) {
-        console.error('[WhatsApp Agendamento] Falha na requisição:', err);
-        showToast('error', `Erro ao disparar WhatsApp: ${err.message}`);
+      }
+    } catch {
+      // Fallback seguro caso o navegador restrinja acesso à referência
+      const fallbackWin = window.open(url, 'hsc_whatsapp_web_tab');
+      if (fallbackWin) {
+        fallbackWin.focus();
       }
     }
+  };
+
+  // Enviar todos os pacientes de "Agendamentos" para "Enviadas" com disparo de WhatsApp
+  const handleSendAllAgendamentosToEnviadas = async () => {
+    if (isSendingAll) return;
+    const agendamentosCards = filteredConsultas.filter(c => c.status === 'Agendamentos');
+    if (agendamentosCards.length === 0) {
+      showToast('info', 'Não há pacientes na coluna Agendamentos para enviar.');
+      return;
+    }
+
+    setIsSendingAll(true);
+    setSendingProgress({ current: 0, total: agendamentosCards.length });
+    showToast('info', `Iniciando envio de ${agendamentosCards.length} agendamento(s) para "Enviadas"...`);
+
+    const now = Date.now();
+    const updatedIds = new Set(agendamentosCards.map(c => c.id));
+
+    // Move os cards visualmente para a coluna "Enviadas" imediatamente
+    setConsultas(prev => prev.map(c => {
+      if (updatedIds.has(c.id)) {
+        return {
+          ...c,
+          status: 'Enviadas' as KanbanStatus,
+          statusReal: 'Enviadas',
+          addedAt: now
+        };
+      }
+      return c;
+    }));
+
+    // Dispara WhatsApp e persiste cada paciente
+    let successCount = 0;
+    for (let i = 0; i < agendamentosCards.length; i++) {
+      const card = agendamentosCards[i];
+      setSendingProgress({ current: i + 1, total: agendamentosCards.length });
+      const updatedCard: ConsultaAgendada = { ...card, status: 'Enviadas', statusReal: 'Enviadas', addedAt: now };
+      persistCardManualStatus(card.id, 'Enviadas', updatedCard);
+
+      try {
+        await sendWhatsAppNotification(updatedCard, 'Enviadas', false);
+        successCount++;
+      } catch (err) {
+        console.error(`Erro ao disparar WhatsApp para ${card.paciente}:`, err);
+      }
+
+      if (i < agendamentosCards.length - 1) {
+        await new Promise(resolve => setTimeout(resolve, 600));
+      }
+    }
+
+    setIsSendingAll(false);
+    setSendingProgress(null);
+    showToast('success', `${successCount} paciente(s) movidos para "Enviadas" com sucesso!`);
   };
 
   // Ação de Confirmação de Consulta do Paciente
@@ -1037,54 +1372,29 @@ export default function CentroMedico() {
   const stats = useMemo(() => {
     const totalPlantonistas = escalas.filter(e => e.status === 'Presencial' || e.status === 'Sobreaviso').length;
     const totalConsultasHoje = consultas.length;
-    const concluidos = consultas.filter(c => c.status === 'Concluídas').length;
+    const canceladas = consultas.filter(c => c.status === 'Canceladas').length;
     const confirmadas = consultas.filter(c => c.status === 'Confirmadas').length;
 
-    return { totalPlantonistas, totalConsultasHoje, concluidos, confirmadas };
+    return { totalPlantonistas, totalConsultasHoje, canceladas, confirmadas };
   }, [escalas, consultas]);
 
   return (
-    <div className="flex-1 space-y-4 min-h-[85vh] pb-6 w-full mx-auto px-1 pt-2 text-foreground transition-all">
-      {/* Toast Notification */}
-      <AnimatePresence>
-        {toast && (
-          <motion.div
-            initial={{ opacity: 0, y: -20, scale: 0.95 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: -20, scale: 0.95 }}
-            className={`fixed top-4 right-4 z-50 flex items-center gap-3 px-4 py-3 rounded-xl shadow-xl border text-sm max-w-md ${
-              toast.type === 'success'
-                ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-600 dark:text-emerald-400'
-                : toast.type === 'error'
-                ? 'bg-rose-500/10 border-rose-500/30 text-rose-600 dark:text-rose-400'
-                : 'bg-blue-500/10 border-blue-500/30 text-blue-600 dark:text-blue-400'
-            }`}
-          >
-            {toast.type === 'success' && <CheckCircle2 className="h-5 w-5 flex-shrink-0" />}
-            {toast.type === 'error' && <AlertCircle className="h-5 w-5 flex-shrink-0" />}
-            {toast.type === 'info' && <RefreshCw className="h-5 w-5 flex-shrink-0 animate-spin text-blue-500" />}
-            <span>{toast.message}</span>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-
-
-      {/* Header do Módulo */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-card border border-border/80 p-5 rounded-2xl shadow-sm">
-        <div className="space-y-1">
-          <div className="flex items-center gap-3">
-            <div className="h-10 w-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center border border-primary/20 shadow-inner">
+    <div className="flex-1 space-y-4 min-h-[85vh] pb-6 w-full mx-auto px-1 sm:px-2 pt-2 text-foreground transition-all">
+      {/* Header do Módulo Responsivo */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-card border border-border/80 p-4 sm:p-5 rounded-2xl shadow-sm w-full min-w-0">
+        <div className="space-y-1 min-w-0 w-full">
+          <div className="flex items-start sm:items-center gap-3 w-full min-w-0">
+            <div className="h-10 w-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center border border-primary/20 shadow-inner shrink-0 mt-0.5 sm:mt-0">
               <Stethoscope className="h-6 w-6" />
             </div>
-            <div>
-              <h1 className="text-2xl font-bold tracking-tight text-foreground flex items-center gap-2">
-                Centro Médico
-                <span className="text-xs px-2 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20 font-medium">
+            <div className="min-w-0 flex-1">
+              <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-foreground flex flex-wrap items-center gap-2">
+                <span>Centro Médico</span>
+                <span className="text-[11px] px-2 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20 font-medium shrink-0">
                   DEV LOCALHOST
                 </span>
               </h1>
-              <p className="text-xs text-muted-foreground">
+              <p className="text-xs text-muted-foreground break-words mt-0.5">
                 Gestão integrada de escalas médicas, plantonistas e acompanhamento em modo Kanban.
               </p>
             </div>
@@ -1092,63 +1402,63 @@ export default function CentroMedico() {
         </div>
       </div>
 
-      {/* Cards de Métricas / Estatísticas */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-        <div className="bg-card border border-border/80 p-4 rounded-xl shadow-sm flex items-center justify-between">
-          <div>
-            <p className="text-xs text-muted-foreground font-medium">Plantonistas Ativos</p>
-            <p className="text-2xl font-bold text-foreground mt-1">{stats.totalPlantonistas}</p>
+      {/* Cards de Métricas / Estatísticas Responsivos */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 w-full min-w-0">
+        <div className="bg-card border border-border/80 p-3.5 sm:p-4 rounded-xl shadow-sm flex items-center justify-between gap-3 min-w-0">
+          <div className="min-w-0 flex-1">
+            <p className="text-xs text-muted-foreground font-medium truncate">Plantonistas Ativos</p>
+            <p className="text-2xl font-bold text-foreground mt-1 truncate">{stats.totalPlantonistas}</p>
           </div>
-          <div className="h-10 w-10 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
+          <div className="h-10 w-10 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
             <UserCheck className="h-5 w-5" />
           </div>
         </div>
 
-        <div className="bg-card border border-border/80 p-4 rounded-xl shadow-sm flex items-center justify-between">
-          <div>
-            <p className="text-xs text-muted-foreground font-medium">Total de Pacientes</p>
-            <p className="text-2xl font-bold text-foreground mt-1">{stats.totalConsultasHoje}</p>
+        <div className="bg-card border border-border/80 p-3.5 sm:p-4 rounded-xl shadow-sm flex items-center justify-between gap-3 min-w-0">
+          <div className="min-w-0 flex-1">
+            <p className="text-xs text-muted-foreground font-medium truncate">Total de Pacientes</p>
+            <p className="text-2xl font-bold text-foreground mt-1 truncate">{stats.totalConsultasHoje}</p>
           </div>
-          <div className="h-10 w-10 rounded-lg bg-blue-500/10 text-blue-600 dark:text-blue-400 flex items-center justify-center">
+          <div className="h-10 w-10 rounded-lg bg-blue-500/10 text-blue-600 dark:text-blue-400 flex items-center justify-center shrink-0">
             <CalendarDays className="h-5 w-5" />
           </div>
         </div>
 
-        <div className="bg-card border border-border/80 p-4 rounded-xl shadow-sm flex items-center justify-between">
-          <div>
-            <p className="text-xs text-muted-foreground font-medium">Consultas Confirmadas</p>
-            <p className="text-2xl font-bold text-foreground mt-1">{stats.confirmadas}</p>
+        <div className="bg-card border border-border/80 p-3.5 sm:p-4 rounded-xl shadow-sm flex items-center justify-between gap-3 min-w-0">
+          <div className="min-w-0 flex-1">
+            <p className="text-xs text-muted-foreground font-medium truncate">Consultas Confirmadas</p>
+            <p className="text-2xl font-bold text-foreground mt-1 truncate">{stats.confirmadas}</p>
           </div>
-          <div className="h-10 w-10 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
+          <div className="h-10 w-10 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
             <CheckCircle2 className="h-5 w-5" />
           </div>
         </div>
 
-        <div className="bg-card border border-border/80 p-4 rounded-xl shadow-sm flex items-center justify-between">
-          <div>
-            <p className="text-xs text-muted-foreground font-medium">Atendimentos Concluídos</p>
-            <p className="text-2xl font-bold text-foreground mt-1">{stats.concluidos}</p>
+        <div className="bg-card border border-border/80 p-3.5 sm:p-4 rounded-xl shadow-sm flex items-center justify-between gap-3 min-w-0">
+          <div className="min-w-0 flex-1">
+            <p className="text-xs text-muted-foreground font-medium truncate">Agendas Canceladas</p>
+            <p className="text-2xl font-bold text-foreground mt-1 truncate">{stats.canceladas}</p>
           </div>
-          <div className="h-10 w-10 rounded-lg bg-teal-500/10 text-teal-600 dark:text-teal-400 flex items-center justify-center">
-            <Check className="h-5 w-5" />
+          <div className="h-10 w-10 rounded-lg bg-rose-500/10 text-rose-600 dark:text-rose-400 flex items-center justify-center shrink-0">
+            <XCircle className="h-5 w-5" />
           </div>
         </div>
       </div>
 
-      {/* Navegação entre Abas, Controle de Datas e Filtros (Design Moderno & Glassmorphism) */}
-      <div className="bg-card border border-border/80 p-4 sm:p-5 rounded-2xl shadow-sm space-y-4 relative overflow-hidden">
+      {/* Navegação entre Abas, Controle de Datas e Filtros (Totalmente Responsivo) */}
+      <div className="bg-card border border-border/80 p-3.5 sm:p-5 rounded-2xl shadow-sm space-y-4 relative w-full min-w-0">
         {/* Glow sutil de fundo */}
         <div className="absolute top-0 right-0 -mt-8 -mr-8 w-40 h-40 bg-primary/5 rounded-full blur-3xl pointer-events-none" />
 
-        <div className="flex flex-col xl:flex-row items-stretch xl:items-center justify-between gap-3.5 relative z-10">
-          {/* Lado Esquerdo: Abas de Navegação (Pill Container) */}
-          <div className="inline-flex items-center bg-muted/60 p-1.5 rounded-2xl border border-border/50 shadow-inner gap-1 overflow-x-auto max-w-full">
+        <div className="flex flex-col xl:flex-row items-stretch xl:items-center justify-between gap-3.5 relative z-10 w-full min-w-0">
+          {/* Lado Esquerdo: Abas de Navegação (Pill Container com Scroll Suave no Mobile) */}
+          <div className="flex items-center bg-muted/60 p-1.5 rounded-2xl border border-border/50 shadow-inner gap-1 overflow-x-auto max-w-full w-full sm:w-auto">
             <button
               onClick={() => {
                 setActiveTab('kanban');
                 setSelectedStatus('TODOS');
               }}
-              className={`flex items-center justify-center gap-2.5 px-4 py-2 rounded-xl font-medium text-xs sm:text-sm transition-all duration-200 whitespace-nowrap shrink-0 ${
+              className={`flex-1 sm:flex-initial flex items-center justify-center gap-2 px-3 sm:px-4 py-2 rounded-xl font-medium text-xs sm:text-sm transition-all duration-200 whitespace-nowrap shrink-0 ${
                 activeTab === 'kanban'
                   ? 'bg-background text-primary shadow-sm font-bold border border-border/60 ring-1 ring-black/5 dark:ring-white/10 scale-[1.01]'
                   : 'text-muted-foreground hover:text-foreground hover:bg-background/50'
@@ -1166,7 +1476,7 @@ export default function CentroMedico() {
                 setActiveTab('escalas');
                 setSelectedStatus('TODOS');
               }}
-              className={`flex items-center justify-center gap-2.5 px-4 py-2 rounded-xl font-medium text-xs sm:text-sm transition-all duration-200 whitespace-nowrap shrink-0 ${
+              className={`flex-1 sm:flex-initial flex items-center justify-center gap-2 px-3 sm:px-4 py-2 rounded-xl font-medium text-xs sm:text-sm transition-all duration-200 whitespace-nowrap shrink-0 ${
                 activeTab === 'escalas'
                   ? 'bg-background text-primary shadow-sm font-bold border border-border/60 ring-1 ring-black/5 dark:ring-white/10 scale-[1.01]'
                   : 'text-muted-foreground hover:text-foreground hover:bg-background/50'
@@ -1180,33 +1490,33 @@ export default function CentroMedico() {
             </button>
           </div>
 
-          {/* Lado Direito: Controle de Datas e Especialidades */}
-          <div className="flex flex-wrap items-center gap-2.5 w-full xl:w-auto">
-            {/* Seletor de Data em Pill Box com Hover Glow */}
-            <div className="flex flex-wrap sm:flex-nowrap items-center gap-1 bg-background border border-border/80 p-1 rounded-2xl text-xs shadow-xs hover:border-primary/40 transition-all max-w-full">
+          {/* Lado Direito: Controle de Datas e Especialidades Fluido */}
+          <div className="flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center gap-2.5 w-full xl:w-auto min-w-0">
+            {/* Seletor de Data em Pill Box com Adaptação Completa */}
+            <div className="flex items-center justify-between sm:justify-start gap-1 bg-background border border-border/80 p-1 rounded-2xl text-xs shadow-xs hover:border-primary/40 transition-all w-full sm:w-auto min-w-0 overflow-x-auto">
               <button
                 onClick={() => handleStepDay(-1)}
                 title="Dia Anterior"
-                className="px-2.5 py-1.5 rounded-xl hover:bg-muted text-foreground transition-all flex items-center gap-1 font-medium text-xs active:scale-95"
+                className="px-2 sm:px-2.5 py-1.5 rounded-xl hover:bg-muted text-foreground transition-all flex items-center gap-1 font-medium text-xs active:scale-95 shrink-0"
               >
                 <ChevronLeft className="h-4 w-4 text-muted-foreground" />
-                <span>Anterior</span>
+                <span className="hidden sm:inline">Anterior</span>
               </button>
 
-              <div className="flex items-center gap-1.5 px-3 py-1.5 bg-muted/40 rounded-xl border border-border/40 hover:bg-muted/70 transition-colors">
+              <div className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 bg-muted/40 rounded-xl border border-border/40 hover:bg-muted/70 transition-colors shrink-0">
                 <Calendar className="h-3.5 w-3.5 text-primary shrink-0" />
                 <input
                   type="date"
                   value={selectedDate}
                   onChange={e => handleDateChange(e.target.value)}
-                  className="bg-transparent text-foreground font-semibold focus:outline-none cursor-pointer text-xs max-w-[125px]"
+                  className="bg-transparent text-foreground font-semibold focus:outline-none cursor-pointer text-xs w-[115px] sm:w-[125px]"
                 />
               </div>
 
               <button
                 onClick={() => handleDateChange(getDateOffset(0))}
                 title="Ir para Hoje"
-                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all shadow-xs active:scale-95 ${
+                className={`px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-bold transition-all shadow-xs active:scale-95 shrink-0 ${
                   selectedDate === getDateOffset(0)
                     ? 'bg-primary text-primary-foreground shadow-sm ring-1 ring-primary/30'
                     : 'hover:bg-muted text-muted-foreground'
@@ -1218,20 +1528,20 @@ export default function CentroMedico() {
               <button
                 onClick={() => handleStepDay(1)}
                 title="Próximo Dia"
-                className="px-2.5 py-1.5 rounded-xl hover:bg-muted text-foreground transition-all flex items-center gap-1 font-medium text-xs active:scale-95"
+                className="px-2 sm:px-2.5 py-1.5 rounded-xl hover:bg-muted text-foreground transition-all flex items-center gap-1 font-medium text-xs active:scale-95 shrink-0"
               >
-                <span>Próximo</span>
+                <span className="hidden sm:inline">Próximo</span>
                 <ChevronRight className="h-4 w-4 text-muted-foreground" />
               </button>
             </div>
 
-            {/* Filtro de Especialidade com Ícone de Destaque */}
-            <div className="flex items-center gap-2 bg-background border border-border/80 px-3.5 py-2 rounded-2xl text-xs shadow-xs hover:border-primary/40 focus-within:ring-2 focus-within:ring-primary/20 transition-all w-full sm:w-auto min-w-[180px] max-w-full">
+            {/* Filtro de Especialidade com Largura Flexível */}
+            <div className="flex items-center gap-2 bg-background border border-border/80 px-3.5 py-2 rounded-2xl text-xs shadow-xs hover:border-primary/40 focus-within:ring-2 focus-within:ring-primary/20 transition-all w-full sm:w-auto sm:min-w-[210px] min-w-0">
               <Filter className="h-3.5 w-3.5 text-primary shrink-0" />
               <select
                 value={selectedEspecialidade}
                 onChange={e => setSelectedEspecialidade(e.target.value)}
-                className="bg-transparent text-foreground focus:outline-none font-semibold cursor-pointer w-full text-xs"
+                className="bg-transparent text-foreground focus:outline-none font-semibold cursor-pointer w-full text-xs min-w-0"
               >
                 {especialidades.map(esp => (
                   <option key={esp} value={esp} className="bg-card text-foreground">
@@ -1240,43 +1550,84 @@ export default function CentroMedico() {
                 ))}
               </select>
             </div>
+
+            {/* Botão de Atualização de Agenda (Gatilho para n8n) */}
+            <button
+              type="button"
+              onClick={handleSyncWebhook}
+              disabled={isSyncing}
+              title="Consultar o n8n para atualizar os agendamentos do Tasy agora"
+              className="flex items-center justify-center gap-2 px-3.5 py-2 rounded-2xl text-xs font-semibold bg-primary text-primary-foreground hover:bg-primary/90 transition-all shadow-sm active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer shrink-0 w-full sm:w-auto whitespace-nowrap"
+            >
+              <RefreshCw className={`h-3.5 w-3.5 shrink-0 ${isSyncing ? 'animate-spin' : ''}`} />
+              <span>{isSyncing ? 'Atualizando Agenda...' : 'Atualizar Agenda'}</span>
+            </button>
+
+            {/* Botão de Diagnóstico da Resposta do n8n */}
+            {debugData && (
+              <button
+                type="button"
+                onClick={() => setDebugModalOpen(true)}
+                title="Visualizar a resposta JSON bruta devolvida pelo n8n"
+                className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-2xl text-xs font-medium bg-muted/80 hover:bg-muted text-muted-foreground hover:text-foreground transition-all border border-border/60 active:scale-95 cursor-pointer shrink-0"
+              >
+                <Activity className="h-3.5 w-3.5 text-blue-500 shrink-0" />
+                <span>Ver Retorno n8n</span>
+                {debugData.count !== undefined && (
+                  <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
+                    debugData.count > 0 
+                      ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20' 
+                      : 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20'
+                  }`}>
+                    {debugData.count}
+                  </span>
+                )}
+              </button>
+            )}
           </div>
         </div>
 
-        {/* Input de Busca com Efeito Neon Ring no Focus */}
-        <div className="relative group z-10">
-          <Search className="h-4 w-4 absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground group-focus-within:text-primary transition-colors" />
+        {/* Input de Busca com Largura Total e Padding Confortável */}
+        <div className="relative group z-10 w-full min-w-0">
+          <Search className="h-4 w-4 absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground group-focus-within:text-primary transition-colors shrink-0" />
           <input
             type="text"
             placeholder={
               activeTab === 'escalas'
                 ? 'Buscar por médico, CRM, especialidade ou setor...'
-                : 'Buscar por paciente, prontuário, médico ou convênio...'
+                : 'Buscar por paciente, médico ou classificação...'
             }
             value={searchTerm}
             onChange={e => setSearchTerm(e.target.value)}
-            className="w-full pl-11 pr-4 py-2.5 bg-background border border-border/80 rounded-2xl text-sm placeholder:text-muted-foreground/70 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/50 transition-all shadow-xs"
+            className="w-full pl-11 pr-4 py-2.5 bg-background border border-border/80 rounded-2xl text-xs sm:text-sm placeholder:text-muted-foreground/70 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/50 transition-all shadow-xs"
           />
         </div>
 
         {/* Conteúdo Principal das Abas */}
         {/* ── ABA KANBAN ── */}
         {activeTab === 'kanban' && (
-          <div key="tab-kanban" className="space-y-3">
-              {/* Grid das Colunas Kanban (Com largura mínima confortável para cards respirarem) */}
-              <div className="flex 2xl:grid 2xl:grid-cols-5 gap-3.5 items-start overflow-x-auto pb-4 custom-scrollbar">
+          <div key="tab-kanban" className="space-y-3 w-full min-w-0">
+              {/* Grid das Colunas Kanban (4 colunas principais com distribuição perfeita no desktop sem cortes) */}
+              <div className="grid grid-flow-col auto-cols-[300px] sm:auto-cols-[320px] lg:auto-cols-fr lg:grid-flow-row lg:grid-cols-4 gap-4 items-stretch overflow-x-auto pb-4 custom-scrollbar w-full min-w-0">
                 {KANBAN_COLUMNS.map(col => {
                   let colCards = filteredConsultas.filter(c => c.status === col.id);
 
-                  // Na coluna "Confirmadas", à medida que for adicionando deve ir ficando em cima (mais recente no topo)
+                  // Organização rigorosa de todos os agendamentos
                   if (col.id === 'Confirmadas') {
+                    // Na coluna "Confirmação", os pacientes confirmados recentemente ficam no topo, desempate por horário
                     colCards = [...colCards].sort((a, b) => {
                       const orderA = addedOrderMap[a.id] ?? a.addedAt ?? 0;
                       const orderB = addedOrderMap[b.id] ?? b.addedAt ?? 0;
                       if (orderA !== orderB) {
                         return orderB - orderA;
                       }
-                      return 0;
+                      return (a.horario || '').localeCompare(b.horario || '', undefined, { numeric: true });
+                    });
+                  } else {
+                    // Em todas as outras colunas (Agendamentos, Enviadas, Canceladas):
+                    // Ordenação cronológica contínua por horário (ex: 07:00, 07:30, 08:00, 08:30...)
+                    colCards = [...colCards].sort((a, b) => {
+                      return (a.horario || '').localeCompare(b.horario || '', undefined, { numeric: true });
                     });
                   }
 
@@ -1288,7 +1639,7 @@ export default function CentroMedico() {
                       onDragOver={e => handleDragOver(e, col.id)}
                       onDragLeave={handleDragLeave}
                       onDrop={e => handleDrop(e, col.id)}
-                      className={`bg-background border rounded-2xl p-3 space-y-3 min-h-[480px] flex flex-col transition-all duration-200 min-w-[280px] 2xl:min-w-0 flex-1 ${
+                      className={`bg-background border rounded-2xl p-3 sm:p-3.5 space-y-3 min-h-[500px] sm:min-h-[540px] flex flex-col justify-between transition-all duration-200 w-full min-w-0 ${
                         col.border
                       } ${
                         isOver
@@ -1296,37 +1647,95 @@ export default function CentroMedico() {
                           : 'bg-muted/10 hover:bg-background'
                       }`}
                     >
-                      {/* Cabeçalho da Coluna */}
-                      <div className="pb-2 border-b border-border/60 space-y-1">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            <span className={`h-2.5 w-2.5 rounded-full ${col.dotColor}`} />
-                            <h3 className={`font-bold text-xs uppercase tracking-wide ${col.color}`}>
+                      {/* Cabeçalho da Coluna Perfeitamente Alinhado */}
+                      <div className="pb-3 border-b border-border/60 space-y-2 shrink-0 w-full min-w-0">
+                        <div className="flex items-start justify-between gap-2 w-full min-w-0">
+                          <div className="flex items-start gap-2 min-w-0 flex-1">
+                            <span className={`h-2.5 w-2.5 rounded-full shrink-0 mt-0.5 ${col.dotColor}`} />
+                            <h3 className={`font-bold text-xs uppercase tracking-tight leading-snug break-words ${col.color}`}>
                               {col.label}
                             </h3>
                           </div>
-                          <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full border ${col.badgeBg}`}>
+                          <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full border shrink-0 ${col.badgeBg}`}>
                             {colCards.length}
                           </span>
                         </div>
-                        <div className="text-[10px] flex items-center gap-1 font-medium">
-                          {col.isSynced ? (
-                            <span className="text-blue-600 dark:text-blue-400 flex items-center gap-1 bg-blue-500/10 px-1.5 py-0.5 rounded border border-blue-500/20">
-                              ⚡ Sincronizado (n8n)
-                            </span>
-                          ) : (
-                            <span className="text-muted-foreground/70 flex items-center gap-1">
-                              ✋ Movimentação Manual
-                            </span>
-                          )}
-                        </div>
+                        {/* Indicador de quando a sincronização funcionou (exclusivo para Agenda / Agendamentos) */}
+                        {col.id === 'Agendamentos' && (
+                          <div className="flex items-center justify-between gap-2 w-full min-w-0 pt-0.5">
+                            {lastSyncTime ? (
+                              <div
+                                className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 text-[11px] font-medium min-w-0 flex-1 shadow-xs"
+                                title={`Última sincronização bem-sucedida com o Tasy às ${lastSyncTime}`}
+                              >
+                                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+                                <span className="break-words leading-tight">Sincronizado às {lastSyncTime}</span>
+                              </div>
+                            ) : isSyncing ? (
+                              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20 text-[11px] font-medium min-w-0 flex-1 shadow-xs">
+                                <RefreshCw className="h-3 w-3 animate-spin shrink-0 text-blue-500" />
+                                <span className="break-words leading-tight">Sincronizando com Tasy...</span>
+                              </div>
+                            ) : (
+                              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-muted/60 text-muted-foreground border border-border/40 text-[11px] font-medium min-w-0 flex-1">
+                                <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/60 shrink-0" />
+                                <span className="break-words leading-tight">Aguardando sincronização</span>
+                              </div>
+                            )}
+
+                            <button
+                              type="button"
+                              onClick={handleSyncWebhook}
+                              disabled={isSyncing}
+                              title="Sincronizar agendamentos agora com o Tasy / n8n"
+                              className="p-1.5 rounded-lg hover:bg-muted/80 text-muted-foreground hover:text-primary transition-all disabled:opacity-50 shrink-0 cursor-pointer"
+                            >
+                              <RefreshCw className={`h-3.5 w-3.5 ${isSyncing ? 'animate-spin text-primary' : ''}`} />
+                            </button>
+                          </div>
+                        )}
+
+                        {/* Botão de Enviar Todos para o Kanban Enviadas */}
+                        {col.id === 'Agendamentos' && (
+                          <button
+                            type="button"
+                            onClick={handleSendAllAgendamentosToEnviadas}
+                            disabled={colCards.length === 0 || isSendingAll}
+                            title={
+                              colCards.length === 0
+                                ? 'Nenhum agendamento para enviar'
+                                : `Mover todos os ${colCards.length} pacientes para Confirmação de agendamento e disparar WhatsApp`
+                            }
+                            className={`w-full flex items-center justify-center gap-2 py-2 px-3 rounded-xl text-xs font-semibold transition-all active:scale-[0.98] cursor-pointer shadow-xs disabled:opacity-50 disabled:cursor-not-allowed text-center break-words mt-1 ${
+                              isSendingAll
+                                ? 'bg-purple-600/20 text-purple-700 dark:text-purple-300 border border-purple-500/40'
+                                : 'bg-blue-600 hover:bg-blue-700 text-white shadow-blue-500/20'
+                            }`}
+                          >
+                            {isSendingAll ? (
+                              <>
+                                <RefreshCw className="h-3.5 w-3.5 animate-spin shrink-0" />
+                                <span>
+                                  {sendingProgress
+                                    ? `Enviando (${sendingProgress.current}/${sendingProgress.total})...`
+                                    : 'Enviando todos...'}
+                                </span>
+                              </>
+                            ) : (
+                              <>
+                                <Send className="h-3.5 w-3.5 shrink-0" />
+                                <span>Enviar Todos</span>
+                              </>
+                            )}
+                          </button>
+                        )}
                       </div>
 
-                      {/* Lista de Cards da Coluna - Cards com expansão natural e sem barra de rolagem restritiva */}
-                      <div className="flex-1 space-y-3">
+                      {/* Lista de Cards da Coluna com Organização Uniforme */}
+                      <div className="flex-1 space-y-2.5 overflow-y-auto pr-0.5 custom-scrollbar w-full min-w-0">
                         {colCards.length === 0 ? (
-                          <div className="h-32 border border-dashed border-border/70 rounded-xl flex items-center justify-center text-center p-3 text-muted-foreground text-xs">
-                            Nenhum paciente
+                          <div className="h-36 border border-dashed border-border/70 rounded-xl flex items-center justify-center text-center p-3 text-muted-foreground text-xs">
+                            Nenhum paciente nesta etapa
                           </div>
                         ) : (
                           colCards.map(card => {
@@ -1337,153 +1746,177 @@ export default function CentroMedico() {
                                 key={card.id}
                                 draggable
                                 onDragStart={e => handleDragStart(e, card.id)}
-                                className={`p-3.5 rounded-xl transition-all cursor-grab active:cursor-grabbing space-y-2.5 relative group ${
+                                className={`w-full max-w-full min-w-0 box-border p-3 sm:p-3.5 rounded-2xl transition-all cursor-grab active:cursor-grabbing flex flex-col gap-2.5 relative group border shadow-xs hover:shadow-md ${
                                   isConfirmed
-                                    ? 'bg-emerald-600 dark:bg-emerald-600 text-white border-2 border-emerald-300 shadow-xl shadow-emerald-950/30 ring-2 ring-emerald-300/40'
-                                    : 'bg-card border border-border/80 hover:border-primary/50 shadow-xs hover:shadow-md'
+                                    ? 'bg-emerald-600 dark:bg-emerald-600 text-white border-emerald-400 shadow-emerald-950/20 ring-1 ring-emerald-300/40'
+                                    : 'bg-card border-border/80 hover:border-primary/40'
                                 }`}
                               >
-                                {/* Selo em destaque caso o paciente tenha confirmado */}
+                                {/* Selo de Confirmação do Paciente */}
                                 {isConfirmed && (
-                                  <div className="flex items-center justify-between gap-1.5 bg-emerald-800/90 text-white px-2.5 py-1 rounded-lg border border-emerald-300 text-[10px] font-bold shadow-xs">
-                                    <div className="flex items-center gap-1.5">
-                                      <CheckCircle2 className="h-3.5 w-3.5 text-emerald-300 animate-pulse" />
-                                      <span>PACIENTE CONFIRMOU PRESENÇA</span>
-                                    </div>
-                                    {card.confirmadoEm && (
-                                      <span className="text-emerald-200 font-mono text-[9px]">{card.confirmadoEm}</span>
-                                    )}
+                                  <div className="w-full min-w-0 flex items-center gap-1.5 bg-emerald-800/90 text-white px-2.5 py-1 rounded-xl border border-emerald-300/40 text-[9.5px] sm:text-[10px] font-bold shadow-xs">
+                                    <CheckCircle2 className="h-3.5 w-3.5 text-emerald-300 animate-pulse shrink-0" />
+                                    <span className="leading-tight break-words">PACIENTE CONFIRMOU PRESENÇA</span>
                                   </div>
                                 )}
 
-                                {/* Header do Card: Paciente, Prontuário, Idade, Horário e Tag de Status Real */}
-                                <div className="flex items-start justify-between gap-2">
-                                  <div className="space-y-1 min-w-0 flex-1">
-                                    <div className="flex flex-wrap items-center gap-1.5">
-                                      <h4 className={`font-bold text-sm leading-snug break-words transition-colors ${
-                                        isConfirmed ? 'text-white font-extrabold' : 'text-foreground group-hover:text-primary'
-                                      }`}>
-                                        {card.paciente}
-                                      </h4>
-                                      {card.statusReal && !isConfirmed && (
-                                        <span
-                                          className={`text-[10px] font-bold px-2 py-0.5 rounded-full border flex items-center gap-1 shrink-0 ${getRealStatusBadgeStyle(card.statusReal)}`}
-                                          title={`Status Real no Sistema: ${card.statusReal}`}
+                                {/* Topo: Classificação */}
+                                <div className="flex items-center w-full min-w-0">
+                                  <span className={`px-2 py-0.5 rounded-md font-semibold text-[10.5px] uppercase tracking-wide border break-words ${
+                                    isConfirmed
+                                      ? 'bg-emerald-800/80 border-emerald-400/50 text-emerald-100'
+                                      : 'bg-muted/70 border-border/60 text-muted-foreground'
+                                  }`}>
+                                    {card.convenio || 'Consulta'}
+                                  </span>
+                                </div>
+
+                                {/* Nome do Paciente */}
+                                <div className="w-full min-w-0">
+                                  <h4 className={`text-sm sm:text-[15px] font-bold tracking-tight leading-snug break-words transition-colors ${
+                                    isConfirmed ? 'text-white font-extrabold' : 'text-foreground group-hover:text-primary'
+                                  }`}>
+                                    {card.paciente}
+                                  </h4>
+                                </div>
+
+                                {/* Bloco Clínico: Médico e Especialidade */}
+                                <div className={`p-2.5 rounded-xl border space-y-1 text-xs w-full min-w-0 ${
+                                  isConfirmed
+                                    ? 'bg-emerald-700/50 border-emerald-400/30 text-emerald-50'
+                                    : 'bg-muted/30 border-border/60 text-muted-foreground'
+                                }`}>
+                                  <div className="flex items-start gap-2 w-full min-w-0">
+                                    <Stethoscope className={`h-3.5 w-3.5 flex-shrink-0 mt-0.5 ${
+                                      isConfirmed ? 'text-emerald-200' : 'text-primary'
+                                    }`} />
+                                    <div className="flex-1 min-w-0 space-y-0.5">
+                                      <p className={`font-semibold text-xs leading-snug break-words ${isConfirmed ? 'text-white' : 'text-foreground'}`}>
+                                        {card.medico}
+                                      </p>
+                                      <p className={`text-[11px] font-medium leading-tight break-words ${isConfirmed ? 'text-emerald-100' : 'text-muted-foreground'}`}>
+                                        {card.especialidade}
+                                      </p>
+                                    </div>
+                                  </div>
+                                </div>
+
+                                {/* Contato: Telefone do Paciente */}
+                                {card.telefone && (
+                                  <div className={`flex items-center gap-2 px-2.5 py-1.5 rounded-xl border text-xs w-full min-w-0 ${
+                                    isConfirmed
+                                      ? 'bg-emerald-700/40 border-emerald-400/30 text-emerald-100'
+                                      : 'bg-muted/20 border-border/50 text-foreground'
+                                  }`}>
+                                    <Phone className={`h-3.5 w-3.5 shrink-0 ${isConfirmed ? 'text-emerald-200' : 'text-muted-foreground'}`} />
+                                    <span className="font-medium text-[11.5px] tracking-wide break-words flex-1">
+                                      {card.telefone}
+                                    </span>
+                                  </div>
+                                )}
+
+                                {/* Observações (quando existirem) */}
+                                {card.observacoes && (
+                                  <div className="w-full min-w-0">
+                                    <div className={`flex items-start gap-1.5 p-2 rounded-lg border leading-relaxed text-xs w-full min-w-0 break-words ${
+                                      isConfirmed
+                                        ? 'bg-emerald-700/60 border-emerald-400 text-white'
+                                        : 'bg-muted/40 border-border/50 text-foreground/90'
+                                    }`}>
+                                      <FileText className={`h-3.5 w-3.5 mt-0.5 flex-shrink-0 ${
+                                        isConfirmed ? 'text-emerald-200' : 'text-muted-foreground/80'
+                                      }`} />
+                                      <span className="flex-1 min-w-0 break-words">{card.observacoes}</span>
+                                    </div>
+                                  </div>
+                                )}
+
+                                {/* Rodapé com Botões de Ação */}
+                                <div className="pt-1 w-full min-w-0 space-y-1.5">
+                                  {/* Botão na coluna "Agendamentos": Abrir no WhatsApp */}
+                                  {card.status === 'Agendamentos' && (
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleOpenWhatsAppChat(card);
+                                      }}
+                                      disabled={!card.telefone}
+                                      title={
+                                        card.telefone
+                                          ? `Abrir conversa no WhatsApp com ${card.paciente} (${card.telefone})`
+                                          : `Telefone não cadastrado no Tasy para ${card.paciente}`
+                                      }
+                                      className={`w-full min-w-0 flex items-center justify-center gap-2 py-2 px-3 rounded-xl text-xs font-semibold transition-all active:scale-[0.98] shadow-xs text-center break-words ${
+                                        card.telefone
+                                          ? 'bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer shadow-emerald-500/20'
+                                          : 'bg-muted/60 text-muted-foreground border border-border/40 opacity-70 cursor-not-allowed'
+                                      }`}
+                                    >
+                                      <MessageCircle className="h-3.5 w-3.5 shrink-0" />
+                                      <span className="break-words">
+                                        {card.telefone ? 'Abrir no WhatsApp' : 'Sem Telefone'}
+                                      </span>
+                                    </button>
+                                  )}
+
+                                  {/* Botões nas colunas "Enviadas" e "Confirmadas": Reenviar WhatsApp e Abrir Chat */}
+                                  {(card.status === 'Enviadas' || card.status === 'Confirmadas') && (
+                                    <div className="flex items-center gap-1.5 w-full min-w-0">
+                                      <button
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          handleResendWhatsApp(card);
+                                        }}
+                                        disabled={resendingCardId === card.id}
+                                        title={`Reenviar notificação de WhatsApp para ${card.paciente}`}
+                                        className={`flex-1 min-w-0 flex items-center justify-center gap-2 py-2 px-3 rounded-xl text-xs font-semibold transition-all active:scale-[0.98] cursor-pointer shadow-xs disabled:opacity-50 disabled:cursor-not-allowed text-center break-words ${
+                                          isConfirmed
+                                            ? 'bg-emerald-800 hover:bg-emerald-900 text-white border border-emerald-300/50'
+                                            : 'bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30'
+                                        }`}
+                                      >
+                                        {resendingCardId === card.id ? (
+                                          <>
+                                            <RefreshCw className="h-3.5 w-3.5 animate-spin text-emerald-400 shrink-0" />
+                                            <span className="break-words">Reenviando...</span>
+                                          </>
+                                        ) : (
+                                          <>
+                                            <MessageCircle className={`h-3.5 w-3.5 shrink-0 ${isConfirmed ? 'text-emerald-200' : 'text-emerald-600 dark:text-emerald-400'}`} />
+                                            <span className="break-words">Reenviar WhatsApp</span>
+                                          </>
+                                        )}
+                                      </button>
+
+                                      {card.telefone && (
+                                        <button
+                                          type="button"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleOpenWhatsAppChat(card);
+                                          }}
+                                          title={`Abrir conversa no WhatsApp com ${card.paciente}`}
+                                          className={`p-2 rounded-xl border transition-all active:scale-95 shrink-0 cursor-pointer ${
+                                            isConfirmed
+                                              ? 'bg-emerald-800 hover:bg-emerald-900 text-white border border-emerald-300/50'
+                                              : 'bg-muted/80 hover:bg-muted text-muted-foreground hover:text-foreground border-border/60'
+                                          }`}
                                         >
-                                          <span className="h-1.5 w-1.5 rounded-full bg-current" />
-                                          {card.statusReal}
-                                        </span>
+                                          <MessageCircle className="h-3.5 w-3.5 text-emerald-500" />
+                                        </button>
                                       )}
                                     </div>
-                                    <p className={`text-[11px] font-mono ${
-                                      isConfirmed ? 'text-emerald-100' : 'text-muted-foreground'
-                                    }`}>
-                                      {card.prontuario} • {card.idade} anos
-                                    </p>
-                                  </div>
-                                  <span className={`text-[11px] font-semibold px-2 py-0.5 rounded border flex-shrink-0 whitespace-nowrap ${
-                                    isConfirmed
-                                      ? 'text-white bg-emerald-800 border-emerald-400 shadow-xs'
-                                      : 'text-primary bg-primary/10 border-primary/20'
-                                  }`}>
-                                    {card.horario}
-                                  </span>
-                                </div>
+                                  )}
 
-                                {/* Info Médica Completa: Médico (sem corte), CRM, Especialidade e Consultório */}
-                                <div className={`space-y-1.5 text-xs border-t pt-2 ${
-                                  isConfirmed ? 'border-emerald-500/50 text-emerald-100' : 'border-border/50 text-muted-foreground'
-                                }`}>
-                                  <div className="space-y-0.5">
-                                    <div className={`flex items-start gap-1.5 font-medium ${
-                                      isConfirmed ? 'text-white' : 'text-foreground'
-                                    }`}>
-                                      <Stethoscope className={`h-3.5 w-3.5 flex-shrink-0 mt-0.5 ${
-                                        isConfirmed ? 'text-emerald-200' : 'text-primary'
-                                      }`} />
-                                      <span className="break-words leading-tight">{card.medico}</span>
+                                  {/* Aviso de Cancelamento no Tasy para a coluna Canceladas */}
+                                  {card.status === 'Canceladas' && (
+                                    <div className="w-full flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-lg bg-rose-500/10 border border-rose-500/20 text-rose-600 dark:text-rose-400 text-[11px] font-semibold text-center">
+                                      <XCircle className="h-3.5 w-3.5 shrink-0" />
+                                      <span>Cancelado no Tasy</span>
                                     </div>
-                                    {card.crm && (
-                                      <p className={`text-[10px] font-mono pl-5 ${
-                                        isConfirmed ? 'text-emerald-200' : 'text-muted-foreground/80'
-                                      }`}>
-                                        {card.crm}
-                                      </p>
-                                    )}
-                                  </div>
-
-                                  <div className="flex flex-wrap items-center justify-between gap-1 text-[11px] pt-0.5">
-                                    <span className={`font-medium ${isConfirmed ? 'text-white' : 'text-foreground/80'}`}>
-                                      {card.especialidade}
-                                    </span>
-                                    <span className={`font-mono flex items-center gap-1 px-1.5 py-0.5 rounded ${
-                                      isConfirmed ? 'bg-emerald-700/80 text-emerald-100' : 'bg-muted/40 text-muted-foreground'
-                                    }`}>
-                                      <Building2 className={`h-3 w-3 ${isConfirmed ? 'text-emerald-200' : 'text-muted-foreground/70'}`} />
-                                      {card.consultorio}
-                                    </span>
-                                  </div>
-                                </div>
-
-                                {/* Telefone e Observações (quando existirem) */}
-                                {(card.telefone || card.observacoes) && (
-                                  <div className={`space-y-1.5 border-t pt-2 text-[11px] ${
-                                    isConfirmed ? 'border-emerald-500/50' : 'border-border/40'
-                                  }`}>
-                                    {card.telefone && (
-                                      <div className={`flex items-center gap-1.5 ${
-                                        isConfirmed ? 'text-emerald-100' : 'text-muted-foreground'
-                                      }`}>
-                                        <Phone className={`h-3 w-3 flex-shrink-0 ${
-                                          isConfirmed ? 'text-emerald-200' : 'text-primary/70'
-                                        }`} />
-                                        <span className="font-mono">{card.telefone}</span>
-                                      </div>
-                                    )}
-                                    {card.observacoes && (
-                                      <div className={`flex items-start gap-1.5 p-2 rounded-lg border leading-tight break-words ${
-                                        isConfirmed
-                                          ? 'bg-emerald-700/60 border-emerald-400 text-white'
-                                          : 'bg-muted/40 border-border/50 text-foreground/90'
-                                      }`}>
-                                        <FileText className={`h-3 w-3 mt-0.5 flex-shrink-0 ${
-                                          isConfirmed ? 'text-emerald-200' : 'text-muted-foreground/80'
-                                        }`} />
-                                        <span>{card.observacoes}</span>
-                                      </div>
-                                    )}
-                                  </div>
-                                )}
-
-                                {/* Footer do Card com Convênio e Ação de Mover */}
-                                <div className={`flex flex-wrap items-center justify-between gap-2 pt-2 border-t text-[11px] ${
-                                  isConfirmed ? 'border-emerald-500/50' : 'border-border/50'
-                                }`}>
-                                  <span className={`px-2 py-0.5 rounded font-medium break-words ${
-                                    isConfirmed ? 'bg-emerald-700 text-white font-semibold' : 'bg-muted text-foreground'
-                                  }`}>
-                                    {card.convenio}
-                                  </span>
-
-                                  {/* Controles de Movimentação Rápida */}
-                                  <div className="flex items-center gap-1">
-                                    <select
-                                      value={card.status}
-                                      onChange={e => moveCardToStatus(card.id, e.target.value as KanbanStatus)}
-                                      className={`text-[10px] rounded px-1.5 py-1 focus:outline-none cursor-pointer border ${
-                                        isConfirmed
-                                          ? 'bg-emerald-700 border-emerald-400 text-white font-medium'
-                                          : 'bg-background border-border/80 text-foreground'
-                                      }`}
-                                      title="Mover paciente para..."
-                                    >
-                                      {KANBAN_COLUMNS.map(c => (
-                                        <option key={c.id} value={c.id} className="bg-background text-foreground">
-                                          Mover: {c.label}
-                                        </option>
-                                      ))}
-                                    </select>
-                                  </div>
+                                  )}
                                 </div>
                               </div>
                             );
@@ -1499,29 +1932,29 @@ export default function CentroMedico() {
 
           {/* ── ABA ESCALAS ── */}
           {activeTab === 'escalas' && (
-            <div key="tab-escalas" className="space-y-3">
+            <div key="tab-escalas" className="space-y-3 w-full min-w-0">
               {filteredEscalas.length === 0 ? (
-                <div className="p-12 text-center text-muted-foreground space-y-2 border border-dashed border-border rounded-xl">
+                <div className="p-8 sm:p-12 text-center text-muted-foreground space-y-2 border border-dashed border-border rounded-xl">
                   <Users className="h-8 w-8 mx-auto text-muted-foreground/60" />
                   <p className="font-medium text-sm">Nenhum plantonista encontrado com os filtros aplicados.</p>
                 </div>
               ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 w-full min-w-0">
                   {filteredEscalas.map(escala => (
                     <div
                       key={escala.id}
-                      className="bg-background border border-border/70 p-4 rounded-xl shadow-xs hover:border-primary/40 transition-all flex flex-col justify-between gap-3 group"
+                      className="bg-background border border-border/70 p-3.5 sm:p-4 rounded-xl shadow-xs hover:border-primary/40 transition-all flex flex-col justify-between gap-3 group w-full min-w-0"
                     >
-                      <div className="space-y-2">
-                        <div className="flex items-start justify-between gap-2">
-                          <div>
-                            <h3 className="font-bold text-sm text-foreground group-hover:text-primary transition-colors">
+                      <div className="space-y-2 w-full min-w-0">
+                        <div className="flex items-start justify-between gap-2 w-full min-w-0">
+                          <div className="min-w-0 flex-1">
+                            <h3 className="font-bold text-sm text-foreground group-hover:text-primary transition-colors break-words">
                               {escala.medico}
                             </h3>
-                            <p className="text-xs text-muted-foreground font-mono">{escala.crm}</p>
+                            <p className="text-xs text-muted-foreground font-mono break-words">{escala.crm}</p>
                           </div>
                           <span
-                            className={`text-[11px] font-semibold px-2 py-0.5 rounded-full border ${
+                            className={`text-[11px] font-semibold px-2 py-0.5 rounded-full border shrink-0 break-words ${
                               escala.status === 'Presencial'
                                 ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-600 dark:text-emerald-400'
                                 : escala.status === 'Sobreaviso'
@@ -1535,26 +1968,26 @@ export default function CentroMedico() {
                           </span>
                         </div>
 
-                        <div className="space-y-1 text-xs text-muted-foreground">
-                          <div className="flex items-center gap-1.5">
-                            <Stethoscope className="h-3.5 w-3.5 text-primary" />
-                            <span className="font-medium text-foreground">{escala.especialidade}</span>
+                        <div className="space-y-1.5 text-xs text-muted-foreground w-full min-w-0">
+                          <div className="flex items-center gap-1.5 w-full min-w-0">
+                            <Stethoscope className="h-3.5 w-3.5 text-primary shrink-0" />
+                            <span className="font-medium text-foreground break-words min-w-0 flex-1">{escala.especialidade}</span>
                           </div>
-                          <div className="flex items-center gap-1.5">
-                            <Building2 className="h-3.5 w-3.5" />
-                            <span>{escala.setor}</span>
+                          <div className="flex items-center gap-1.5 w-full min-w-0">
+                            <Building2 className="h-3.5 w-3.5 shrink-0" />
+                            <span className="break-words min-w-0 flex-1">{escala.setor}</span>
                           </div>
-                          <div className="flex items-center gap-1.5">
-                            <Clock className="h-3.5 w-3.5" />
-                            <span>{escala.turno} ({escala.horario})</span>
+                          <div className="flex items-center gap-1.5 w-full min-w-0">
+                            <Clock className="h-3.5 w-3.5 shrink-0" />
+                            <span className="break-words min-w-0 flex-1">{escala.turno} ({escala.horario})</span>
                           </div>
                         </div>
                       </div>
 
-                      <div className="pt-2 border-t border-border/50 flex items-center justify-between text-xs">
-                        <div className="flex items-center gap-1 text-muted-foreground">
-                          <Phone className="h-3.5 w-3.5" />
-                          <span>{escala.contato}</span>
+                      <div className="pt-2 border-t border-border/50 flex items-center justify-between text-xs w-full min-w-0">
+                        <div className="flex items-center gap-1.5 text-muted-foreground min-w-0 flex-1">
+                          <Phone className="h-3.5 w-3.5 shrink-0" />
+                          <span className="break-words truncate">{escala.contato}</span>
                         </div>
                       </div>
                     </div>
@@ -1564,6 +1997,162 @@ export default function CentroMedico() {
             </div>
           )}
         </div>
+
+        {/* Notificações Flutuantes (Toast) com feedback detalhado de sincronização */}
+        <AnimatePresence>
+          {toast && (
+            <motion.div
+              initial={{ opacity: 0, y: -20, scale: 0.95 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: -20, scale: 0.95 }}
+              transition={{ duration: 0.2 }}
+              className="fixed top-5 right-5 z-50 max-w-md w-[calc(100vw-2.5rem)] sm:w-full shadow-2xl rounded-2xl overflow-hidden pointer-events-auto border backdrop-blur-md"
+            >
+              <div
+                className={`p-4 flex items-start gap-3.5 ${
+                  toast.type === 'success'
+                    ? 'bg-emerald-950/95 text-emerald-100 border-emerald-500/50 shadow-emerald-500/10'
+                    : toast.type === 'error'
+                    ? 'bg-rose-950/95 text-rose-100 border-rose-500/50 shadow-rose-500/10'
+                    : 'bg-slate-900/95 text-slate-100 border-blue-500/50 shadow-blue-500/10'
+                }`}
+              >
+                <div className="shrink-0 mt-0.5">
+                  {toast.type === 'success' && <CheckCircle2 className="h-5 w-5 text-emerald-400" />}
+                  {toast.type === 'error' && <AlertCircle className="h-5 w-5 text-rose-400" />}
+                  {toast.type === 'info' && <RefreshCw className="h-5 w-5 text-blue-400 animate-spin" />}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-semibold uppercase tracking-wider opacity-80">
+                    {toast.type === 'success' ? 'Sincronização Concluída' : toast.type === 'error' ? 'Atenção na Sincronização' : 'Atualizando Agenda'}
+                  </p>
+                  <p className="text-sm mt-0.5 leading-relaxed break-words">{toast.message}</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setToast(null)}
+                  className="text-white/60 hover:text-white p-1 rounded-lg hover:bg-white/10 transition-colors shrink-0"
+                  title="Fechar notificação"
+                >
+                  <XCircle className="h-4 w-4" />
+                </button>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Modal de Diagnóstico da Resposta do n8n */}
+        <AnimatePresence>
+          {debugModalOpen && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-sm"
+              onClick={() => setDebugModalOpen(false)}
+            >
+              <motion.div
+                initial={{ scale: 0.95, opacity: 0, y: 10 }}
+                animate={{ scale: 1, opacity: 1, y: 0 }}
+                exit={{ scale: 0.95, opacity: 0, y: 10 }}
+                onClick={(e) => e.stopPropagation()}
+                className="bg-card border border-border rounded-2xl shadow-2xl max-w-2xl w-full max-h-[85vh] flex flex-col overflow-hidden"
+              >
+                <div className="flex items-center justify-between p-4 border-b border-border bg-muted/20">
+                  <div className="flex items-center gap-2">
+                    <Activity className="h-5 w-5 text-primary" />
+                    <h3 className="font-bold text-sm sm:text-base text-foreground">
+                      Diagnóstico da Resposta n8n
+                    </h3>
+                  </div>
+                  <button
+                    onClick={() => setDebugModalOpen(false)}
+                    className="p-1 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors cursor-pointer"
+                  >
+                    <XCircle className="h-5 w-5" />
+                  </button>
+                </div>
+
+                <div className="p-4 space-y-4 overflow-y-auto text-xs">
+                  <div className="grid grid-cols-2 gap-2.5 p-3.5 bg-muted/40 rounded-xl border border-border/50">
+                    <div>
+                      <span className="text-muted-foreground font-medium">Data Consultada:</span>
+                      <p className="font-semibold text-foreground text-sm">{debugData?.targetDate || selectedDate}</p>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground font-medium">Horário da Consulta:</span>
+                      <p className="font-semibold text-foreground text-sm">{debugData?.timestamp || '-'}</p>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground font-medium">Registros Encontrados:</span>
+                      <p className={`font-bold text-sm ${debugData?.count && debugData.count > 0 ? 'text-emerald-500' : 'text-amber-500'}`}>
+                        {debugData?.count ?? 0} agendamento(s)
+                      </p>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground font-medium">Método HTTP:</span>
+                      <p className="font-semibold text-foreground text-sm">{debugData?.method || 'POST'}</p>
+                    </div>
+                    <div className="col-span-2">
+                      <span className="text-muted-foreground font-medium">URL do Webhook:</span>
+                      <p className="font-mono text-[11px] text-foreground break-all">{debugData?.url || '-'}</p>
+                    </div>
+                  </div>
+
+                  {debugData?.error && (
+                    <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-500 text-xs">
+                      <strong>Aviso / Erro:</strong> {debugData.error}
+                    </div>
+                  )}
+
+                  <div>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <span className="font-semibold text-foreground">Dados Brutos Retornados pelo n8n (JSON):</span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          navigator.clipboard.writeText(JSON.stringify(debugData?.raw, null, 2));
+                          showToast('success', 'JSON copiado para a área de transferência!');
+                        }}
+                        className="text-[11px] text-primary hover:underline font-medium cursor-pointer"
+                      >
+                        Copiar JSON
+                      </button>
+                    </div>
+                    <pre className="p-3 bg-muted rounded-xl text-[11px] font-mono overflow-x-auto max-h-60 border border-border/60 text-foreground">
+                      {JSON.stringify(debugData?.raw, null, 2)}
+                    </pre>
+                  </div>
+
+                  <div className="flex items-center justify-between pt-2 border-t border-border">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setConsultas(INITIAL_CONSULTAS);
+                        setUsingMock(true);
+                        setDebugModalOpen(false);
+                        showToast('info', 'Dados de demonstração (mock) restaurados.');
+                      }}
+                      className="px-3 py-1.5 rounded-xl border border-border text-muted-foreground hover:text-foreground text-xs font-medium cursor-pointer"
+                    >
+                      Restaurar Mock de Exemplo
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        handleSyncWebhook();
+                        setDebugModalOpen(false);
+                      }}
+                      className="px-4 py-1.5 rounded-xl bg-primary text-primary-foreground text-xs font-semibold hover:bg-primary/90 cursor-pointer"
+                    >
+                      Consultar Novamente
+                    </button>
+                  </div>
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
   );
 }
