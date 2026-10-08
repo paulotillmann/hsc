@@ -31,7 +31,31 @@ interface UsePermissionsReturn {
  */
 export function usePermissions(): UsePermissionsReturn {
   const { permissions, isAdmin, userModules: rawUserModules } = useAuth();
-  const userModules = rawUserModules;
+  // Retorna os módulos do usuário com fallback de injeção em localhost para desenvolvimento
+  const userModules = useMemo(() => {
+    const isLocalhost = typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+    if (isLocalhost) {
+      const hasCentroMedico = rawUserModules.some(m => m.slug === 'centro-medico');
+      if (!hasCentroMedico) {
+        return [
+          ...rawUserModules,
+          {
+            id: 'centro-medico-dev',
+            name: 'Centro Médico',
+            slug: 'centro-medico',
+            icon: 'Stethoscope',
+            description: 'Módulo de escalas médicas, consultas e agendamentos do Centro Médico',
+            is_active: true,
+            sort_order: 75,
+            is_system: false,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          } as Module
+        ];
+      }
+    }
+    return rawUserModules;
+  }, [rawUserModules]);
 
   // Verifica permissão de ação (colunas booleanas na tabela roles)
   const can = useCallback(

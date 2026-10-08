@@ -20,6 +20,7 @@ import ProntoAtendimento from './pages/ProntoAtendimento';
 import PainelTVPA from './pages/ProntoAtendimento/PainelTVPA';
 import EscutaLanding from './pages/EscutaSantaCasa/EscutaLanding';
 import NovaDenuncia from './pages/EscutaSantaCasa/NovaDenuncia';
+import ConfirmarConsultaPublica from './pages/CentroMedico/ConfirmarConsultaPublica';
 
 const App: React.FC = () => {
   // Configuração Global de Tema
@@ -42,6 +43,10 @@ const App: React.FC = () => {
           {/* Canal de Escuta Público e Formulário (Totalmente Públicos - Sem Login) */}
           <Route path="/escuta-santa-casa" element={<EscutaLanding />} />
           <Route path="/escuta-santa-casa/nova-denuncia" element={<NovaDenuncia />} />
+
+          {/* Tela Pública e Independente de Confirmação de Consulta do Paciente */}
+          <Route path="/confirmar-consulta" element={<ConfirmarConsultaPublica />} />
+          <Route path="/confirmar-consulta/:id" element={<ConfirmarConsultaPublica />} />
 
           {/* Rotas protegidas — exigem sessão ativa */}
           <Route element={<PrivateRoute />}>

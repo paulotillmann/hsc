@@ -24,6 +24,7 @@ const Sidebar: React.FC = () => {
     if (window.location.pathname.startsWith('/financeiro')) return 'financeiro';
     if (window.location.pathname.startsWith('/gestao-escuta-santa-casa')) return 'gestao-escuta-santa-casa';
     if (window.location.pathname.startsWith('/gestao-prontuarios')) return 'gestao-prontuarios';
+    if (window.location.pathname.startsWith('/centro-medico')) return 'centro-medico';
     if (window.location.pathname.startsWith('/plantao-ti') || window.location.pathname.startsWith('/ordem-servico') || window.location.pathname.startsWith('/ordem-servico-mobile') || window.location.pathname.startsWith('/equipamentos') || window.location.pathname.startsWith('/custos-ti') || window.location.pathname.startsWith('/usuarios-tasy')) return 'tecnologia-informacao';
     if (window.location.pathname.startsWith('/dashboard') || window.location.pathname.startsWith('/holerites') || window.location.pathname.startsWith('/informes')) return 'recursos-humanos';
     if (window.location.pathname.startsWith('/internato-secretaria') || window.location.pathname.startsWith('/internato-notas') || window.location.pathname.startsWith('/internato-agenda')) return 'internato';
@@ -63,6 +64,8 @@ const Sidebar: React.FC = () => {
       setExpandedMenu('gestao-escuta-santa-casa');
     } else if (location.pathname.startsWith('/gestao-prontuarios')) {
       setExpandedMenu('gestao-prontuarios');
+    } else if (location.pathname.startsWith('/centro-medico')) {
+      setExpandedMenu('centro-medico');
     } else if (location.pathname.startsWith('/plantao-ti') || location.pathname.startsWith('/ordem-servico') || location.pathname.startsWith('/ordem-servico-mobile') || location.pathname.startsWith('/equipamentos') || location.pathname.startsWith('/custos-ti') || location.pathname.startsWith('/usuarios-tasy')) {
       setExpandedMenu('tecnologia-informacao');
     } else if (location.pathname.startsWith('/dashboard') || location.pathname.startsWith('/holerites') || location.pathname.startsWith('/informes')) {
@@ -1143,7 +1146,71 @@ const Sidebar: React.FC = () => {
           );
         })()}
 
-        {/* 12. Demais Módulos Dinâmicos Individuais (Ordenados em ordem alfabética) */}
+        {/* 12. Centro Médico (Agrupador) */}
+        {(() => {
+          const hasCentroMedicoAccess = isAdmin || userModules.some(m => m.slug === 'centro-medico');
+          const isCentroMedicoActive = location.pathname.startsWith('/centro-medico');
+          if (!hasCentroMedicoAccess) return null;
+
+          return (
+            <div className="flex flex-col">
+              {isCollapsed ? (
+                <NavLink
+                  to="/centro-medico"
+                  title="Centro Médico"
+                  className={navLinkClass(isCentroMedicoActive)}
+                >
+                  <DynamicIcon name="Stethoscope" className="h-5 w-5 flex-shrink-0" />
+                </NavLink>
+              ) : (
+                <button
+                  onClick={() => {
+                    setExpandedMenu(expandedMenu === 'centro-medico' ? null : 'centro-medico');
+                    if (!isCentroMedicoActive) navigate('/centro-medico');
+                  }}
+                  className={`flex items-center rounded-md text-sm transition-all duration-200 justify-start gap-3 px-3 py-2 w-full ${isCentroMedicoActive
+                    ? 'bg-primary text-primary-foreground shadow-sm hover:shadow-md hover:shadow-primary/20 font-medium'
+                    : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
+                    }`}
+                >
+                  <DynamicIcon name="Stethoscope" className="h-5 w-5 flex-shrink-0" />
+                  <div className="flex flex-1 items-center justify-between">
+                    <span className="truncate">Centro Médico</span>
+                    <ChevronRight className={`h-4 w-4 transition-transform ${expandedMenu === 'centro-medico' ? 'rotate-90' : ''}`} />
+                  </div>
+                </button>
+              )}
+
+              {!isCollapsed && expandedMenu === 'centro-medico' && (
+                <div className="flex flex-col ml-9 mt-1 gap-1 border-l-2 border-border pl-2 border-primary/20">
+                  <NavLink
+                    to="/centro-medico"
+                    end
+                    className={({ isActive }) =>
+                      `text-sm px-3 py-2 rounded-md transition-colors ${isActive
+                        ? 'bg-primary text-primary-foreground shadow-sm font-medium'
+                        : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
+                      }`
+                    }
+                  >
+                    Agendamentos
+                  </NavLink>
+                  <a
+                    href="/confirmar-consulta"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-sm px-3 py-2 rounded-md transition-colors flex items-center justify-between text-muted-foreground hover:bg-muted hover:text-foreground font-medium"
+                  >
+                    <span>Confirmação de Consulta</span>
+                    <DynamicIcon name="ExternalLink" className="h-3.5 w-3.5 opacity-60" />
+                  </a>
+                </div>
+              )}
+            </div>
+          );
+        })()}
+
+        {/* 13. Demais Módulos Dinâmicos Individuais (Ordenados em ordem alfabética) */}
         {userModules
           .filter(m => 
             m.slug !== 'configuracoes' &&
@@ -1171,7 +1238,8 @@ const Sidebar: React.FC = () => {
             m.slug !== 'ordem-servico-mobile' &&
             m.slug !== 'equipamentos' &&
             m.slug !== 'custos-ti' &&
-            m.slug !== 'usuarios-tasy'
+            m.slug !== 'usuarios-tasy' &&
+            m.slug !== 'centro-medico'
           )
           .sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'))
           .map(module => (
