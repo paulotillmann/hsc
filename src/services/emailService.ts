@@ -29,8 +29,27 @@ export async function sendDocumentEmail(params: SendDocumentEmailParams): Promis
     });
 
     if (error) {
-      console.error('[Email] Erro ao enviar:', error);
-      return { success: false, error: error.message || 'Falha ao enviar e-mail.' };
+      let errorMessage = error.message;
+      if ('context' in error && error.context) {
+        try {
+          const ctx: any = error.context;
+          if (typeof ctx.json === 'function') {
+            const errBody = await ctx.json();
+            if (errBody?.error) errorMessage = errBody.error;
+          } else if (typeof ctx.text === 'function') {
+            const errText = await ctx.text();
+            try {
+              const parsed = JSON.parse(errText);
+              if (parsed?.error) errorMessage = parsed.error;
+              else if (errText) errorMessage = errText;
+            } catch {
+              if (errText) errorMessage = errText;
+            }
+          }
+        } catch (_) {}
+      }
+      console.error('[Email] Erro detalhado ao enviar:', errorMessage, error);
+      return { success: false, error: errorMessage || 'Falha ao enviar e-mail.' };
     }
 
     if (data?.error) {

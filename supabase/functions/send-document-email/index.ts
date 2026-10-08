@@ -39,10 +39,27 @@ async function getSmtpConfig(): Promise<SmtpConfig> {
   const config: Record<string, string> = {};
   for (const row of data) config[row.key] = row.value;
 
-  if (!config.smtp_host || !config.smtp_port || !config.smtp_user || !config.smtp_pass) {
-    throw new Error('Configurações SMTP incompletas. Verifique host, porta, usuário e senha.');
+  const host = config.smtp_host || '';
+  const port = config.smtp_port || '587';
+  const user = config.smtp_user || '';
+  const pass = config.smtp_pass || '';
+  const fromName = config.smtp_from_name || 'Hospital Santa Casa';
+  const fromEmail = config.smtp_from_email || user;
+  const secure = config.smtp_secure || 'tls';
+
+  if (!host || !user || !pass) {
+    throw new Error('Configurações SMTP incompletas. Verifique host, porta, usuário e senha em Configurações.');
   }
-  return config as unknown as SmtpConfig;
+
+  return {
+    smtp_host: host,
+    smtp_port: port,
+    smtp_user: user,
+    smtp_pass: pass,
+    smtp_from_name: fromName,
+    smtp_from_email: fromEmail,
+    smtp_secure: secure,
+  };
 }
 
 // ---------- Encoder/Decoder helpers ----------
@@ -69,10 +86,35 @@ async function sendCommand(
   return await readResponse(reader);
 }
 
+// ---------- Normaliza e limpa endereços de e-mail ----------
+function extractCleanRecipients(raw: string | string[]): string[] {
+  const list = Array.isArray(raw) ? raw : [raw];
+  const results: string[] = [];
+  for (const item of list) {
+    if (!item || typeof item !== 'string') continue;
+    // Divide por vírgula, ponto-e-vírgula ou quebras de linha caso haja múltiplos
+    const parts = item.split(/[,;\n\r]+/);
+    for (const part of parts) {
+      // Se vier como "Nome <email@dominio.com>", extrai o conteúdo entre <>
+      const match = part.match(/<([^>]+)>/);
+      const emailCandidate = (match ? match[1] : part).trim();
+      // Remove aspas simples/duplas, parênteses e espaços
+      const clean = emailCandidate.replace(/[<>'"\(\)\s]/g, '').toLowerCase();
+      // Valida sintaxe padrão RFC
+      if (clean && /^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$/.test(clean)) {
+        if (!results.includes(clean)) {
+          results.push(clean);
+        }
+      }
+    }
+  }
+  return results;
+}
+
 // ---------- Envio via SMTP raw (Deno.connect + STARTTLS) ----------
 async function sendEmailViaSMTP(
   smtp: SmtpConfig,
-  to: string,
+  recipients: string[],
   subject: string,
   html: string
 ): Promise<void> {
@@ -119,19 +161,22 @@ async function sendEmailViaSMTP(
   const passResp = await sendCommand(writer, reader, btoa(smtp.smtp_pass));
   if (!passResp.startsWith('235')) throw new Error(`AUTH password failed: ${passResp}`);
 
-  const fromResp = await sendCommand(writer, reader, `MAIL FROM:<${smtp.smtp_from_email}>`);
+  const fromEmail = (smtp.smtp_from_email || smtp.smtp_user).replace(/[<>'"]+/g, '').trim();
+  const fromResp = await sendCommand(writer, reader, `MAIL FROM:<${fromEmail}>`);
   if (!fromResp.startsWith('250')) throw new Error(`MAIL FROM failed: ${fromResp}`);
 
-  const rcptResp = await sendCommand(writer, reader, `RCPT TO:<${to}>`);
-  if (!rcptResp.startsWith('250')) throw new Error(`RCPT TO failed: ${rcptResp}`);
+  for (const rcpt of recipients) {
+    const rcptResp = await sendCommand(writer, reader, `RCPT TO:<${rcpt}>`);
+    if (!rcptResp.startsWith('250')) throw new Error(`Falha no destinatário (${rcpt}): ${rcptResp}`);
+  }
 
   const dataResp = await sendCommand(writer, reader, 'DATA');
   if (!dataResp.startsWith('354')) throw new Error(`DATA failed: ${dataResp}`);
 
   const boundary = `boundary_${Date.now()}`;
   const message = [
-    `From: ${smtp.smtp_from_name} <${smtp.smtp_from_email}>`,
-    `To: ${to}`,
+    `From: ${smtp.smtp_from_name} <${fromEmail}>`,
+    `To: ${recipients.join(', ')}`,
     `Subject: =?UTF-8?B?${btoa(unescape(encodeURIComponent(subject)))}?=`,
     `MIME-Version: 1.0`,
     `Content-Type: multipart/alternative; boundary="${boundary}"`,
@@ -223,8 +268,20 @@ Deno.serve(async (req: Request) => {
 
   try {
     const payload: EmailPayload = await req.json();
-    if (!payload.to || !payload.nomeColaborador) {
-      return new Response(JSON.stringify({ error: 'Campos obrigatórios: to, nomeColaborador' }), { status: 400, headers: corsHeaders });
+    const cleanRecipients = extractCleanRecipients(payload.to);
+
+    if (cleanRecipients.length === 0) {
+      return new Response(
+        JSON.stringify({ error: `E-mail de destino inválido: "${payload.to}". Por favor, edite o e-mail do colaborador com um endereço válido (ex: nome@dominio.com).` }),
+        { status: 400, headers: corsHeaders }
+      );
+    }
+
+    if (!payload.nomeColaborador) {
+      return new Response(
+        JSON.stringify({ error: 'Nome do colaborador não informado.' }),
+        { status: 400, headers: corsHeaders }
+      );
     }
 
     const smtp = await getSmtpConfig();
@@ -234,7 +291,7 @@ Deno.serve(async (req: Request) => {
       : `${tipoLabel} - ${payload.periodoReferencia} | Hospital Santa Casa`;
     const html = buildEmailHtml(payload);
 
-    await sendEmailViaSMTP(smtp, payload.to, subject, html);
+    await sendEmailViaSMTP(smtp, cleanRecipients, subject, html);
 
     return new Response(JSON.stringify({ success: true }), { headers: corsHeaders });
   } catch (err) {

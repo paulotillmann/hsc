@@ -91,22 +91,30 @@ interface ExtractedData {
   totalLiquido: number | null;
 }
 
+function cleanExtractedName(rawName: string): string {
+  return rawName
+    .replace(/^Nome(?:\s+do)?\s+Funcion[aá]rio\s*/i, '')
+    .replace(/\b(?:FL|CBO|Empresa|Local|Departamento)\b.*$/i, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 /**
  * Extrai CPF, Nome, Mês/Ano e Total Líquido do texto de uma página de holerite.
  *
- * Estrutura do PDF (mapeada via análise do HOL-01A20-DEZ25.pdf):
- *   - CPF:          "CPF: 865.140.679-72"
- *   - Mês/Ano:      "12/2025" (aparece após "ARAGUARI")
- *   - Nome:         texto entre o número de cadastro e o código CBO (6 dígitos)
+ * Suporta formatos consolidados da Santa Casa de Araguari:
+ *   - CPF:          "CPF: 753.734.676-34"
+ *   - Mês/Ano:      "09/2026 Mensal" ou "12/2025" (competência principal)
+ *   - Nome:         texto entre o cadastro (1-6 dígitos) e o CBO (6 dígitos) ou âncoras da tabela
  *   - TotalLíquido: valor numérico imediatamente após "Total Líquido"
  *
- * O conteúdo de cada página aparece DUPLICADO (holerite impresso 2x para recibo).
- * Por isso usamos a PRIMEIRA ocorrência de cada campo.
+ * O conteúdo de cada página pode aparecer duplicado (recibo).
+ * Usamos a primeira ocorrência válida de cada campo.
  */
 function extractDadosHolerite(text: string): ExtractedData {
-  // 1. CPF: "CPF: XXX.XXX.XXX-XX" (com tolerância a falhas de pontuação/espaços no OCR)
+  // 1. CPF: "CPF: XXX.XXX.XXX-XX" (com tolerância a pontuação/espaços)
   let cpf: string | null = null;
-  const cpfRawMatch = text.match(/CPF:\s*([\d\s.-]+)/i);
+  const cpfRawMatch = text.match(/CPF[:\s]*([\d\s.-]+)/i);
   if (cpfRawMatch) {
     const cleaned = cpfRawMatch[1].replace(/\D/g, '');
     if (cleaned.length >= 11) {
@@ -115,40 +123,74 @@ function extractDadosHolerite(text: string): ExtractedData {
     }
   }
 
-  // 2. Mês/Ano: MM/YYYY ou MMYYYY
+  // 2. Mês/Ano: prioriza a competência do cabeçalho da folha (ex: "09/2026 Mensal", "Araguari - MG 09/2026")
   let mesAno: string | null = null;
-  const mesAnoMatch = text.match(/\b(0[1-9]|1[0-2])\/?(20\d{2})\b/);
-  if (mesAnoMatch) {
-    mesAno = `${mesAnoMatch[1]}/${mesAnoMatch[2]}`;
+  const mesAnoHeadMatch = text.match(/(?:Araguari\s*[-–]\s*MG\s+)?\b(0[1-9]|1[0-2])\/(20\d{2})\s+(?:Mensal|Adiantamento|Folha|Rescis|13[ºo])/i) ||
+                          text.match(/Araguari\s*[-–]\s*MG\s+\b(0[1-9]|1[0-2])\/(20\d{2})\b/i);
+  if (mesAnoHeadMatch) {
+    mesAno = `${mesAnoHeadMatch[1]}/${mesAnoHeadMatch[2]}`;
+  } else {
+    // Fallback geral para formato MM/YYYY
+    const mesAnoMatch = text.match(/\b(0[1-9]|1[0-2])\/?(20\d{2})\b/);
+    if (mesAnoMatch) {
+      mesAno = `${mesAnoMatch[1]}/${mesAnoMatch[2]}`;
+    }
   }
 
-  // 3. Nome
+  // 3. Nome Completo
   let nomeCompleto: string | null = null;
-  // Tenta padrão: cadastro (1-5 dígitos) + NOME + CBO (6 dígitos)
-  const nomeMatch = text.match(/\b(?:FL\s*)?\d{1,5}\s+([A-ZÀÁÂÃÇÉÊÍÓÔÕÚ][A-ZÀÁÂÃÇÉÊÍÓÔÕÚ\s]+?)\s+\d{6}\b/);
+
+  // Padrão 1: Matrícula (1-6 dígitos) + NOME (incluindo apóstrofos D'ARC, acentos, etc.) + CBO (6 dígitos)
+  const nomeMatch = text.match(/\b(?:FL\s*\d{1,2}\s+)?\b\d{1,6}\s+([A-Za-zÀ-ÖØ-öø-ÿ'’.\s-]+?)\s+\d{6}\b/);
   if (nomeMatch) {
-    nomeCompleto = nomeMatch[1].trim();
-  } else {
-    // Fallback: busca por "Nome do Funcionário" (com tolerância a grafia do OCR) e analisa as linhas subsequentes
+    const candidate = cleanExtractedName(nomeMatch[1]);
+    if (candidate.length >= 4 && candidate.split(' ').length >= 2) {
+      nomeCompleto = candidate.toUpperCase();
+    }
+  }
+
+  // Padrão 2 (Fallback por âncora "Nome do Funcionário"):
+  if (!nomeCompleto) {
     const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
-    const idx = lines.findIndex(l => /Nome do Funcion/i.test(l));
+    const idx = lines.findIndex(l => /Nome(?:\s+do)?\s+Funcion/i.test(l));
     if (idx !== -1) {
-      for (let j = idx + 1; j < Math.min(idx + 5, lines.length); j++) {
-        const line = lines[j];
-        if (/^[A-ZÀÁÂÃÇÉÊÍÓÔÕÚ\s]{6,}$/.test(line) && 
-            line.split(/\s+/).length >= 2 &&
-            !/Cadastro|CBO|Empresa|Local|Departamento|FL|ANALISTA|ASSISTENTE|AUXILIAR|TECNICO|TECNICA|GERENTE|DIRETOR|COORDENADOR|RECEPCIONISTA|MOTORISTA/i.test(line)) {
-          nomeCompleto = line;
+      for (let j = idx + 1; j < Math.min(idx + 6, lines.length); j++) {
+        let line = lines[j];
+        // Remove prefixo numérico se tiver matrícula na frente da linha
+        line = line.replace(/^\d{1,6}\s+/, '');
+        // Remove CBO no final se houver
+        line = line.replace(/\s+\d{6}.*$/, '');
+        line = cleanExtractedName(line);
+
+        if (
+          /^[A-Za-zÀ-ÖØ-öø-ÿ'’.\s-]+$/.test(line) &&
+          line.split(/\s+/).length >= 2 &&
+          line.length >= 5 &&
+          !/Cadastro|CBO|Empresa|Local|Departamento|FL|CNPJ|CPF|Demonstrativo|Santa Casa|Data Admiss|Sal[aá]rio|Total/i.test(line)
+        ) {
+          nomeCompleto = line.toUpperCase();
           break;
         }
       }
     }
   }
 
-  // 4. Total Líquido (prioriza valor após "Total Líquido", depois valor antes)
+  // Padrão 3 (Fallback inline geral):
+  if (!nomeCompleto) {
+    const fallbackInline = text.match(/Nome(?:\s+do)?\s+Funcion[aá]rio[^\n]*\n(?:\d{1,6}\s+)?([A-Za-zÀ-ÖØ-öø-ÿ'’.\s-]+?)(?:\s+\d{6}|\n|$)/i);
+    if (fallbackInline) {
+      const candidate = cleanExtractedName(fallbackInline[1]);
+      if (candidate.length >= 4 && candidate.split(' ').length >= 2) {
+        nomeCompleto = candidate.toUpperCase();
+      }
+    }
+  }
+
+  // 4. Total Líquido
   let totalLiquido: number | null = null;
-  const totalMatchAfter = text.match(/Total\s+L[\s\S]{1,8}?do\s+([\d.,]+)/i);
-  const totalMatchBefore = text.match(/([\d.,]+)\s+Total\s+L[\s\S]{1,8}?do/i);
+  const totalMatchAfter = text.match(/Total\s+L[íi\s]*quido[:\s]*([\d.,]+)/i) ||
+                          text.match(/Total\s+L[\s\S]{1,8}?do[:\s]*([\d.,]+)/i);
+  const totalMatchBefore = text.match(/([\d.,]+)\s+Total\s+L[íi\s]*quido/i);
   const totalMatch = totalMatchAfter || totalMatchBefore;
   if (totalMatch) {
     const rawValue = totalMatch[1].replace(/\./g, '').replace(',', '.');
@@ -166,7 +208,26 @@ function extractDadosHolerite(text: string): ExtractedData {
 
 async function getPageText(page: any): Promise<string> {
   const content = await page.getTextContent();
-  return content.items.map((item: any) => item.str).join(' ');
+  let lastY: number | null = null;
+  let text = '';
+  for (const item of content.items as any[]) {
+    if (!item.str) continue;
+    if (item.transform && typeof item.transform[5] === 'number') {
+      const currentY = item.transform[5];
+      if (lastY !== null && Math.abs(currentY - lastY) > 5) {
+        text += '\n';
+      } else if (text.length > 0 && !text.endsWith('\n') && !text.endsWith(' ')) {
+        text += ' ';
+      }
+      lastY = currentY;
+    } else {
+      if (text.length > 0 && !text.endsWith('\n') && !text.endsWith(' ')) {
+        text += ' ';
+      }
+    }
+    text += item.str;
+  }
+  return text;
 }
 
 /**
