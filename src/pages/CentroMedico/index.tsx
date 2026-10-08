@@ -1451,8 +1451,8 @@ export default function CentroMedico() {
         <div className="absolute top-0 right-0 -mt-8 -mr-8 w-40 h-40 bg-primary/5 rounded-full blur-3xl pointer-events-none" />
 
         <div className="flex flex-col xl:flex-row items-stretch xl:items-center justify-between gap-3.5 relative z-10 w-full min-w-0">
-          {/* Lado Esquerdo: Abas de Navegação (Pill Container com Scroll Suave no Mobile) */}
-          <div className="flex items-center bg-muted/60 p-1.5 rounded-2xl border border-border/50 shadow-inner gap-1 overflow-x-auto max-w-full w-full sm:w-auto">
+          {/* Lado Esquerdo: Abas de Navegação */}
+          <div className="flex items-center bg-muted/60 p-1.5 rounded-2xl border border-border/50 shadow-inner gap-1 max-w-full w-full sm:w-auto shrink-0">
             <button
               onClick={() => {
                 setActiveTab('kanban');
@@ -1492,8 +1492,8 @@ export default function CentroMedico() {
 
           {/* Lado Direito: Controle de Datas e Especialidades Fluido */}
           <div className="flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center gap-2.5 w-full xl:w-auto min-w-0">
-            {/* Seletor de Data em Pill Box com Adaptação Completa */}
-            <div className="flex items-center justify-between sm:justify-start gap-1 bg-background border border-border/80 p-1 rounded-2xl text-xs shadow-xs hover:border-primary/40 transition-all w-full sm:w-auto min-w-0 overflow-x-auto">
+            {/* Seletor de Data em Pill Box sem barra de rolagem */}
+            <div className="flex items-center justify-between sm:justify-start gap-1 bg-background border border-border/80 p-1 rounded-2xl text-xs shadow-xs hover:border-primary/40 transition-all w-full sm:w-auto shrink-0">
               <button
                 onClick={() => handleStepDay(-1)}
                 title="Dia Anterior"
@@ -1503,13 +1503,13 @@ export default function CentroMedico() {
                 <span className="hidden sm:inline">Anterior</span>
               </button>
 
-              <div className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 bg-muted/40 rounded-xl border border-border/40 hover:bg-muted/70 transition-colors shrink-0">
+              <div className="flex items-center gap-1.5 px-2 sm:px-2.5 py-1.5 bg-muted/40 rounded-xl border border-border/40 hover:bg-muted/70 transition-colors shrink-0">
                 <Calendar className="h-3.5 w-3.5 text-primary shrink-0" />
                 <input
                   type="date"
                   value={selectedDate}
                   onChange={e => handleDateChange(e.target.value)}
-                  className="bg-transparent text-foreground font-semibold focus:outline-none cursor-pointer text-xs w-[115px] sm:w-[125px]"
+                  className="bg-transparent text-foreground font-semibold focus:outline-none cursor-pointer text-xs w-[105px] sm:w-[115px]"
                 />
               </div>
 
@@ -1607,8 +1607,8 @@ export default function CentroMedico() {
         {/* ── ABA KANBAN ── */}
         {activeTab === 'kanban' && (
           <div key="tab-kanban" className="space-y-3 w-full min-w-0">
-              {/* Grid das Colunas Kanban (4 colunas principais com distribuição perfeita no desktop sem cortes) */}
-              <div className="grid grid-flow-col auto-cols-[300px] sm:auto-cols-[320px] lg:auto-cols-fr lg:grid-flow-row lg:grid-cols-4 gap-4 items-stretch overflow-x-auto pb-4 custom-scrollbar w-full min-w-0">
+              {/* Grid das Colunas Kanban (4 colunas principais com distribuição perfeita e fluida sem barra de rolagem desnecessária) */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 items-stretch w-full min-w-0 pb-4">
                 {KANBAN_COLUMNS.map(col => {
                   let colCards = filteredConsultas.filter(c => c.status === col.id);
 
