@@ -7,6 +7,7 @@ export interface ColaboradorTI {
   id: string;
   full_name: string;
   email: string;
+  avatar_url?: string | null;
 }
 
 export interface OcorrenciaPlantao {
@@ -28,6 +29,7 @@ export interface EscalaPlantao {
     id: string;
     full_name: string;
     email: string;
+    avatar_url?: string | null;
   } | null;
 }
 
@@ -42,7 +44,7 @@ export const ALLOWED_EMAILS = [
 export async function fetchColaboradoresTI(): Promise<ColaboradorTI[]> {
   const { data, error } = await supabase
     .from('profiles')
-    .select('id, full_name, email')
+    .select('id, full_name, email, avatar_url')
     .in('email', ALLOWED_EMAILS)
     .order('full_name');
 
@@ -71,7 +73,8 @@ export async function fetchEscalasMes(ano: number, mes: number): Promise<EscalaP
       profiles (
         id,
         full_name,
-        email
+        email,
+        avatar_url
       ),
       plantao_ti_ocorrencias (
         id,
@@ -122,6 +125,65 @@ export async function adicionarPlantonista(
   }
 
   return { success: true };
+}
+
+// ── Adiciona múltiplos dias em lote para um colaborador ─────────────────────
+export async function adicionarPlantonistasEmLote(
+  datas: string[],
+  usuarioId: string
+): Promise<{ success: boolean; insertedCount: number; error?: string }> {
+  if (datas.length === 0) return { success: true, insertedCount: 0 };
+
+  const records = datas.map(data => ({
+    data_plantao: data,
+    usuario_id: usuarioId,
+  }));
+
+  const { data, error } = await supabase
+    .from('plantao_ti_escala')
+    .upsert(records, { onConflict: 'data_plantao,usuario_id', ignoreDuplicates: true })
+    .select('id');
+
+  if (error) {
+    console.error('Erro ao adicionar plantonistas em lote:', error);
+    return { success: false, insertedCount: 0, error: error.message };
+  }
+
+  return { success: true, insertedCount: data?.length ?? records.length };
+}
+
+// ── Remove um colaborador de uma data específica ────────────────────────────
+export async function removerPlantonistaDia(
+  data: string,
+  usuarioId: string
+): Promise<{ success: boolean; error?: string }> {
+  const { error } = await supabase
+    .from('plantao_ti_escala')
+    .delete()
+    .eq('data_plantao', data)
+    .eq('usuario_id', usuarioId);
+
+  return error ? { success: false, error: error.message } : { success: true };
+}
+
+// ── Limpa todos os plantões de um colaborador no mês ────────────────────────
+export async function limparEscalasMesColaborador(
+  ano: number,
+  mes: number,
+  usuarioId: string
+): Promise<{ success: boolean; error?: string }> {
+  const startDate = `${ano}-${String(mes).padStart(2, '0')}-01`;
+  const ultimoDia = new Date(ano, mes, 0).getDate();
+  const endDate = `${ano}-${String(mes).padStart(2, '0')}-${String(ultimoDia).padStart(2, '0')}`;
+
+  const { error } = await supabase
+    .from('plantao_ti_escala')
+    .delete()
+    .eq('usuario_id', usuarioId)
+    .gte('data_plantao', startDate)
+    .lte('data_plantao', endDate);
+
+  return error ? { success: false, error: error.message } : { success: true };
 }
 
 // ── Remove um colaborador da escala de plantão pelo ID da escala ────────────

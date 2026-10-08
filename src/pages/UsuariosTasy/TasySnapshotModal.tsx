@@ -115,33 +115,44 @@ export const TasySnapshotModal: React.FC<TasySnapshotModalProps> = ({
     }
   };
 
-  // Salvar snapshot atual (sob demanda / teste)
+  // Salvar/Sincronizar snapshot atual (sob demanda / teste)
   const handleSaveCurrentSnapshot = async () => {
-    if (!currentDataForSave) return;
     setSavingManual(true);
     try {
       const today = new Date().toISOString().split('T')[0];
-      const totalLicencas = 150;
-      const ativas = currentDataForSave.total;
-      const percentOcupacao = Math.min(Math.round((ativas / totalLicencas) * 100), 100);
 
-      const newSnapshot: TasyDailySnapshot = {
-        data_referencia: today,
-        total_conectados: currentDataForSave.total,
-        pico_quantidade: currentDataForSave.picoQtd || currentDataForSave.total,
-        pico_horario: currentDataForSave.picoHora || '-',
-        percentual_ocupacao: percentOcupacao,
-        media_tempo_formatada: currentDataForSave.mediaFormatada,
-        media_tempo_minutos: currentDataForSave.mediaMinutos || 0,
-        historico_slots: currentDataForSave.slots,
-        usuarios_lista: currentDataForSave.usuarios
-      };
+      // Tenta acionar a Edge Function no backend primeiro para obter dados completos
+      const syncResult = await tasySnapshotService.dispararSyncBackend(today);
 
-      const saved = await tasySnapshotService.salvarSnapshot(newSnapshot);
+      let saved: TasyDailySnapshot | null = null;
+
+      if (syncResult.success && syncResult.data) {
+        saved = syncResult.data;
+      } else if (currentDataForSave) {
+        // Fallback para persistência direta via cliente se a Edge Function não responder
+        const totalLicencas = 150;
+        const ativas = currentDataForSave.total;
+        const percentOcupacao = Math.min(Math.round((ativas / totalLicencas) * 100), 100);
+
+        const newSnapshot: TasyDailySnapshot = {
+          data_referencia: today,
+          total_conectados: currentDataForSave.total,
+          pico_quantidade: currentDataForSave.picoQtd || currentDataForSave.total,
+          pico_horario: currentDataForSave.picoHora || '-',
+          percentual_ocupacao: percentOcupacao,
+          media_tempo_formatada: currentDataForSave.mediaFormatada,
+          media_tempo_minutos: currentDataForSave.mediaMinutos || 0,
+          historico_slots: currentDataForSave.slots,
+          usuarios_lista: currentDataForSave.usuarios
+        };
+
+        saved = await tasySnapshotService.salvarSnapshot(newSnapshot);
+      }
+
       if (saved) {
         setSnapshots(prev => {
           const filtered = prev.filter(s => s.data_referencia !== today);
-          return [saved, ...filtered];
+          return [saved!, ...filtered];
         });
         setSelectedSnapshot(saved);
         setSaveSuccess(true);
@@ -153,6 +164,7 @@ export const TasySnapshotModal: React.FC<TasySnapshotModalProps> = ({
       setSavingManual(false);
     }
   };
+
 
   // Encontra o slot de pico no snapshot selecionado
   const peakSlot = selectedSnapshot?.historico_slots?.find(s => s.isPeak) ||

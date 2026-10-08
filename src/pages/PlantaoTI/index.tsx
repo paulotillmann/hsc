@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   Calendar as CalendarIcon, ChevronLeft, ChevronRight, ChevronDown, Plus, Trash2,
   Loader2, UserPlus, X, CalendarX, AlertCircle, CheckCircle, Info,
-  FileText, MapPin, Monitor, Coins
+  FileText, MapPin, Monitor, Coins, Check, Users
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../lib/supabase';
@@ -11,32 +11,49 @@ import {
   fetchColaboradoresTI, fetchEscalasMes, adicionarPlantonista,
   removerPlantonista, limparEscalaDia, adicionarOcorrenciaPlantao,
   removerOcorrenciaPlantao, fetchSetoresInternacao, buscarNomesSolicitantes,
+  adicionarPlantonistasEmLote, limparEscalasMesColaborador,
   ColaboradorTI, EscalaPlantao, OcorrenciaPlantao, ALLOWED_EMAILS
 } from '../../services/plantaoTiService';
-const COLABORADORES_CORES: Record<string, { bullet: string; text: string; bg: string; border: string }> = {
+
+const COLABORADORES_CORES: Record<string, {
+  bullet: string;
+  text: string;
+  bg: string;
+  border: string;
+  ring: string;
+  badge: string;
+}> = {
   'talysson': {
     bullet: 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]',
     text: 'text-emerald-700 dark:text-emerald-300',
     bg: 'bg-emerald-500/10 dark:bg-emerald-500/20',
     border: 'border-emerald-500/20 dark:border-emerald-500/30',
+    ring: 'border-emerald-500 ring-2 ring-emerald-500/30',
+    badge: 'bg-emerald-500 text-white',
   },
   'bruno': {
     bullet: 'bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.5)]',
     text: 'text-blue-700 dark:text-blue-300',
     bg: 'bg-blue-500/10 dark:bg-blue-500/20',
     border: 'border-blue-500/20 dark:border-blue-500/30',
+    ring: 'border-blue-500 ring-2 ring-blue-500/30',
+    badge: 'bg-blue-500 text-white',
   },
   'jessica': {
     bullet: 'bg-pink-500 shadow-[0_0_8px_rgba(236,72,153,0.5)]',
     text: 'text-pink-700 dark:text-pink-300',
     bg: 'bg-pink-500/10 dark:bg-pink-500/20',
     border: 'border-pink-500/20 dark:border-pink-500/30',
+    ring: 'border-pink-500 ring-2 ring-pink-500/30',
+    badge: 'bg-pink-500 text-white',
   },
   'jhon': {
     bullet: 'bg-purple-500 shadow-[0_0_8px_rgba(168,85,247,0.5)]',
     text: 'text-purple-700 dark:text-purple-300',
     bg: 'bg-purple-500/10 dark:bg-purple-500/20',
     border: 'border-purple-500/20 dark:border-purple-500/30',
+    ring: 'border-purple-500 ring-2 ring-purple-500/30',
+    badge: 'bg-purple-500 text-white',
   },
 };
 
@@ -47,6 +64,8 @@ function getColaboradorEstilo(fullName?: string | null) {
       text: 'text-slate-700 dark:text-slate-300',
       bg: 'bg-slate-500/10',
       border: 'border-slate-500/20',
+      ring: 'border-slate-500 ring-2 ring-slate-500/30',
+      badge: 'bg-slate-500 text-white',
     };
   }
   const name = fullName.toLowerCase();
@@ -60,6 +79,8 @@ function getColaboradorEstilo(fullName?: string | null) {
     text: 'text-slate-700 dark:text-slate-300',
     bg: 'bg-slate-500/10',
     border: 'border-slate-500/20',
+    ring: 'border-slate-500 ring-2 ring-slate-500/30',
+    badge: 'bg-slate-500 text-white',
   };
 }
 
@@ -162,6 +183,9 @@ export default function PlantaoTI() {
   const [colaboradores, setColaboradores] = useState<ColaboradorTI[]>([]);
   const [loading, setLoading] = useState(true);
   const [operando, setOperando] = useState(false);
+
+  // Estado do Colaborador selecionado para Escala Rápida (Estilo Chamados TI)
+  const [activeColaboradorEscala, setActiveColaboradorEscala] = useState<ColaboradorTI | null>(null);
 
   // Estados de Modais / Popups
   const [showAddModal, setShowAddModal] = useState(false);
@@ -511,6 +535,110 @@ export default function PlantaoTI() {
     }
   };
 
+  // ── Escala Rápida: Alternar plantonista ao clicar no dia do calendário ───
+  const handleDayClick = async (slot: { day: number; date: Date; isCurrentMonth: boolean; dateStr: string }) => {
+    // Mantém a data selecionada sincronizada para visualização no painel lateral
+    setSelectedDate(slot.date);
+
+    // Se estiver no Modo Escala de um colaborador ativo:
+    if (activeColaboradorEscala) {
+      if (!isAdmin) {
+        showToast('info', 'Apenas administradores podem gerenciar a escala de plantão.');
+        return;
+      }
+
+      const diaEscalas = escalasAgrupadas[slot.dateStr] ?? [];
+      const escalaExistente = diaEscalas.find(e => e.usuario_id === activeColaboradorEscala.id);
+
+      if (escalaExistente) {
+        // Já está escalado: Remover
+        const temOcorrencias = escalaExistente.ocorrencias && escalaExistente.ocorrencias.length > 0;
+        if (temOcorrencias) {
+          const confirmar = window.confirm(
+            `${obterPrimeiroNome(activeColaboradorEscala.full_name)} possui ocorrência(s) registrada(s) no dia ${slot.date.toLocaleDateString('pt-BR')}. Deseja realmente remover do plantão?`
+          );
+          if (!confirmar) return;
+        }
+
+        // Atualização otimista
+        setEscalas(prev => prev.filter(e => e.id !== escalaExistente.id));
+
+        try {
+          const res = await removerPlantonista(escalaExistente.id);
+          if (!res.success) {
+            showToast('error', res.error || 'Erro ao remover colaborador da escala.');
+            await loadEscalas();
+          } else {
+            showToast('info', `${obterPrimeiroNome(activeColaboradorEscala.full_name)} removido do dia ${slot.day}.`);
+          }
+        } catch {
+          showToast('error', 'Erro ao remover da escala.');
+          await loadEscalas();
+        }
+      } else {
+        // Não está escalado: Adicionar
+        const tempId = `temp-${Date.now()}`;
+        const novaEscala: EscalaPlantao = {
+          id: tempId,
+          data_plantao: slot.dateStr,
+          usuario_id: activeColaboradorEscala.id,
+          profiles: {
+            id: activeColaboradorEscala.id,
+            full_name: activeColaboradorEscala.full_name,
+            email: activeColaboradorEscala.email,
+            avatar_url: activeColaboradorEscala.avatar_url,
+          },
+          ocorrencias: []
+        };
+
+        // Atualização otimista
+        setEscalas(prev => [...prev, novaEscala]);
+
+        try {
+          const res = await adicionarPlantonista(slot.dateStr, activeColaboradorEscala.id);
+          if (!res.success) {
+            showToast('error', res.error || 'Erro ao adicionar na escala.');
+            await loadEscalas();
+          } else {
+            showToast('success', `${obterPrimeiroNome(activeColaboradorEscala.full_name)} escalado no dia ${slot.day}!`);
+            loadEscalas();
+          }
+        } catch {
+          showToast('error', 'Erro ao adicionar na escala.');
+          await loadEscalas();
+        }
+      }
+    }
+  };
+
+  const handleLimparMesColaborador = async () => {
+    if (!activeColaboradorEscala) return;
+    if (!isAdmin) {
+      showToast('info', 'Apenas administradores podem gerenciar a escala.');
+      return;
+    }
+
+    const primeiroNome = obterPrimeiroNome(activeColaboradorEscala.full_name);
+    if (!window.confirm(`Tem certeza que deseja remover ${primeiroNome} de todas as escalas em ${MESES[currentMonth]} de ${currentYear}?`)) {
+      return;
+    }
+
+    setOperando(true);
+    try {
+      const res = await limparEscalasMesColaborador(currentYear, currentMonth + 1, activeColaboradorEscala.id);
+      if (res.success) {
+        showToast('success', `Escalas de ${primeiroNome} em ${MESES[currentMonth]} foram removidas.`);
+        await loadEscalas();
+      } else {
+        showToast('error', res.error || 'Erro ao limpar escalas do colaborador no mês.');
+      }
+    } catch {
+      showToast('error', 'Erro inesperado ao limpar escalas do mês.');
+    } finally {
+      setOperando(false);
+    }
+  };
+
   const handleSaveOcorrencia = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedEscala) return;
@@ -626,6 +754,75 @@ export default function PlantaoTI() {
     return mapa;
   }, [escalas]);
 
+  // Contagem de escalas por colaborador no mês ativo
+  const contagemEscalasPorColaborador = useMemo(() => {
+    const mapa: Record<string, number> = {};
+    escalas.forEach(e => {
+      mapa[e.usuario_id] = (mapa[e.usuario_id] || 0) + 1;
+    });
+    return mapa;
+  }, [escalas]);
+
+  const diasEscaladosColaboradorAtivo = useMemo(() => {
+    if (!activeColaboradorEscala) return 0;
+    return contagemEscalasPorColaborador[activeColaboradorEscala.id] || 0;
+  }, [activeColaboradorEscala, contagemEscalasPorColaborador]);
+
+  // Totais e valores possíveis para o mês ativo (Dias úteis R$ 100,00 | Finais de semana e Feriados R$ 200,00)
+  const totaisMesAtual = useMemo(() => {
+    const totalDiasNoMes = new Date(currentYear, currentMonth + 1, 0).getDate();
+    let diasUteis = 0;
+    let finaisEFeriados = 0;
+
+    for (let d = 1; d <= totalDiasNoMes; d++) {
+      const dateObj = new Date(currentYear, currentMonth, d);
+      const dayOfWeek = dateObj.getDay();
+      const dateStr = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+      const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+      const isFeriado = !!feriadosDoAno[dateStr];
+
+      if (isWeekend || isFeriado) {
+        finaisEFeriados++;
+      } else {
+        diasUteis++;
+      }
+    }
+
+    const valorTotalPossivel = (diasUteis * 100) + (finaisEFeriados * 200);
+
+    return {
+      totalDias: totalDiasNoMes,
+      diasUteis,
+      finaisEFeriados,
+      valorTotalPossivel,
+    };
+  }, [currentYear, currentMonth, feriadosDoAno]);
+
+  const valorColaboradorAtivo = useMemo(() => {
+    if (!activeColaboradorEscala) return 0;
+    const resumo = resumoValoresTodos.find(r => r.id === activeColaboradorEscala.id);
+    if (resumo) return resumo.total;
+
+    const escalasColab = escalas.filter(e => e.usuario_id === activeColaboradorEscala.id);
+    let total = 0;
+    escalasColab.forEach(e => {
+      const dateParts = e.data_plantao.split('-');
+      const year = parseInt(dateParts[0], 10);
+      const month = parseInt(dateParts[1], 10) - 1;
+      const day = parseInt(dateParts[2], 10);
+      const dateObj = new Date(year, month, day);
+      const dayOfWeek = dateObj.getDay();
+      const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+      const isFeriado = !!feriadosDoAno[e.data_plantao];
+      if (isWeekend || isFeriado) {
+        total += 200;
+      } else {
+        total += 100;
+      }
+    });
+    return total;
+  }, [activeColaboradorEscala, resumoValoresTodos, escalas, feriadosDoAno]);
+
   const plantonistasDoDiaSelecionado = useMemo(() => {
     return escalasAgrupadas[selectedDateString] ?? [];
   }, [escalasAgrupadas, selectedDateString]);
@@ -668,8 +865,8 @@ export default function PlantaoTI() {
         )}
       </AnimatePresence>
 
-      {/* ── Cabeçalho do Módulo ── */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-2">
+      {/* ── Cabeçalho do Módulo & Barra de Plantonistas ── */}
+      <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-foreground flex items-center gap-2">
             <CalendarIcon className="h-8 w-8 text-primary" />
@@ -679,7 +876,152 @@ export default function PlantaoTI() {
             Calendário de escalas e controle de plantonistas de tecnologia.
           </p>
         </div>
+
+        {/* ── Avatares dos Plantonistas (Estilo Chamados TI) ── */}
+        <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap bg-muted/40 border border-border/60 px-3 py-1.5 rounded-xl">
+          <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider pl-0.5 select-none shrink-0">
+            Escalar no Mês:
+          </span>
+          <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
+            {colaboradores.map((colab) => {
+              const isSelected = activeColaboradorEscala?.id === colab.id;
+              const estilo = getColaboradorEstilo(colab.full_name);
+              const primeiroNome = obterPrimeiroNome(colab.full_name);
+              const initials = primeiroNome.substring(0, 2).toUpperCase();
+              const qtdDias = contagemEscalasPorColaborador[colab.id] || 0;
+
+              return (
+                <button
+                  key={colab.id}
+                  type="button"
+                  onClick={() => {
+                    if (isSelected) {
+                      setActiveColaboradorEscala(null);
+                    } else {
+                      setActiveColaboradorEscala(colab);
+                    }
+                  }}
+                  title={`${colab.full_name} (${qtdDias} plantões em ${MESES[currentMonth]})`}
+                  className={`relative flex items-center justify-center h-9 w-9 rounded-full border overflow-hidden p-0 transition-all duration-200 bg-background shrink-0 ${
+                    isSelected
+                      ? `${estilo.ring} scale-105 shadow-sm`
+                      : 'border-border hover:border-muted-foreground/50 hover:scale-105'
+                  }`}
+                >
+                  {colab.avatar_url ? (
+                    <img
+                      src={colab.avatar_url}
+                      alt={colab.full_name}
+                      className="h-full w-full rounded-full object-cover"
+                    />
+                  ) : (
+                    <div className={`h-full w-full rounded-full flex items-center justify-center text-[10px] font-bold ${
+                      isSelected ? estilo.badge : 'bg-muted text-muted-foreground'
+                    }`}>
+                      {initials}
+                    </div>
+                  )}
+                  {isSelected && (
+                    <span className="absolute -bottom-0.5 -right-0.5 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-primary text-[8px] text-primary-foreground font-bold border border-background shadow-sm">
+                      ✓
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+
+            {activeColaboradorEscala && (
+              <button
+                type="button"
+                onClick={() => setActiveColaboradorEscala(null)}
+                className="text-[11px] text-muted-foreground hover:text-foreground font-semibold underline ml-1 whitespace-nowrap transition-colors"
+              >
+                Limpar
+              </button>
+            )}
+          </div>
+        </div>
       </div>
+
+      {/* ── Banner de Instrução e Ações Rápidas do Modo Escala ── */}
+      <AnimatePresence>
+        {activeColaboradorEscala && (
+          <motion.div
+            initial={{ opacity: 0, y: -8, height: 0 }}
+            animate={{ opacity: 1, y: 0, height: 'auto' }}
+            exit={{ opacity: 0, y: -8, height: 0 }}
+            className="bg-primary/10 border border-primary/25 shadow-sm rounded-xl p-3 flex flex-col md:flex-row md:items-center justify-between gap-3 overflow-hidden"
+          >
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="relative shrink-0">
+                {activeColaboradorEscala.avatar_url ? (
+                  <img
+                    src={activeColaboradorEscala.avatar_url}
+                    alt={activeColaboradorEscala.full_name}
+                    className="h-10 w-10 rounded-full object-cover border-2 border-primary"
+                  />
+                ) : (
+                  <div className="h-10 w-10 rounded-full bg-primary text-primary-foreground flex items-center justify-center font-bold text-xs">
+                    {obterPrimeiroNome(activeColaboradorEscala.full_name).slice(0, 2).toUpperCase()}
+                  </div>
+                )}
+                <span className="absolute -bottom-0.5 -right-0.5 bg-primary text-primary-foreground text-[8px] rounded-full h-4 w-4 flex items-center justify-center font-bold border border-background shadow-xs">
+                  ✓
+                </span>
+              </div>
+              <div className="min-w-0 space-y-1">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h3 className="text-sm font-bold text-foreground">
+                    Modo Escala: {activeColaboradorEscala.full_name}
+                  </h3>
+                  <span className="text-[11px] px-2 py-0.5 rounded-full font-bold bg-primary text-primary-foreground shadow-xs">
+                    {diasEscaladosColaboradorAtivo} plantões
+                  </span>
+                  <span className="text-[11px] px-2.5 py-0.5 rounded-full font-bold bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30">
+                    Agendado: R$ {valorColaboradorAtivo.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </span>
+                  <span
+                    className="text-[11px] px-2.5 py-0.5 rounded-full font-bold bg-blue-500/15 text-blue-600 dark:text-blue-400 border border-blue-500/30"
+                    title={`${totaisMesAtual.diasUteis} dias úteis (R$ 100,00) + ${totaisMesAtual.finaisEFeriados} finais de semana/feriados (R$ 200,00)`}
+                  >
+                    Total Possível no Mês: R$ {totaisMesAtual.valorTotalPossivel.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </span>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Clique diretamente nos dias do calendário para marcar ou desmarcar a escala.
+                  <span className="hidden lg:inline text-muted-foreground/80"> • Dias úteis: <strong>R$ 100,00</strong> ({totaisMesAtual.diasUteis}d) • Finais/Feriados: <strong>R$ 200,00</strong> ({totaisMesAtual.finaisEFeriados}d)</span>
+                </p>
+              </div>
+            </div>
+
+            {/* Ações do Modo Escala */}
+            <div className="flex items-center gap-2 shrink-0 self-end md:self-auto flex-wrap">
+              {isAdmin && (
+                <button
+                  type="button"
+                  onClick={handleLimparMesColaborador}
+                  disabled={operando}
+                  className="px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-background border border-border hover:bg-destructive/10 hover:text-destructive text-muted-foreground flex items-center gap-1.5 shadow-xs transition-all disabled:opacity-50"
+                  title="Remover todas as escalas deste colaborador no mês"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                  <span>Limpar Mês</span>
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => setActiveColaboradorEscala(null)}
+                className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-primary text-primary-foreground hover:opacity-90 flex items-center gap-1.5 shadow-xs transition-all"
+                title="Voltar ao modo de navegação e ocorrências"
+              >
+                <Check className="h-3.5 w-3.5" />
+                <span>Concluir</span>
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* ── Grid Principal de dois painéis ── */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
         {/* ── Painel da Esquerda: Agenda do Mês (8/12) ── */}
@@ -745,24 +1087,43 @@ export default function PlantaoTI() {
                     e => e.ocorrencias && e.ocorrencias.some(o => o.atendimento_presencial)
                   );
 
+                  // Escala rápida: status do colaborador ativo
+                  const isEscaladoAtivo = activeColaboradorEscala
+                    ? diaEscalas.some(e => e.usuario_id === activeColaboradorEscala.id)
+                    : false;
+                  const estiloAtivo = activeColaboradorEscala
+                    ? getColaboradorEstilo(activeColaboradorEscala.full_name)
+                    : null;
+
                   // Estilos de destaque para feriados e pontos facultativos
                   let feriadoClasses = '';
-                  if (hasFeriado && !isSelected) {
+                  if (hasFeriado && !isSelected && !isEscaladoAtivo) {
                     feriadoClasses = 'border-rose-200/80 dark:border-rose-950/80 bg-rose-500/[0.04] dark:bg-rose-500/[0.06] text-foreground';
+                  }
+
+                  // Estilo dinâmico da célula
+                  let cellClasses = 'bg-card border-border/50 text-foreground hover:border-border-hover hover:bg-muted/20';
+
+                  if (!slot.isCurrentMonth) {
+                    cellClasses = 'bg-muted/10 border-border/20 text-muted-foreground opacity-50';
+                  } else if (activeColaboradorEscala) {
+                    if (isEscaladoAtivo) {
+                      cellClasses = `${estiloAtivo?.bg} ${estiloAtivo?.border} ${estiloAtivo?.ring} text-foreground shadow-xs scale-[1.01]`;
+                    } else {
+                      cellClasses = 'bg-card border-border/50 hover:border-primary/60 hover:bg-primary/5 text-foreground cursor-pointer';
+                    }
+                  } else if (isSelected) {
+                    cellClasses = 'ring-2 ring-primary border-transparent bg-primary/5 shadow-inner text-foreground';
+                  } else if (hasFeriado) {
+                    cellClasses = feriadoClasses;
                   }
 
                   return (
                     <button
                       key={index}
-                      onClick={() => setSelectedDate(slot.date)}
-                      className={`min-h-[75px] md:min-h-[85px] p-1.5 rounded-lg border flex flex-col justify-between items-stretch text-left transition-all relative ${
-                        slot.isCurrentMonth
-                          ? feriadoClasses || 'bg-card border-border/50 text-foreground'
-                          : 'bg-muted/10 border-border/20 text-muted-foreground opacity-50'
-                        } ${isSelected
-                          ? 'ring-2 ring-primary border-transparent bg-primary/5 shadow-inner'
-                          : 'hover:border-border-hover hover:bg-muted/20'
-                        }`}
+                      type="button"
+                      onClick={() => handleDayClick(slot)}
+                      className={`min-h-[75px] md:min-h-[85px] p-1.5 rounded-lg border flex flex-col justify-between items-stretch text-left transition-all relative ${cellClasses}`}
                     >
                       {/* Número do Dia com destaque se for hoje e feriado */}
                       <div className="flex justify-between items-center w-full gap-2">
@@ -772,18 +1133,39 @@ export default function PlantaoTI() {
                           </span>
                         ) : (
                           <span className={`text-xs font-bold ${
-                            isSelected
+                            isSelected && !activeColaboradorEscala
                               ? 'text-primary'
-                              : feriadoInfo
-                                ? 'text-rose-600 dark:text-rose-400'
-                                : ''
+                              : isEscaladoAtivo
+                                ? estiloAtivo?.text
+                                : feriadoInfo
+                                  ? 'text-rose-600 dark:text-rose-400'
+                                  : ''
                           }`}>
                             {slot.day}
                           </span>
                         )}
 
                         <div className="flex items-center gap-1.5 ml-auto shrink-0">
-                          {feriadoInfo && (
+                          {/* Badge de status no modo escala rápida */}
+                          {activeColaboradorEscala && slot.isCurrentMonth && (
+                            isEscaladoAtivo ? (
+                              <span
+                                className={`text-[9px] px-1.5 py-0.5 rounded font-bold ${estiloAtivo?.badge} shadow-xs flex items-center gap-0.5`}
+                                title={`${activeColaboradorEscala.full_name} escalado neste dia. Clique para remover.`}
+                              >
+                                ✓ Escalado
+                              </span>
+                            ) : (
+                              <span
+                                className="text-[9px] px-1 py-0.5 rounded font-medium text-muted-foreground/60 border border-border/40 group-hover:text-primary transition-colors"
+                                title="Clique para escalar"
+                              >
+                                +
+                              </span>
+                            )
+                          )}
+
+                          {feriadoInfo && !activeColaboradorEscala && (
                             <span
                               className={`text-[10px] px-1.5 py-0.5 rounded font-bold leading-tight text-right break-words max-w-[70px] bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20`}
                               title={feriadoInfo.name}
@@ -805,7 +1187,7 @@ export default function PlantaoTI() {
                             </span>
                           )}
 
-                          {isAdmin && (
+                          {isAdmin && !activeColaboradorEscala && (
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
@@ -826,12 +1208,15 @@ export default function PlantaoTI() {
                       <div className="flex-1 mt-1.5 space-y-1 overflow-y-auto max-h-[50px] pr-0.5 scrollbar-thin">
                         {diaEscalas.map(escala => {
                           const estilo = getColaboradorEstilo(escala.profiles?.full_name);
+                          const isEsteColabAtivo = activeColaboradorEscala && escala.usuario_id === activeColaboradorEscala.id;
                           const temOcorrenciaPlantonista = escala.ocorrencias && escala.ocorrencias.length > 0;
                           const temPresencialPlantonista = escala.ocorrencias && escala.ocorrencias.some(o => o.atendimento_presencial);
                           return (
                             <div
                               key={escala.id}
-                              className={`flex items-center justify-between gap-1 px-1 py-0.5 rounded text-[11px] font-medium border ${estilo.bg} ${estilo.border}`}
+                              className={`flex items-center justify-between gap-1 px-1 py-0.5 rounded text-[11px] font-medium border ${
+                                isEsteColabAtivo ? `${estilo.bg} ${estilo.ring} font-bold` : `${estilo.bg} ${estilo.border}`
+                              }`}
                               title={escala.profiles?.full_name || ''}
                             >
                               <div className="flex items-center gap-1 min-w-0">
@@ -1275,22 +1660,56 @@ export default function PlantaoTI() {
 
           {/* Card de Resumo Financeiro do Mês para Plantonistas de TI */}
           <AnimatePresence>
-            {canDoPlantao && resumoValoresTodos.length > 0 && (
+            {canDoPlantao && (
               <motion.div
                 initial={{ opacity: 0, y: 15 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: 15 }}
                 className="bg-card border border-border/80 shadow-md rounded-xl p-4 space-y-3"
               >
-                <div className="flex items-center gap-2.5 border-b border-border/50 pb-1.5">
-                  <div className="p-2 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
-                    <Coins className="h-5 w-5" />
+                {/* Cabeçalho de Ganhos com Valor Total Possível do Mês */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-border/50 pb-2.5">
+                  <div className="flex items-center gap-2.5">
+                    <div className="p-2 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+                      <Coins className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-bold text-foreground">Ganhos do Mês de {MESES[currentMonth]} de {currentYear}</h3>
+                      <p className="text-[10px] text-muted-foreground">
+                        Valores a serem recebidos por cada plantonista.
+                      </p>
+                    </div>
                   </div>
-                  <div>
-                    <h3 className="text-sm font-bold text-foreground">Ganhos do Mês de {MESES[currentMonth]} de {currentYear} (Estimado)</h3>
-                    <p className="text-[10px] text-muted-foreground">
-                      Valores a serem recebidos por cada plantonista.
-                    </p>
+
+                  {/* Valor Total Possível no Mês */}
+                  <div className="sm:self-center shrink-0">
+                    <div
+                      className="px-3 py-1.5 rounded-lg bg-blue-500/10 border border-blue-500/25 flex flex-col sm:items-end"
+                      title={`${totaisMesAtual.diasUteis} dias úteis (R$ 100,00) + ${totaisMesAtual.finaisEFeriados} finais de semana e feriados (R$ 200,00)`}
+                    >
+                      <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">
+                        Total Possível no Mês
+                      </span>
+                      <span className="text-sm font-extrabold text-blue-600 dark:text-blue-400 leading-tight">
+                        R$ {totaisMesAtual.valorTotalPossivel.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Detalhamento das Diárias do Mês */}
+                <div className="grid grid-cols-2 gap-2 text-[11px] bg-muted/30 border border-border/50 rounded-lg p-2.5">
+                  <div className="flex flex-col">
+                    <span className="text-[10px] uppercase font-bold text-muted-foreground/80">Dias Úteis (R$ 100,00)</span>
+                    <span className="font-semibold text-foreground">
+                      {totaisMesAtual.diasUteis} dias • R$ {(totaisMesAtual.diasUteis * 100).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                    </span>
+                  </div>
+                  <div className="flex flex-col text-right">
+                    <span className="text-[10px] uppercase font-bold text-muted-foreground/80">Finais / Feriados (R$ 200,00)</span>
+                    <span className="font-semibold text-foreground">
+                      {totaisMesAtual.finaisEFeriados} dias • R$ {(totaisMesAtual.finaisEFeriados * 200).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                    </span>
                   </div>
                 </div>
 
