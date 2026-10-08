@@ -1450,9 +1450,9 @@ export default function CentroMedico() {
         {/* Glow sutil de fundo */}
         <div className="absolute top-0 right-0 -mt-8 -mr-8 w-40 h-40 bg-primary/5 rounded-full blur-3xl pointer-events-none" />
 
-        <div className="flex flex-col xl:flex-row items-stretch xl:items-center justify-between gap-3.5 relative z-10 w-full min-w-0">
-          {/* Lado Esquerdo: Identificação da Agenda */}
-          <div className="flex items-center gap-2 px-3 sm:px-4 py-2 rounded-2xl bg-muted/60 border border-border/50 text-foreground font-bold text-xs sm:text-sm shrink-0 shadow-xs">
+        <div className="flex flex-wrap items-center gap-3 relative z-10 w-full min-w-0">
+          {/* Identificação da Agenda */}
+          <div className="flex items-center gap-2 px-3.5 h-10 rounded-xl bg-muted/60 border border-border/50 text-foreground font-bold text-xs sm:text-sm shrink-0 shadow-xs">
             <Kanban className="h-4 w-4 shrink-0 text-primary" />
             <span>Agenda</span>
             <span className="ml-0.5 px-2 py-0.5 rounded-full text-[10px] bg-primary/10 text-primary font-bold border border-primary/20">
@@ -1460,79 +1460,79 @@ export default function CentroMedico() {
             </span>
           </div>
 
-          {/* Lado Direito: Controle de Datas e Especialidades Fluido */}
-          <div className="flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center gap-2.5 w-full xl:w-auto min-w-0">
-            {/* Seletor de Data em Pill Box sem barra de rolagem */}
-            <div className="flex items-center justify-between sm:justify-start gap-1 bg-background border border-border/80 p-1 rounded-2xl text-xs shadow-xs hover:border-primary/40 transition-all w-full sm:w-auto shrink-0">
-              <button
-                onClick={() => handleStepDay(-1)}
-                title="Dia Anterior"
-                className="px-2 sm:px-2.5 py-1.5 rounded-xl hover:bg-muted text-foreground transition-all flex items-center gap-1 font-medium text-xs active:scale-95 shrink-0"
-              >
-                <ChevronLeft className="h-4 w-4 text-muted-foreground" />
-                <span className="hidden sm:inline">Anterior</span>
-              </button>
-
-              <div className="flex items-center gap-1.5 px-2 sm:px-2.5 py-1.5 bg-muted/40 rounded-xl border border-border/40 hover:bg-muted/70 transition-colors shrink-0">
-                <Calendar className="h-3.5 w-3.5 text-primary shrink-0" />
-                <input
-                  type="date"
-                  value={selectedDate}
-                  onChange={e => handleDateChange(e.target.value)}
-                  className="bg-transparent text-foreground font-semibold focus:outline-none cursor-pointer text-xs w-[105px] sm:w-[115px]"
-                />
-              </div>
-
-              <button
-                onClick={() => handleDateChange(getDateOffset(0))}
-                title="Ir para Hoje"
-                className={`px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-bold transition-all shadow-xs active:scale-95 shrink-0 ${
-                  selectedDate === getDateOffset(0)
-                    ? 'bg-primary text-primary-foreground shadow-sm ring-1 ring-primary/30'
-                    : 'hover:bg-muted text-muted-foreground'
-                }`}
-              >
-                Hoje
-              </button>
-
-              <button
-                onClick={() => handleStepDay(1)}
-                title="Próximo Dia"
-                className="px-2 sm:px-2.5 py-1.5 rounded-xl hover:bg-muted text-foreground transition-all flex items-center gap-1 font-medium text-xs active:scale-95 shrink-0"
-              >
-                <span className="hidden sm:inline">Próximo</span>
-                <ChevronRight className="h-4 w-4 text-muted-foreground" />
-              </button>
-            </div>
-
-            {/* Filtro de Especialidade com Largura Flexível */}
-            <div className="flex items-center gap-2 bg-background border border-border/80 px-3.5 py-2 rounded-2xl text-xs shadow-xs hover:border-primary/40 focus-within:ring-2 focus-within:ring-primary/20 transition-all w-full sm:w-auto sm:min-w-[210px] min-w-0">
-              <Filter className="h-3.5 w-3.5 text-primary shrink-0" />
-              <select
-                value={selectedEspecialidade}
-                onChange={e => setSelectedEspecialidade(e.target.value)}
-                className="bg-transparent text-foreground focus:outline-none font-semibold cursor-pointer w-full text-xs min-w-0"
-              >
-                {especialidades.map(esp => (
-                  <option key={esp} value={esp} className="bg-card text-foreground">
-                    {esp === 'TODAS' ? 'Todas Especialidades' : esp}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {/* Botão de Atualização de Agenda (Gatilho para n8n) */}
+          {/* Seletor de Data em Pill Box sem barra de rolagem */}
+          <div className="flex items-center justify-between sm:justify-start gap-1.5 bg-background border border-border/80 px-1.5 h-10 rounded-xl text-xs shadow-xs hover:border-primary/40 transition-all shrink-0">
             <button
               type="button"
-              onClick={handleSyncWebhook}
-              disabled={isSyncing}
-              title="Consultar o n8n para atualizar os agendamentos do Tasy agora"
-              className="flex items-center justify-center gap-2 px-3.5 py-2 rounded-2xl text-xs font-semibold bg-primary text-primary-foreground hover:bg-primary/90 transition-all shadow-sm active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer shrink-0 w-full sm:w-auto whitespace-nowrap"
+              onClick={() => handleStepDay(-1)}
+              title="Dia Anterior"
+              className="px-2.5 h-7 rounded-lg hover:bg-muted text-foreground transition-all flex items-center gap-1 font-medium text-xs active:scale-95 shrink-0"
             >
-              <RefreshCw className={`h-3.5 w-3.5 shrink-0 ${isSyncing ? 'animate-spin' : ''}`} />
-              <span>{isSyncing ? 'Atualizando Agenda...' : 'Atualizar Agenda'}</span>
+              <ChevronLeft className="h-4 w-4 text-muted-foreground" />
+              <span className="hidden sm:inline">Anterior</span>
+            </button>
+
+            <div className="flex items-center gap-1.5 px-2 h-7 bg-muted/40 rounded-lg border border-border/40 hover:bg-muted/70 transition-colors shrink-0">
+              <Calendar className="h-3.5 w-3.5 text-primary shrink-0" />
+              <input
+                type="date"
+                value={selectedDate}
+                onChange={e => handleDateChange(e.target.value)}
+                className="bg-transparent text-foreground font-semibold focus:outline-none cursor-pointer text-xs w-[105px] sm:w-[115px]"
+              />
+            </div>
+
+            <button
+              type="button"
+              onClick={() => handleDateChange(getDateOffset(0))}
+              title="Ir para Hoje"
+              className={`px-3 h-7 rounded-lg text-xs font-bold transition-all shadow-xs active:scale-95 shrink-0 ${
+                selectedDate === getDateOffset(0)
+                  ? 'bg-primary text-primary-foreground shadow-sm ring-1 ring-primary/30'
+                  : 'hover:bg-muted text-muted-foreground'
+              }`}
+            >
+              Hoje
+            </button>
+
+            <button
+              type="button"
+              onClick={() => handleStepDay(1)}
+              title="Próximo Dia"
+              className="px-2.5 h-7 rounded-lg hover:bg-muted text-foreground transition-all flex items-center gap-1 font-medium text-xs active:scale-95 shrink-0"
+            >
+              <span className="hidden sm:inline">Próximo</span>
+              <ChevronRight className="h-4 w-4 text-muted-foreground" />
             </button>
           </div>
+
+          {/* Filtro de Especialidade com Largura Flexível */}
+          <div className="flex items-center gap-2 bg-background border border-border/80 px-3.5 h-10 rounded-xl text-xs shadow-xs hover:border-primary/40 focus-within:ring-2 focus-within:ring-primary/20 transition-all sm:min-w-[210px] shrink-0">
+            <Filter className="h-3.5 w-3.5 text-primary shrink-0" />
+            <select
+              value={selectedEspecialidade}
+              onChange={e => setSelectedEspecialidade(e.target.value)}
+              className="bg-transparent text-foreground focus:outline-none font-semibold cursor-pointer w-full text-xs min-w-0"
+            >
+              {especialidades.map(esp => (
+                <option key={esp} value={esp} className="bg-card text-foreground">
+                  {esp === 'TODAS' ? 'Todas Especialidades' : esp}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Botão de Atualização de Agenda (Gatilho para n8n) */}
+          <button
+            type="button"
+            onClick={handleSyncWebhook}
+            disabled={isSyncing}
+            title="Consultar o n8n para atualizar os agendamentos do Tasy agora"
+            className="flex items-center justify-center gap-2 px-4 h-10 rounded-xl text-xs font-semibold bg-primary text-primary-foreground hover:bg-primary/90 transition-all shadow-sm active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer shrink-0 whitespace-nowrap"
+          >
+            <RefreshCw className={`h-3.5 w-3.5 shrink-0 ${isSyncing ? 'animate-spin' : ''}`} />
+            <span>{isSyncing ? 'Atualizando Agenda...' : 'Atualizar Agenda'}</span>
+          </button>
         </div>
 
         {/* Input de Busca com Largura Total e Padding Confortável */}

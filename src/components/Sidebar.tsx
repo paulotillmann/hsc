@@ -699,10 +699,6 @@ const Sidebar: React.FC = () => {
 
         {userModules
           .filter(m => {
-            if (m.slug === 'centro-medico') {
-              const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-              if (!isLocalhost) return false;
-            }
             return (
               m.slug !== 'configuracoes' &&
               m.slug !== 'pacientes-internados' &&

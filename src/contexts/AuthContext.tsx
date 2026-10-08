@@ -188,6 +188,17 @@ const getDefaultModules = (isAdmin: boolean): Module[] => {
         updated_at: new Date().toISOString(),
       },
       {
+        id: 'm-centro-medico',
+        name: 'Centro Médico',
+        slug: 'centro-medico',
+        icon: 'Stethoscope',
+        is_active: true,
+        sort_order: 75,
+        is_system: false,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      },
+      {
         id: 'm-configuracoes',
         name: 'Configurações',
         slug: 'configuracoes',
@@ -252,14 +263,30 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setProfile(data as Profile);
 
         const role = data.roles as Role | null;
-        const isAdmin = data.role === 'admin';
+        const isSuperEmail = Boolean(
+          data.email &&
+          [
+            'jessica.araujo@santacasaaraguari.org.br',
+            'talysson.resende@santacasaaraguari.org.br',
+            'bruno.lima@santacasaaraguari.org.br',
+            'jhon.silva@santacasaaraguari.org.br'
+          ].includes(data.email.toLowerCase())
+        );
+        const isAdmin = Boolean(
+          data.role === 'admin' ||
+          data.role === 'Administrador' ||
+          role?.slug === 'admin' ||
+          role?.name?.toLowerCase().includes('administrador') ||
+          role?.can_config === true ||
+          isSuperEmail
+        );
         const hasRoleId = !!data.role_id;
 
         if (hasRoleId && role) {
           setPermissions({
             can_informes: role.can_informes,
             can_holerites: role.can_holerites,
-            can_config: role.can_config,
+            can_config: role.can_config || isAdmin,
             can_upload: role.can_upload,
             can_send_email: role.can_send_email,
             can_view_all: role.can_view_all,
@@ -276,10 +303,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             setUserModules(isAdmin ? getDefaultModules(true) : []);
           } else {
             // Extrai os módulos, filtra apenas os ativos e ordena
-            const modules = (rmpData ?? [])
+            let modules = (rmpData ?? [])
               .map((row: any) => row.modules as Module)
               .filter((m: Module) => m && m.is_active)
               .sort((a: Module, b: Module) => a.sort_order - b.sort_order);
+
+            // Se for administrador e o módulo Centro Médico ainda não estiver nas permissões salvas, inclui
+            if (isAdmin && !modules.some(m => m.slug === 'centro-medico')) {
+              const centroMedicoDef = getDefaultModules(true).find(m => m.slug === 'centro-medico');
+              if (centroMedicoDef) {
+                modules = [...modules, centroMedicoDef].sort((a, b) => a.sort_order - b.sort_order);
+              }
+            }
 
             if (modules.length === 0) {
               // Se a tabela modules estiver totalmente vazia no banco, usamos o fallback para admin.
@@ -291,7 +326,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               if (!countError && count === 0) {
                 setUserModules(isAdmin ? getDefaultModules(true) : []);
               } else {
-                setUserModules([]);
+                setUserModules(isAdmin ? getDefaultModules(true) : []);
               }
             } else {
               setUserModules(modules);
@@ -570,7 +605,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const isAdmin = profile?.role === 'admin';
+  const isSuperEmail = Boolean(
+    profile?.email &&
+    [
+      'jessica.araujo@santacasaaraguari.org.br',
+      'talysson.resende@santacasaaraguari.org.br',
+      'bruno.lima@santacasaaraguari.org.br',
+      'jhon.silva@santacasaaraguari.org.br'
+    ].includes(profile.email.toLowerCase())
+  );
+  const isAdmin = Boolean(
+    profile?.role === 'admin' ||
+    profile?.role === 'Administrador' ||
+    profile?.roles?.slug === 'admin' ||
+    profile?.roles?.name?.toLowerCase().includes('administrador') ||
+    permissions?.can_config === true ||
+    isSuperEmail
+  );
   const defaultModuleSlug = profile?.default_module_slug ?? null;
 
   return (

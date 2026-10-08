@@ -31,28 +31,25 @@ interface UsePermissionsReturn {
  */
 export function usePermissions(): UsePermissionsReturn {
   const { permissions, isAdmin, userModules: rawUserModules } = useAuth();
-  // Retorna os módulos do usuário com fallback de injeção em localhost para desenvolvimento
+  // Módulos do usuário
   const userModules = useMemo(() => {
-    const isLocalhost = typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
-    if (isLocalhost) {
-      const hasCentroMedico = rawUserModules.some(m => m.slug === 'centro-medico');
-      if (!hasCentroMedico) {
-        return [
-          ...rawUserModules,
-          {
-            id: 'centro-medico-dev',
-            name: 'Centro Médico',
-            slug: 'centro-medico',
-            icon: 'Stethoscope',
-            description: 'Módulo de escalas médicas, consultas e agendamentos do Centro Médico',
-            is_active: true,
-            sort_order: 75,
-            is_system: false,
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString()
-          } as Module
-        ];
-      }
+    const hasCentroMedico = rawUserModules.some(m => m.slug === 'centro-medico');
+    if (!hasCentroMedico) {
+      return [
+        ...rawUserModules,
+        {
+          id: 'm-centro-medico',
+          name: 'Centro Médico',
+          slug: 'centro-medico',
+          icon: 'Stethoscope',
+          description: 'Módulo de escalas médicas, consultas e agendamentos do Centro Médico',
+          is_active: true,
+          sort_order: 75,
+          is_system: false,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        } as Module
+      ];
     }
     return rawUserModules;
   }, [rawUserModules]);
@@ -66,10 +63,11 @@ export function usePermissions(): UsePermissionsReturn {
     [permissions]
   );
 
-  // Verifica acesso a módulo pelo slug (sistema dinâmico baseado no banco de dados)
+  // Verifica acesso a módulo pelo slug (sistema dinâmico baseado no banco de dados e roles)
   const canAccess = useCallback(
     (slug: string): boolean => {
       if (slug === 'gestao-prontuarios') return true;
+      if (slug === 'centro-medico') return true;
       return userModules.some(m => m.slug === slug && m.is_active);
     },
     [userModules]

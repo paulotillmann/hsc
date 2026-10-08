@@ -12,6 +12,14 @@ export default defineConfig(({ mode }) => {
       server: {
         port: 3000,
         host: '0.0.0.0',
+        proxy: {
+          '/api/n8n-webhook': {
+            target: 'https://n8n-n8n.7woir1.easypanel.host',
+            changeOrigin: true,
+            secure: false,
+            rewrite: (path) => path.replace(/^\/api\/n8n-webhook/, '')
+          }
+        }
       },
       plugins: [react(), // informesPlugin()
       tailwindcss(), cloudflare()],

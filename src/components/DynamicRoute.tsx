@@ -64,11 +64,6 @@ const DynamicRoute: React.FC = () => {
     return <Navigate to="/" replace />;
   }
 
-  // Verifica se o módulo é restrito a ambiente local (dev)
-  const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-  if (moduleSlug === 'centro-medico' && !isLocalhost) {
-    return <AccessDenied />;
-  }
 
   // Verifica permissão de acesso ao módulo pelo slug (Admins sempre podem acessar as configurações)
   const hasAccess = canAccess(moduleSlug) || (moduleSlug === 'configuracoes' && isAdmin);
