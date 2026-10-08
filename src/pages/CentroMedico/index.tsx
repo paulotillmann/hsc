@@ -1562,28 +1562,6 @@ export default function CentroMedico() {
               <RefreshCw className={`h-3.5 w-3.5 shrink-0 ${isSyncing ? 'animate-spin' : ''}`} />
               <span>{isSyncing ? 'Atualizando Agenda...' : 'Atualizar Agenda'}</span>
             </button>
-
-            {/* Botão de Diagnóstico da Resposta do n8n */}
-            {debugData && (
-              <button
-                type="button"
-                onClick={() => setDebugModalOpen(true)}
-                title="Visualizar a resposta JSON bruta devolvida pelo n8n"
-                className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-2xl text-xs font-medium bg-muted/80 hover:bg-muted text-muted-foreground hover:text-foreground transition-all border border-border/60 active:scale-95 cursor-pointer shrink-0"
-              >
-                <Activity className="h-3.5 w-3.5 text-blue-500 shrink-0" />
-                <span>Ver Retorno n8n</span>
-                {debugData.count !== undefined && (
-                  <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
-                    debugData.count > 0 
-                      ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20' 
-                      : 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20'
-                  }`}>
-                    {debugData.count}
-                  </span>
-                )}
-              </button>
-            )}
           </div>
         </div>
 
