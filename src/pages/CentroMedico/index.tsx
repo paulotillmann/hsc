@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Stethoscope,
@@ -128,7 +128,10 @@ const isStatusCanceladoTasy = (statusReal?: string, statusOriginal?: string): bo
 const getDateOffset = (days: number): string => {
   const d = new Date();
   d.setDate(d.getDate() + days);
-  return d.toISOString().split('T')[0];
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
 };
 
 const formatDateLabel = (dateStr: string): string => {
@@ -607,7 +610,7 @@ export default function CentroMedico() {
   // Estados Principais: Kanban e Escalas Médicas
   const [activeTab, setActiveTab] = useState<'escalas' | 'kanban'>('kanban');
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedDate, setSelectedDate] = useState<string>(() => new Date().toISOString().split('T')[0]);
+  const [selectedDate, setSelectedDate] = useState<string>(() => getDateOffset(0));
   const [selectedEspecialidade, setSelectedEspecialidade] = useState<string>('TODAS');
   const [selectedStatus, setSelectedStatus] = useState<string>('TODOS');
   
@@ -733,6 +736,8 @@ export default function CentroMedico() {
   const [resendingCardId, setResendingCardId] = useState<string | null>(null);
   const [isSendingAll, setIsSendingAll] = useState(false);
   const [sendingProgress, setSendingProgress] = useState<{ current: number; total: number } | null>(null);
+  const [isResendingAllEnviadas, setIsResendingAllEnviadas] = useState(false);
+  const [resendingAllProgress, setResendingAllProgress] = useState<{ current: number; total: number } | null>(null);
   const [toast, setToast] = useState<{ type: 'success' | 'error' | 'info'; message: string } | null>(null);
   const [debugModalOpen, setDebugModalOpen] = useState(false);
   const [debugData, setDebugData] = useState<{
@@ -1025,6 +1030,15 @@ export default function CentroMedico() {
     handleDateChange(newDateStr);
   };
 
+  // Busca automática dos agendamentos do dia ao abrir a tela
+  const hasAutoSyncedRef = useRef(false);
+  useEffect(() => {
+    if (hasAutoSyncedRef.current) return;
+    hasAutoSyncedRef.current = true;
+    const todayStr = getDateOffset(0);
+    handleSyncWebhookForDate(todayStr);
+  }, []);
+
   // Mover Card de Consulta entre Colunas do Kanban
   const moveCardToStatus = async (cardId: string, newStatus: KanbanStatus) => {
     const targetCard = consultas.find(c => c.id === cardId);
@@ -1259,6 +1273,41 @@ export default function CentroMedico() {
     setIsSendingAll(false);
     setSendingProgress(null);
     showToast('success', `${successCount} paciente(s) movidos para "Enviadas" com sucesso!`);
+  };
+
+  // Reenviar WhatsApp para todos os pacientes da coluna "Confirmação de agendamento" (Enviadas)
+  const handleResendAllEnviadas = async () => {
+    if (isResendingAllEnviadas || isSendingAll) return;
+    const enviadasCards = filteredConsultas.filter(c => c.status === 'Enviadas');
+    if (enviadasCards.length === 0) {
+      showToast('info', 'Não há pacientes na coluna Confirmação de agendamento para enviar.');
+      return;
+    }
+
+    setIsResendingAllEnviadas(true);
+    setResendingAllProgress({ current: 0, total: enviadasCards.length });
+    showToast('info', `Iniciando reenvio de WhatsApp para ${enviadasCards.length} paciente(s) da Confirmação de agendamento...`);
+
+    let successCount = 0;
+    for (let i = 0; i < enviadasCards.length; i++) {
+      const card = enviadasCards[i];
+      setResendingAllProgress({ current: i + 1, total: enviadasCards.length });
+
+      try {
+        await sendWhatsAppNotification(card, 'Enviadas', true);
+        successCount++;
+      } catch (err) {
+        console.error(`Erro ao reenviar WhatsApp para ${card.paciente}:`, err);
+      }
+
+      if (i < enviadasCards.length - 1) {
+        await new Promise(resolve => setTimeout(resolve, 600));
+      }
+    }
+
+    setIsResendingAllEnviadas(false);
+    setResendingAllProgress(null);
+    showToast('success', `WhatsApp reenviado com sucesso para ${successCount} paciente(s) da Confirmação de agendamento!`);
   };
 
   // Ação de Confirmação de Consulta do Paciente
@@ -1666,6 +1715,41 @@ export default function CentroMedico() {
                                 <span>
                                   {sendingProgress
                                     ? `Enviando (${sendingProgress.current}/${sendingProgress.total})...`
+                                    : 'Enviando todos...'}
+                                </span>
+                              </>
+                            ) : (
+                              <>
+                                <Send className="h-3.5 w-3.5 shrink-0" />
+                                <span>Enviar Todos</span>
+                              </>
+                            )}
+                          </button>
+                        )}
+
+                        {/* Botão de Enviar Todos na coluna "Confirmação de agendamento" (Enviadas) */}
+                        {col.id === 'Enviadas' && (
+                          <button
+                            type="button"
+                            onClick={handleResendAllEnviadas}
+                            disabled={colCards.length === 0 || isResendingAllEnviadas}
+                            title={
+                              colCards.length === 0
+                                ? 'Nenhum paciente para enviar'
+                                : `Reenviar notificação de WhatsApp para todos os ${colCards.length} pacientes da Confirmação de agendamento`
+                            }
+                            className={`w-full flex items-center justify-center gap-2 py-2 px-3 rounded-xl text-xs font-semibold transition-all active:scale-[0.98] cursor-pointer shadow-xs disabled:opacity-50 disabled:cursor-not-allowed text-center break-words mt-1 ${
+                              isResendingAllEnviadas
+                                ? 'bg-purple-600/20 text-purple-700 dark:text-purple-300 border border-purple-500/40'
+                                : 'bg-purple-600 hover:bg-purple-700 text-white shadow-purple-500/20'
+                            }`}
+                          >
+                            {isResendingAllEnviadas ? (
+                              <>
+                                <RefreshCw className="h-3.5 w-3.5 animate-spin shrink-0" />
+                                <span>
+                                  {resendingAllProgress
+                                    ? `Enviando (${resendingAllProgress.current}/${resendingAllProgress.total})...`
                                     : 'Enviando todos...'}
                                 </span>
                               </>
