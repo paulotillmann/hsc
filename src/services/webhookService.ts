@@ -138,36 +138,116 @@ export const webhookService = {
   },
 
   /**
-   * Trigger the "Consulta Centro Médico" webhook
-   * @param payload Data containing filters like dateFrom, dateTo, medico, especialidade, etc.
+   * Trigger the "Consulta Centro Médico" webhook com resiliência:
+   * - Prioriza a URL direta do n8n (sem passar por rotas SPA que devolvem index.html)
+   * - Rejeita documentos HTML (garantindo que fallbacks do Vite não sejam interpretados como sucesso)
+   * - Suporte a fallback entre /webhook/ e /webhook-test/
+   * - Suporte a POST e GET automático
    */
   async triggerConsultaCentroMedico(payload: any = {}): Promise<any> {
-    const webhookUrl = import.meta.env.VITE_N8N_WEBHOOK_CENTRO_MEDICO || 'https://n8n-n8n.7woir1.easypanel.host/webhook/centro_medico';
+    const rawConfiguredUrl = 
+      import.meta.env.VITE_N8N_WEBHOOK_CENTRO_MEDICO || 
+      (typeof window !== 'undefined' ? localStorage.getItem('hsc_n8n_webhook_centro_medico_url') : null) ||
+      'https://n8n-n8n.7woir1.easypanel.host/webhook/d3f00b1e-9dac-4be8-ad07-f58ec85789e5';
     
-    if (!webhookUrl) {
-      console.error('Webhook URL (VITE_N8N_WEBHOOK_CENTRO_MEDICO) is not configured.');
-      return null;
-    }
+    // Normaliza URLs direta e de teste
+    const directProdUrl = rawConfiguredUrl.replace('/webhook-test/', '/webhook/');
+    const directTestUrl = rawConfiguredUrl.replace('/webhook/', '/webhook-test/');
+    
+    // Lista ordenada: SEMPRE prioriza as URLs diretas do Easypanel
+    const urlsToTry = [directProdUrl, directTestUrl];
 
-    try {
-      const response = await fetch(webhookUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(payload),
+    console.log('[n8n Webhook] Disparando consulta ao Centro Médico. Candidatos:', urlsToTry, 'Payload:', payload);
+
+    let lastError: any = null;
+
+    // Constrói query string para fallback GET
+    const queryParams = new URLSearchParams();
+    if (payload && typeof payload === 'object') {
+      Object.entries(payload).forEach(([k, v]) => {
+        if (v !== undefined && v !== null) {
+          queryParams.append(k, String(v));
+        }
       });
-
-      if (!response.ok) {
-        throw new Error(`Error triggering webhook (${response.status}): ${response.statusText}`);
-      }
-
-      const data = await response.json();
-      return data;
-    } catch (error) {
-      console.error('Error in webhook triggerConsultaCentroMedico:', error);
-      return null;
     }
+    const queryString = queryParams.toString();
+
+    for (const targetUrl of urlsToTry) {
+      // 1. Tentar POST primeiro
+      try {
+        console.log(`[n8n Webhook] Tentando POST em: ${targetUrl}`);
+        const response = await fetch(targetUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json, text/plain, */*'
+          },
+          body: JSON.stringify(payload)
+        });
+
+        if (response.ok) {
+          const rawText = await response.text();
+          const trimmed = (rawText || '').trim();
+
+          // Ignora respostas HTML (fallback SPA do Vite)
+          if (trimmed.startsWith('<') || trimmed.toLowerCase().startsWith('<!doctype')) {
+            console.warn(`[n8n Webhook] Rota ${targetUrl} retornou documento HTML. Ignorando.`);
+            continue;
+          }
+
+          if (trimmed) {
+            try {
+              const parsed = JSON.parse(trimmed);
+              console.log(`[n8n Webhook] Sucesso via POST em ${targetUrl}:`, parsed);
+              return { success: true, url: targetUrl, method: 'POST', data: parsed };
+            } catch {
+              console.log(`[n8n Webhook] Resposta em texto bruto de ${targetUrl}:`, trimmed);
+              return { success: true, url: targetUrl, method: 'POST', data: trimmed };
+            }
+          }
+          return { success: true, url: targetUrl, method: 'POST', data: [] };
+        }
+
+        // Se retornar 404 ou 405 no POST, tenta GET com query parameters
+        if (response.status === 404 || response.status === 405) {
+          console.log(`[n8n Webhook] Status ${response.status} no POST. Tentando GET em: ${targetUrl}`);
+          const urlWithParams = queryString ? `${targetUrl}?${queryString}` : targetUrl;
+          const getRes = await fetch(urlWithParams, {
+            method: 'GET',
+            headers: { 'Accept': 'application/json, text/plain, */*' }
+          });
+
+          if (getRes.ok) {
+            const rawText = await getRes.text();
+            const trimmed = (rawText || '').trim();
+
+            if (trimmed.startsWith('<') || trimmed.toLowerCase().startsWith('<!doctype')) {
+              console.warn(`[n8n Webhook] Rota GET ${urlWithParams} retornou documento HTML. Ignorando.`);
+              continue;
+            }
+
+            if (trimmed) {
+              try {
+                const parsed = JSON.parse(trimmed);
+                console.log(`[n8n Webhook] Sucesso via GET em ${urlWithParams}:`, parsed);
+                return { success: true, url: urlWithParams, method: 'GET', data: parsed };
+              } catch {
+                return { success: true, url: urlWithParams, method: 'GET', data: trimmed };
+              }
+            }
+            return { success: true, url: urlWithParams, method: 'GET', data: [] };
+          }
+        }
+
+        lastError = new Error(`HTTP ${response.status}: ${response.statusText}`);
+      } catch (err: any) {
+        console.warn(`[n8n Webhook] Falha de requisição em ${targetUrl}:`, err?.message || err);
+        lastError = err;
+      }
+    }
+
+    console.error('[n8n Webhook] Falha ao consultar n8n:', lastError);
+    throw lastError || new Error('Não foi possível conectar ao webhook do n8n.');
   },
 
   /**

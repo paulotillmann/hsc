@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Stethoscope,
@@ -128,7 +128,10 @@ const isStatusCanceladoTasy = (statusReal?: string, statusOriginal?: string): bo
 const getDateOffset = (days: number): string => {
   const d = new Date();
   d.setDate(d.getDate() + days);
-  return d.toISOString().split('T')[0];
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
 };
 
 const formatDateLabel = (dateStr: string): string => {
@@ -607,7 +610,7 @@ export default function CentroMedico() {
   // Estados Principais: Kanban e Escalas Médicas
   const [activeTab, setActiveTab] = useState<'escalas' | 'kanban'>('kanban');
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedDate, setSelectedDate] = useState<string>(() => new Date().toISOString().split('T')[0]);
+  const [selectedDate, setSelectedDate] = useState<string>(() => getDateOffset(0));
   const [selectedEspecialidade, setSelectedEspecialidade] = useState<string>('TODAS');
   const [selectedStatus, setSelectedStatus] = useState<string>('TODOS');
   
@@ -733,6 +736,8 @@ export default function CentroMedico() {
   const [resendingCardId, setResendingCardId] = useState<string | null>(null);
   const [isSendingAll, setIsSendingAll] = useState(false);
   const [sendingProgress, setSendingProgress] = useState<{ current: number; total: number } | null>(null);
+  const [isResendingAllEnviadas, setIsResendingAllEnviadas] = useState(false);
+  const [resendingAllProgress, setResendingAllProgress] = useState<{ current: number; total: number } | null>(null);
   const [toast, setToast] = useState<{ type: 'success' | 'error' | 'info'; message: string } | null>(null);
   const [debugModalOpen, setDebugModalOpen] = useState(false);
   const [debugData, setDebugData] = useState<{
@@ -1025,6 +1030,15 @@ export default function CentroMedico() {
     handleDateChange(newDateStr);
   };
 
+  // Busca automática dos agendamentos do dia ao abrir a tela
+  const hasAutoSyncedRef = useRef(false);
+  useEffect(() => {
+    if (hasAutoSyncedRef.current) return;
+    hasAutoSyncedRef.current = true;
+    const todayStr = getDateOffset(0);
+    handleSyncWebhookForDate(todayStr);
+  }, []);
+
   // Mover Card de Consulta entre Colunas do Kanban
   const moveCardToStatus = async (cardId: string, newStatus: KanbanStatus) => {
     const targetCard = consultas.find(c => c.id === cardId);
@@ -1261,6 +1275,41 @@ export default function CentroMedico() {
     showToast('success', `${successCount} paciente(s) movidos para "Enviadas" com sucesso!`);
   };
 
+  // Reenviar WhatsApp para todos os pacientes da coluna "Confirmação de agendamento" (Enviadas)
+  const handleResendAllEnviadas = async () => {
+    if (isResendingAllEnviadas || isSendingAll) return;
+    const enviadasCards = filteredConsultas.filter(c => c.status === 'Enviadas');
+    if (enviadasCards.length === 0) {
+      showToast('info', 'Não há pacientes na coluna Confirmação de agendamento para enviar.');
+      return;
+    }
+
+    setIsResendingAllEnviadas(true);
+    setResendingAllProgress({ current: 0, total: enviadasCards.length });
+    showToast('info', `Iniciando reenvio de WhatsApp para ${enviadasCards.length} paciente(s) da Confirmação de agendamento...`);
+
+    let successCount = 0;
+    for (let i = 0; i < enviadasCards.length; i++) {
+      const card = enviadasCards[i];
+      setResendingAllProgress({ current: i + 1, total: enviadasCards.length });
+
+      try {
+        await sendWhatsAppNotification(card, 'Enviadas', true);
+        successCount++;
+      } catch (err) {
+        console.error(`Erro ao reenviar WhatsApp para ${card.paciente}:`, err);
+      }
+
+      if (i < enviadasCards.length - 1) {
+        await new Promise(resolve => setTimeout(resolve, 600));
+      }
+    }
+
+    setIsResendingAllEnviadas(false);
+    setResendingAllProgress(null);
+    showToast('success', `WhatsApp reenviado com sucesso para ${successCount} paciente(s) da Confirmação de agendamento!`);
+  };
+
   // Ação de Confirmação de Consulta do Paciente
   const handleToggleConfirmPatient = async (cardId: string) => {
     const target = consultas.find(c => c.id === cardId);
@@ -1450,9 +1499,9 @@ export default function CentroMedico() {
         {/* Glow sutil de fundo */}
         <div className="absolute top-0 right-0 -mt-8 -mr-8 w-40 h-40 bg-primary/5 rounded-full blur-3xl pointer-events-none" />
 
-        <div className="flex flex-col xl:flex-row items-stretch xl:items-center justify-between gap-3.5 relative z-10 w-full min-w-0">
-          {/* Lado Esquerdo: Identificação da Agenda */}
-          <div className="flex items-center gap-2 px-3 sm:px-4 py-2 rounded-2xl bg-muted/60 border border-border/50 text-foreground font-bold text-xs sm:text-sm shrink-0 shadow-xs">
+        <div className="flex flex-wrap items-center gap-3 relative z-10 w-full min-w-0">
+          {/* Identificação da Agenda */}
+          <div className="flex items-center gap-2 px-3.5 h-10 rounded-xl bg-muted/60 border border-border/50 text-foreground font-bold text-xs sm:text-sm shrink-0 shadow-xs">
             <Kanban className="h-4 w-4 shrink-0 text-primary" />
             <span>Agenda</span>
             <span className="ml-0.5 px-2 py-0.5 rounded-full text-[10px] bg-primary/10 text-primary font-bold border border-primary/20">
@@ -1460,79 +1509,79 @@ export default function CentroMedico() {
             </span>
           </div>
 
-          {/* Lado Direito: Controle de Datas e Especialidades Fluido */}
-          <div className="flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center gap-2.5 w-full xl:w-auto min-w-0">
-            {/* Seletor de Data em Pill Box sem barra de rolagem */}
-            <div className="flex items-center justify-between sm:justify-start gap-1 bg-background border border-border/80 p-1 rounded-2xl text-xs shadow-xs hover:border-primary/40 transition-all w-full sm:w-auto shrink-0">
-              <button
-                onClick={() => handleStepDay(-1)}
-                title="Dia Anterior"
-                className="px-2 sm:px-2.5 py-1.5 rounded-xl hover:bg-muted text-foreground transition-all flex items-center gap-1 font-medium text-xs active:scale-95 shrink-0"
-              >
-                <ChevronLeft className="h-4 w-4 text-muted-foreground" />
-                <span className="hidden sm:inline">Anterior</span>
-              </button>
-
-              <div className="flex items-center gap-1.5 px-2 sm:px-2.5 py-1.5 bg-muted/40 rounded-xl border border-border/40 hover:bg-muted/70 transition-colors shrink-0">
-                <Calendar className="h-3.5 w-3.5 text-primary shrink-0" />
-                <input
-                  type="date"
-                  value={selectedDate}
-                  onChange={e => handleDateChange(e.target.value)}
-                  className="bg-transparent text-foreground font-semibold focus:outline-none cursor-pointer text-xs w-[105px] sm:w-[115px]"
-                />
-              </div>
-
-              <button
-                onClick={() => handleDateChange(getDateOffset(0))}
-                title="Ir para Hoje"
-                className={`px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-bold transition-all shadow-xs active:scale-95 shrink-0 ${
-                  selectedDate === getDateOffset(0)
-                    ? 'bg-primary text-primary-foreground shadow-sm ring-1 ring-primary/30'
-                    : 'hover:bg-muted text-muted-foreground'
-                }`}
-              >
-                Hoje
-              </button>
-
-              <button
-                onClick={() => handleStepDay(1)}
-                title="Próximo Dia"
-                className="px-2 sm:px-2.5 py-1.5 rounded-xl hover:bg-muted text-foreground transition-all flex items-center gap-1 font-medium text-xs active:scale-95 shrink-0"
-              >
-                <span className="hidden sm:inline">Próximo</span>
-                <ChevronRight className="h-4 w-4 text-muted-foreground" />
-              </button>
-            </div>
-
-            {/* Filtro de Especialidade com Largura Flexível */}
-            <div className="flex items-center gap-2 bg-background border border-border/80 px-3.5 py-2 rounded-2xl text-xs shadow-xs hover:border-primary/40 focus-within:ring-2 focus-within:ring-primary/20 transition-all w-full sm:w-auto sm:min-w-[210px] min-w-0">
-              <Filter className="h-3.5 w-3.5 text-primary shrink-0" />
-              <select
-                value={selectedEspecialidade}
-                onChange={e => setSelectedEspecialidade(e.target.value)}
-                className="bg-transparent text-foreground focus:outline-none font-semibold cursor-pointer w-full text-xs min-w-0"
-              >
-                {especialidades.map(esp => (
-                  <option key={esp} value={esp} className="bg-card text-foreground">
-                    {esp === 'TODAS' ? 'Todas Especialidades' : esp}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {/* Botão de Atualização de Agenda (Gatilho para n8n) */}
+          {/* Seletor de Data em Pill Box sem barra de rolagem */}
+          <div className="flex items-center justify-between sm:justify-start gap-1.5 bg-background border border-border/80 px-1.5 h-10 rounded-xl text-xs shadow-xs hover:border-primary/40 transition-all shrink-0">
             <button
               type="button"
-              onClick={handleSyncWebhook}
-              disabled={isSyncing}
-              title="Consultar o n8n para atualizar os agendamentos do Tasy agora"
-              className="flex items-center justify-center gap-2 px-3.5 py-2 rounded-2xl text-xs font-semibold bg-primary text-primary-foreground hover:bg-primary/90 transition-all shadow-sm active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer shrink-0 w-full sm:w-auto whitespace-nowrap"
+              onClick={() => handleStepDay(-1)}
+              title="Dia Anterior"
+              className="px-2.5 h-7 rounded-lg hover:bg-muted text-foreground transition-all flex items-center gap-1 font-medium text-xs active:scale-95 shrink-0"
             >
-              <RefreshCw className={`h-3.5 w-3.5 shrink-0 ${isSyncing ? 'animate-spin' : ''}`} />
-              <span>{isSyncing ? 'Atualizando Agenda...' : 'Atualizar Agenda'}</span>
+              <ChevronLeft className="h-4 w-4 text-muted-foreground" />
+              <span className="hidden sm:inline">Anterior</span>
+            </button>
+
+            <div className="flex items-center gap-1.5 px-2 h-7 bg-muted/40 rounded-lg border border-border/40 hover:bg-muted/70 transition-colors shrink-0">
+              <Calendar className="h-3.5 w-3.5 text-primary shrink-0" />
+              <input
+                type="date"
+                value={selectedDate}
+                onChange={e => handleDateChange(e.target.value)}
+                className="bg-transparent text-foreground font-semibold focus:outline-none cursor-pointer text-xs w-[105px] sm:w-[115px]"
+              />
+            </div>
+
+            <button
+              type="button"
+              onClick={() => handleDateChange(getDateOffset(0))}
+              title="Ir para Hoje"
+              className={`px-3 h-7 rounded-lg text-xs font-bold transition-all shadow-xs active:scale-95 shrink-0 ${
+                selectedDate === getDateOffset(0)
+                  ? 'bg-primary text-primary-foreground shadow-sm ring-1 ring-primary/30'
+                  : 'hover:bg-muted text-muted-foreground'
+              }`}
+            >
+              Hoje
+            </button>
+
+            <button
+              type="button"
+              onClick={() => handleStepDay(1)}
+              title="Próximo Dia"
+              className="px-2.5 h-7 rounded-lg hover:bg-muted text-foreground transition-all flex items-center gap-1 font-medium text-xs active:scale-95 shrink-0"
+            >
+              <span className="hidden sm:inline">Próximo</span>
+              <ChevronRight className="h-4 w-4 text-muted-foreground" />
             </button>
           </div>
+
+          {/* Filtro de Especialidade com Largura Flexível */}
+          <div className="flex items-center gap-2 bg-background border border-border/80 px-3.5 h-10 rounded-xl text-xs shadow-xs hover:border-primary/40 focus-within:ring-2 focus-within:ring-primary/20 transition-all sm:min-w-[210px] shrink-0">
+            <Filter className="h-3.5 w-3.5 text-primary shrink-0" />
+            <select
+              value={selectedEspecialidade}
+              onChange={e => setSelectedEspecialidade(e.target.value)}
+              className="bg-transparent text-foreground focus:outline-none font-semibold cursor-pointer w-full text-xs min-w-0"
+            >
+              {especialidades.map(esp => (
+                <option key={esp} value={esp} className="bg-card text-foreground">
+                  {esp === 'TODAS' ? 'Todas Especialidades' : esp}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Botão de Atualização de Agenda (Gatilho para n8n) */}
+          <button
+            type="button"
+            onClick={handleSyncWebhook}
+            disabled={isSyncing}
+            title="Consultar o n8n para atualizar os agendamentos do Tasy agora"
+            className="flex items-center justify-center gap-2 px-4 h-10 rounded-xl text-xs font-semibold bg-primary text-primary-foreground hover:bg-primary/90 transition-all shadow-sm active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer shrink-0 whitespace-nowrap"
+          >
+            <RefreshCw className={`h-3.5 w-3.5 shrink-0 ${isSyncing ? 'animate-spin' : ''}`} />
+            <span>{isSyncing ? 'Atualizando Agenda...' : 'Atualizar Agenda'}</span>
+          </button>
         </div>
 
         {/* Input de Busca com Largura Total e Padding Confortável */}
@@ -1666,6 +1715,41 @@ export default function CentroMedico() {
                                 <span>
                                   {sendingProgress
                                     ? `Enviando (${sendingProgress.current}/${sendingProgress.total})...`
+                                    : 'Enviando todos...'}
+                                </span>
+                              </>
+                            ) : (
+                              <>
+                                <Send className="h-3.5 w-3.5 shrink-0" />
+                                <span>Enviar Todos</span>
+                              </>
+                            )}
+                          </button>
+                        )}
+
+                        {/* Botão de Enviar Todos na coluna "Confirmação de agendamento" (Enviadas) */}
+                        {col.id === 'Enviadas' && (
+                          <button
+                            type="button"
+                            onClick={handleResendAllEnviadas}
+                            disabled={colCards.length === 0 || isResendingAllEnviadas}
+                            title={
+                              colCards.length === 0
+                                ? 'Nenhum paciente para enviar'
+                                : `Reenviar notificação de WhatsApp para todos os ${colCards.length} pacientes da Confirmação de agendamento`
+                            }
+                            className={`w-full flex items-center justify-center gap-2 py-2 px-3 rounded-xl text-xs font-semibold transition-all active:scale-[0.98] cursor-pointer shadow-xs disabled:opacity-50 disabled:cursor-not-allowed text-center break-words mt-1 ${
+                              isResendingAllEnviadas
+                                ? 'bg-purple-600/20 text-purple-700 dark:text-purple-300 border border-purple-500/40'
+                                : 'bg-purple-600 hover:bg-purple-700 text-white shadow-purple-500/20'
+                            }`}
+                          >
+                            {isResendingAllEnviadas ? (
+                              <>
+                                <RefreshCw className="h-3.5 w-3.5 animate-spin shrink-0" />
+                                <span>
+                                  {resendingAllProgress
+                                    ? `Enviando (${resendingAllProgress.current}/${resendingAllProgress.total})...`
                                     : 'Enviando todos...'}
                                 </span>
                               </>
