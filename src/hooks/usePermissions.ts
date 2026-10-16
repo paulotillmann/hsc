@@ -1,7 +1,7 @@
 // src/hooks/usePermissions.ts
 // Hook centralizado para verificação de permissões e módulos do usuário logado
 
-import { useCallback, useMemo } from 'react';
+import { useCallback } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { PermissionKey, Permissions, Module } from '../types/permissions';
 
@@ -30,29 +30,7 @@ interface UsePermissionsReturn {
  * if (canAccess('relatorios')) { ... }
  */
 export function usePermissions(): UsePermissionsReturn {
-  const { permissions, isAdmin, userModules: rawUserModules } = useAuth();
-  // Módulos do usuário
-  const userModules = useMemo(() => {
-    const hasCentroMedico = rawUserModules.some(m => m.slug === 'centro-medico');
-    if (!hasCentroMedico) {
-      return [
-        ...rawUserModules,
-        {
-          id: 'm-centro-medico',
-          name: 'Centro Médico',
-          slug: 'centro-medico',
-          icon: 'Stethoscope',
-          description: 'Módulo de escalas médicas, consultas e agendamentos do Centro Médico',
-          is_active: true,
-          sort_order: 75,
-          is_system: false,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
-        } as Module
-      ];
-    }
-    return rawUserModules;
-  }, [rawUserModules]);
+  const { permissions, isAdmin, userModules } = useAuth();
 
   // Verifica permissão de ação (colunas booleanas na tabela roles)
   const can = useCallback(
@@ -68,7 +46,6 @@ export function usePermissions(): UsePermissionsReturn {
     (slug: string): boolean => {
       if (isAdmin) return true;
       if (slug === 'gestao-prontuarios') return true;
-      if (slug === 'centro-medico') return true;
       return userModules.some(m => m.slug === slug && m.is_active);
     },
     [isAdmin, userModules]
