@@ -23,12 +23,15 @@ import {
   ArrowLeft,
   Sun,
   Moon,
-  Users
+  Users,
+  UserX,
+  BarChart3
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import ActiveUsersModal from '../../components/ordemServico/ActiveUsersModal';
 import { VisaoGeralCard } from '../../components/recepcao/VisaoGeralCard';
+import GestaoOSView from '../../components/ordemServico/GestaoOSView';
 
 interface OrdemServicoItem {
   id: string;
@@ -140,6 +143,7 @@ export default function OrdemServico() {
     displayName: string;
     fullName: string;
     avatarUrl: string | null;
+    ativo: boolean;
   }
 
   const [executors, setExecutors] = useState<ExecutorInfo[]>([
@@ -148,32 +152,38 @@ export default function OrdemServico() {
       dbKey: 'talysson.resend',
       displayName: 'Talysson',
       fullName: 'Talysson Marins Resende',
-      avatarUrl: null
+      avatarUrl: null,
+      ativo: true
     },
     {
       email: 'bruno.lima@santacasaaraguari.org.br',
       dbKey: 'bruno.lima',
       displayName: 'Bruno',
       fullName: 'Bruno José M A Lima',
-      avatarUrl: null
+      avatarUrl: null,
+      ativo: true
     },
     {
       email: 'jessica.araujo@santacasaaraguari.org.br',
       dbKey: 'jessica.araujo',
       displayName: 'Jessica',
       fullName: 'Jessica Dantas de Araújo Cardoso',
-      avatarUrl: null
+      avatarUrl: null,
+      ativo: false
     },
     {
       email: 'jhon.silva@santacasaaraguari.org.br',
       dbKey: 'jhon.silva',
       displayName: 'Jhon',
       fullName: 'Jhon Willy da Silva',
-      avatarUrl: null
+      avatarUrl: null,
+      ativo: true
     }
   ]);
 
   const [selectedExecutor, setSelectedExecutor] = useState<string | null>(null);
+  const [showInactiveExecutors, setShowInactiveExecutors] = useState(false);
+  const [currentView, setCurrentView] = useState<'kanban' | 'gestao'>('kanban');
 
   const [selectedOrder, setSelectedOrder] = useState<OrdemServicoItem | null>(null);
   const [orderHistory, setOrderHistory] = useState<any[]>([]);
@@ -935,8 +945,16 @@ export default function OrdemServico() {
     );
   };
 
-  // Ordenar os executores em ordem alfabética pelo nome de exibição
-  const sortedExecutors = [...executors].sort((a, b) => a.displayName.localeCompare(b.displayName));
+  // Filtragem dos executores para a barra superior: ativos + inativos (se ativado ou selecionado)
+  const hasInactiveExecutors = executors.some(e => e.ativo === false);
+  const visibleExecutors = executors
+    .filter(exec => exec.ativo || showInactiveExecutors || selectedExecutor === exec.dbKey)
+    .sort((a, b) => {
+      if (a.ativo !== b.ativo) {
+        return a.ativo ? -1 : 1;
+      }
+      return a.displayName.localeCompare(b.displayName);
+    });
 
 
   return (
@@ -1034,31 +1052,77 @@ export default function OrdemServico() {
               </div>
             </div>
 
+            {/* Card / Botão de Gestão & Indicadores */}
+            <div
+              onClick={() => setCurrentView(prev => (prev === 'gestao' ? 'kanban' : 'gestao'))}
+              className={`relative overflow-hidden border rounded-xl px-3.5 py-1 flex items-center gap-3 min-h-[42px] transition-all duration-300 group cursor-pointer select-none shrink-0 ${
+                currentView === 'gestao'
+                  ? 'bg-primary/10 border-primary text-primary shadow-md shadow-primary/10 ring-2 ring-primary/20'
+                  : 'bg-card border-border/80 hover:border-primary/60 hover:shadow-md hover:shadow-primary/5'
+              }`}
+              title={currentView === 'gestao' ? 'Voltar para o Kanban' : 'Abrir Painel de Gestão e Indicadores'}
+            >
+              {/* Background Watermark Icon */}
+              <div className="absolute right-1 -bottom-2 text-slate-100 dark:text-white/5 group-hover:text-primary/10 dark:group-hover:text-primary/15 group-hover:scale-110 transition-all duration-500 pointer-events-none">
+                <BarChart3 className="w-12 h-12 stroke-[1.2]" />
+              </div>
+
+              <div className="flex flex-col relative z-10">
+                <div className="flex items-center gap-1.5">
+                  <span className={`text-[10px] font-bold uppercase tracking-wider ${currentView === 'gestao' ? 'text-primary' : 'text-muted-foreground'}`}>
+                    Indicadores
+                  </span>
+                  <span className="relative flex h-2 w-2">
+                    <span className={`relative inline-flex rounded-full h-2 w-2 ${currentView === 'gestao' ? 'bg-primary animate-pulse' : 'bg-muted-foreground/40'}`}></span>
+                  </span>
+                </div>
+                <div className="flex items-baseline gap-1.5 mt-0.5">
+                  <span className="text-base font-black text-foreground tracking-tight leading-none flex items-center gap-1">
+                    <BarChart3 className={`h-3.5 w-3.5 ${currentView === 'gestao' ? 'text-primary' : 'text-muted-foreground'}`} />
+                    Gestão
+                  </span>
+                  <span className={`text-[10px] font-bold ${currentView === 'gestao' ? 'text-primary font-black' : 'text-muted-foreground'}`}>
+                    {currentView === 'gestao' ? 'ativa' : 'BI'}
+                  </span>
+                </div>
+              </div>
+            </div>
+
             {/* Avatares dos Executores */}
             <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap bg-muted/40 border border-border/60 px-2.5 py-1 rounded-xl">
               <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider pl-0.5 select-none">Executores:</span>
-              <div className="flex items-center gap-1.5">
-                {sortedExecutors.map((exec) => {
+              <div className="flex items-center gap-1.5 flex-wrap">
+                {visibleExecutors.map((exec) => {
                   const isSelected = selectedExecutor === exec.dbKey;
+                  const isInactive = !exec.ativo;
                   const initials = exec.displayName.substring(0, 2).toUpperCase();
                   return (
                     <button
                       key={exec.dbKey}
                       onClick={() => setSelectedExecutor(isSelected ? null : exec.dbKey)}
-                      title={exec.fullName}
+                      title={`${exec.fullName}${isInactive ? ' (Histórico / Inativo)' : ''}`}
                       className={`relative flex items-center justify-center h-9 w-9 rounded-full border overflow-hidden p-0 transition-all duration-200 bg-background shrink-0 ${isSelected
                         ? 'border-primary ring-2 ring-primary/25 scale-105 shadow-sm'
-                        : 'border-border hover:border-muted-foreground/50 hover:scale-105'
+                        : isInactive
+                          ? 'border-dashed border-muted-foreground/50 opacity-75 hover:opacity-100 hover:scale-105'
+                          : 'border-border hover:border-muted-foreground/50 hover:scale-105'
                         }`}
                     >
                       {exec.avatarUrl ? (
                         <img
                           src={exec.avatarUrl}
                           alt={exec.displayName}
-                          className="h-full w-full rounded-full object-cover"
+                          className={`h-full w-full rounded-full object-cover transition-all ${
+                            isInactive && !isSelected ? 'grayscale opacity-80' : ''
+                          }`}
                         />
                       ) : (
-                        <div className={`h-full w-full rounded-full flex items-center justify-center text-[10px] font-bold ${isSelected ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'
+                        <div className={`h-full w-full rounded-full flex items-center justify-center text-[10px] font-bold ${
+                          isSelected
+                            ? 'bg-primary text-primary-foreground'
+                            : isInactive
+                              ? 'bg-muted/80 text-muted-foreground'
+                              : 'bg-muted text-muted-foreground'
                           }`}>
                           {initials}
                         </div>
@@ -1068,9 +1132,33 @@ export default function OrdemServico() {
                           ✓
                         </span>
                       )}
+                      {isInactive && !isSelected && (
+                        <span
+                          className="absolute -top-0.5 -right-0.5 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-muted border border-border text-[8px] text-muted-foreground shadow-xs"
+                          title="Inativo / Histórico"
+                        >
+                          ⏳
+                        </span>
+                      )}
                     </button>
                   );
                 })}
+
+                {hasInactiveExecutors && (
+                  <button
+                    type="button"
+                    onClick={() => setShowInactiveExecutors(prev => !prev)}
+                    title={showInactiveExecutors ? 'Ocultar executores inativos' : 'Exibir executores inativos'}
+                    className={`flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-semibold transition-all border shrink-0 ${
+                      showInactiveExecutors
+                        ? 'bg-primary/10 border-primary/30 text-primary shadow-xs'
+                        : 'bg-background/80 border-border text-muted-foreground hover:text-foreground hover:bg-muted/60'
+                    }`}
+                  >
+                    <UserX className="h-3 w-3" />
+                    <span>Inativo</span>
+                  </button>
+                )}
 
                 {selectedExecutor && (
                   <button
@@ -1138,152 +1226,174 @@ export default function OrdemServico() {
         </div>
       )}
 
-      {/* Estatísticas Rápidas */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-        <VisaoGeralCard
-          title="Em Triagem"
-          value={triagemItems.length}
-          icon={Search}
-          subtext="🔍 Aguardando análise"
-          subtextColorClass="text-slate-500 dark:text-slate-400"
-          isLoading={loading}
+      {/* Visualização: Kanban vs Gestão */}
+      {currentView === 'gestao' ? (
+        <GestaoOSView
+          orders={filteredOrders}
+          onBackToKanban={() => setCurrentView('kanban')}
+          dateFilterLabel={
+            dateFilter === 'dia'
+              ? 'Hoje'
+              : dateFilter === 'semana'
+              ? 'Esta Semana'
+              : dateFilter === 'mes'
+              ? 'Este Mês'
+              : 'Todas'
+          }
+          executorFilterLabel={
+            selectedExecutor
+              ? executors.find(e => e.dbKey.toLowerCase() === selectedExecutor.toLowerCase())?.displayName || selectedExecutor
+              : null
+          }
         />
-        <VisaoGeralCard
-          title="Em Processo"
-          value={processoItems.length}
-          icon={Play}
-          subtext="⚡ Técnicos em atendimento"
-          subtextColorClass="text-sky-600 dark:text-sky-400"
-          isLoading={loading}
-        />
-        <VisaoGeralCard
-          title="Escalado / Parado"
-          value={escalonadoItems.length}
-          icon={AlertTriangle}
-          subtext="⚠️ Aguardando peça/terceiro"
-          subtextColorClass="text-amber-600 dark:text-amber-400"
-          isLoading={loading}
-        />
-        <VisaoGeralCard
-          title="Encerrados"
-          value={finalizadoItems.length}
-          icon={CheckCircle2}
-          subtext="✅ Chamados finalizados"
-          subtextColorClass="text-emerald-600 dark:text-emerald-400"
-          isLoading={loading}
-        />
-        <VisaoGeralCard
-          title="Total"
-          value={filteredOrders.length}
-          icon={ClipboardList}
-          subtext="📋 Total de ordens no período"
-          subtextColorClass="text-primary dark:text-primary/95"
-          isLoading={loading}
-        />
-      </div>
-
-
-
-      {/* Layout Kanban */}
-      {loading ? (
-        <div className="flex-1 flex flex-col items-center justify-center gap-3">
-          <RefreshCcw className="h-8 w-8 text-primary animate-spin" />
-          <p className="text-sm text-muted-foreground">Carregando ordens de serviço...</p>
-        </div>
-      ) : filteredOrders.length === 0 ? (
-        <div className="flex-1 bg-card border border-border/80 shadow-sm rounded-xl p-8 text-center flex flex-col items-center justify-center gap-4">
-          <div className="h-16 w-16 rounded-full bg-muted flex items-center justify-center text-muted-foreground">
-            <Search className="h-8 w-8" />
-          </div>
-          <div>
-            <h2 className="text-xl font-bold text-foreground mb-1">Nenhum chamado encontrado</h2>
-            <p className="text-muted-foreground text-sm max-w-md mx-auto">
-              Experimente alterar os filtros de pesquisa ou utilize o botão de sincronização para baixar novos dados.
-            </p>
-          </div>
-        </div>
       ) : (
-        <div className="flex-1 min-h-0 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 pb-2">
-          {/* Coluna 1: Triagem */}
-          <div className="bg-slate-50 dark:bg-slate-900/30 border border-slate-200/60 dark:border-slate-800/40 rounded-xl p-3 flex flex-col h-full min-h-0">
-            <div className="flex items-center justify-between pb-2 border-b border-border/40 mb-3 shrink-0">
-              <div className="flex items-center gap-2">
-                <div className="h-2 w-2 rounded-full bg-slate-400" />
-                <h2 className="font-bold text-[16px] text-foreground">Triagem</h2>
-              </div>
-            </div>
-
-            <div className="flex-1 overflow-y-auto space-y-3 pr-1 custom-scrollbar transition-colors">
-              {triagemItems.length === 0 ? (
-                <div className="text-center py-8 text-xs text-muted-foreground border border-dashed rounded-lg">
-                  Sem chamados na triagem
-                </div>
-              ) : (
-                triagemItems.map(os => renderCard(os, 'triagem'))
-              )}
-            </div>
+        <>
+          {/* Estatísticas Rápidas */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+            <VisaoGeralCard
+              title="Em Triagem"
+              value={triagemItems.length}
+              icon={Search}
+              subtext="🔍 Aguardando análise"
+              subtextColorClass="text-slate-500 dark:text-slate-400"
+              isLoading={loading}
+            />
+            <VisaoGeralCard
+              title="Em Processo"
+              value={processoItems.length}
+              icon={Play}
+              subtext="⚡ Técnicos em atendimento"
+              subtextColorClass="text-sky-600 dark:text-sky-400"
+              isLoading={loading}
+            />
+            <VisaoGeralCard
+              title="Escalado / Parado"
+              value={escalonadoItems.length}
+              icon={AlertTriangle}
+              subtext="⚠️ Aguardando peça/terceiro"
+              subtextColorClass="text-amber-600 dark:text-amber-400"
+              isLoading={loading}
+            />
+            <VisaoGeralCard
+              title="Encerrados"
+              value={finalizadoItems.length}
+              icon={CheckCircle2}
+              subtext="✅ Chamados finalizados"
+              subtextColorClass="text-emerald-600 dark:text-emerald-400"
+              isLoading={loading}
+            />
+            <VisaoGeralCard
+              title="Total"
+              value={filteredOrders.length}
+              icon={ClipboardList}
+              subtext="📋 Total de ordens no período"
+              subtextColorClass="text-primary dark:text-primary/95"
+              isLoading={loading}
+            />
           </div>
 
-          {/* Coluna 2: Em Processo */}
-          <div className="bg-sky-50/40 dark:bg-sky-950/5 border border-sky-200/40 dark:border-sky-900/10 rounded-xl p-3 flex flex-col h-full min-h-0">
-            <div className="flex items-center justify-between pb-2 border-b border-border/40 mb-3 shrink-0">
-              <div className="flex items-center gap-2">
-                <div className="h-2 w-2 rounded-full bg-sky-500 animate-pulse" />
-                <h2 className="font-bold text-[16px] text-foreground">Em processo</h2>
+          {/* Layout Kanban */}
+          {loading ? (
+            <div className="flex-1 flex flex-col items-center justify-center gap-3">
+              <RefreshCcw className="h-8 w-8 text-primary animate-spin" />
+              <p className="text-sm text-muted-foreground">Carregando ordens de serviço...</p>
+            </div>
+          ) : filteredOrders.length === 0 ? (
+            <div className="flex-1 bg-card border border-border/80 shadow-sm rounded-xl p-8 text-center flex flex-col items-center justify-center gap-4">
+              <div className="h-16 w-16 rounded-full bg-muted flex items-center justify-center text-muted-foreground">
+                <Search className="h-8 w-8" />
+              </div>
+              <div>
+                <h2 className="text-xl font-bold text-foreground mb-1">Nenhum chamado encontrado</h2>
+                <p className="text-muted-foreground text-sm max-w-md mx-auto">
+                  Experimente alterar os filtros de pesquisa ou utilize o botão de sincronização para baixar novos dados.
+                </p>
               </div>
             </div>
-
-            <div className="flex-1 overflow-y-auto space-y-3 pr-1 custom-scrollbar transition-colors">
-              {processoItems.length === 0 ? (
-                <div className="text-center py-8 text-xs text-muted-foreground border border-dashed rounded-lg">
-                  Sem chamados em processo
+          ) : (
+            <div className="flex-1 min-h-0 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 pb-2">
+              {/* Coluna 1: Triagem */}
+              <div className="bg-slate-50 dark:bg-slate-900/30 border border-slate-200/60 dark:border-slate-800/40 rounded-xl p-3 flex flex-col h-full min-h-0">
+                <div className="flex items-center justify-between pb-2 border-b border-border/40 mb-3 shrink-0">
+                  <div className="flex items-center gap-2">
+                    <div className="h-2 w-2 rounded-full bg-slate-400" />
+                    <h2 className="font-bold text-[16px] text-foreground">Triagem</h2>
+                  </div>
                 </div>
-              ) : (
-                processoItems.map(os => renderCard(os, 'processo'))
-              )}
-            </div>
-          </div>
 
-          {/* Coluna 3: Escalonado */}
-          <div className="bg-amber-50/30 dark:bg-amber-950/5 border border-amber-200/40 dark:border-amber-900/10 rounded-xl p-3 flex flex-col h-full min-h-0">
-            <div className="flex items-center justify-between pb-2 border-b border-border/40 mb-3 shrink-0">
-              <div className="flex items-center gap-2">
-                <div className="h-2 w-2 rounded-full bg-amber-500" />
-                <h2 className="font-bold text-[16px] text-foreground">Escalonado</h2>
+                <div className="flex-1 overflow-y-auto space-y-3 pr-1 custom-scrollbar transition-colors">
+                  {triagemItems.length === 0 ? (
+                    <div className="text-center py-8 text-xs text-muted-foreground border border-dashed rounded-lg">
+                      Sem chamados na triagem
+                    </div>
+                  ) : (
+                    triagemItems.map(os => renderCard(os, 'triagem'))
+                  )}
+                </div>
+              </div>
+
+              {/* Coluna 2: Em Processo */}
+              <div className="bg-sky-50/40 dark:bg-sky-950/5 border border-sky-200/40 dark:border-sky-900/10 rounded-xl p-3 flex flex-col h-full min-h-0">
+                <div className="flex items-center justify-between pb-2 border-b border-border/40 mb-3 shrink-0">
+                  <div className="flex items-center gap-2">
+                    <div className="h-2 w-2 rounded-full bg-sky-500 animate-pulse" />
+                    <h2 className="font-bold text-[16px] text-foreground">Em processo</h2>
+                  </div>
+                </div>
+
+                <div className="flex-1 overflow-y-auto space-y-3 pr-1 custom-scrollbar transition-colors">
+                  {processoItems.length === 0 ? (
+                    <div className="text-center py-8 text-xs text-muted-foreground border border-dashed rounded-lg">
+                      Sem chamados em processo
+                    </div>
+                  ) : (
+                    processoItems.map(os => renderCard(os, 'processo'))
+                  )}
+                </div>
+              </div>
+
+              {/* Coluna 3: Escalonado */}
+              <div className="bg-amber-50/30 dark:bg-amber-950/5 border border-amber-200/40 dark:border-amber-900/10 rounded-xl p-3 flex flex-col h-full min-h-0">
+                <div className="flex items-center justify-between pb-2 border-b border-border/40 mb-3 shrink-0">
+                  <div className="flex items-center gap-2">
+                    <div className="h-2 w-2 rounded-full bg-amber-500" />
+                    <h2 className="font-bold text-[16px] text-foreground">Escalonado</h2>
+                  </div>
+                </div>
+
+                <div className="flex-1 overflow-y-auto space-y-3 pr-1 custom-scrollbar transition-colors">
+                  {escalonadoItems.length === 0 ? (
+                    <div className="text-center py-8 text-xs text-muted-foreground border border-dashed rounded-lg">
+                      Sem chamados escalonados
+                    </div>
+                  ) : (
+                    escalonadoItems.map(os => renderCard(os, 'escalonado'))
+                  )}
+                </div>
+              </div>
+
+              {/* Coluna 4: Finalizado */}
+              <div className="bg-emerald-50/20 dark:bg-emerald-950/5 border border-emerald-200/30 dark:border-emerald-900/10 rounded-xl p-3 flex flex-col h-full min-h-0">
+                <div className="flex items-center justify-between pb-2 border-b border-border/40 mb-3 shrink-0">
+                  <div className="flex items-center gap-2">
+                    <div className="h-2 w-2 rounded-full bg-emerald-500" />
+                    <h2 className="font-bold text-[16px] text-foreground">Finalizado</h2>
+                  </div>
+                </div>
+
+                <div className="flex-1 overflow-y-auto space-y-3 pr-1 custom-scrollbar transition-colors">
+                  {finalizadoItems.length === 0 ? (
+                    <div className="text-center py-8 text-xs text-muted-foreground border border-dashed rounded-lg">
+                      Nenhum chamado finalizado
+                    </div>
+                  ) : (
+                    finalizadoItems.map(os => renderCard(os, 'finalizado'))
+                  )}
+                </div>
               </div>
             </div>
-
-            <div className="flex-1 overflow-y-auto space-y-3 pr-1 custom-scrollbar transition-colors">
-              {escalonadoItems.length === 0 ? (
-                <div className="text-center py-8 text-xs text-muted-foreground border border-dashed rounded-lg">
-                  Sem chamados escalonados
-                </div>
-              ) : (
-                escalonadoItems.map(os => renderCard(os, 'escalonado'))
-              )}
-            </div>
-          </div>
-
-          {/* Coluna 4: Finalizado */}
-          <div className="bg-emerald-50/20 dark:bg-emerald-950/5 border border-emerald-200/30 dark:border-emerald-900/10 rounded-xl p-3 flex flex-col h-full min-h-0">
-            <div className="flex items-center justify-between pb-2 border-b border-border/40 mb-3 shrink-0">
-              <div className="flex items-center gap-2">
-                <div className="h-2 w-2 rounded-full bg-emerald-500" />
-                <h2 className="font-bold text-[16px] text-foreground">Finalizado</h2>
-              </div>
-            </div>
-
-            <div className="flex-1 overflow-y-auto space-y-3 pr-1 custom-scrollbar transition-colors">
-              {finalizadoItems.length === 0 ? (
-                <div className="text-center py-8 text-xs text-muted-foreground border border-dashed rounded-lg">
-                  Nenhum chamado finalizado
-                </div>
-              ) : (
-                finalizadoItems.map(os => renderCard(os, 'finalizado'))
-              )}
-            </div>
-          </div>
-        </div>
+          )}
+        </>
       )}
 
       {/* Modal de Detalhes da OS */}
@@ -1334,12 +1444,22 @@ export default function OrdemServico() {
                       <span>Solicitante: {selectedOrder.nm_solicitante}</span>
                     </div>
                   )}
-                  {selectedOrder.nm_executor && (
-                    <div className="flex items-center gap-2 text-sm text-emerald-600 dark:text-emerald-400 font-medium">
-                      <UserCheck className="h-4 w-4 shrink-0" />
-                      <span>Executor: {selectedOrder.nm_executor}</span>
-                    </div>
-                  )}
+                  {selectedOrder.nm_executor && (() => {
+                    const exec = executors.find(e => e.dbKey.toLowerCase() === selectedOrder.nm_executor?.trim().toLowerCase());
+                    return (
+                      <div className="flex items-center gap-2 text-sm text-emerald-600 dark:text-emerald-400 font-medium">
+                        <UserCheck className="h-4 w-4 shrink-0" />
+                        <span>
+                          Executor: {exec ? exec.fullName : selectedOrder.nm_executor}
+                          {exec?.ativo === false && (
+                            <span className="ml-2 text-[10px] font-semibold text-muted-foreground bg-muted px-1.5 py-0.5 rounded border border-border">
+                              Histórico
+                            </span>
+                          )}
+                        </span>
+                      </div>
+                    );
+                  })()}
                 </div>
               </div>
 

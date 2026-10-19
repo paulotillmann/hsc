@@ -36,7 +36,6 @@ export interface EscalaPlantao {
 export const ALLOWED_EMAILS = [
   'talysson.resende@santacasaaraguari.org.br',
   'bruno.lima@santacasaaraguari.org.br',
-  'jessica.araujo@santacasaaraguari.org.br',
   'jhon.silva@santacasaaraguari.org.br'
 ];
 
