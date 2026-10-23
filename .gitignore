@@ -49,3 +49,6 @@ supabase-go.exe
 
 # Temporary agent scratch files
 scratch/
+scratch_read_pdf.*
+por.traineddata
+public/holerites/
