@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Calendar, RefreshCw, ChevronDown, Check } from 'lucide-react';
+import { Calendar, RefreshCw, ChevronDown, Check, Mail } from 'lucide-react';
 import { PeriodOption, DateRange } from './types';
 
 interface DashboardHeaderProps {
@@ -11,6 +11,7 @@ interface DashboardHeaderProps {
   onNpsFilterChange: (f: 'all' | 'promoter' | 'neutral' | 'detractor') => void;
   onRefresh: () => void;
   loading: boolean;
+  onOpenReportModal?: () => void;
 }
 
 export const DashboardHeader: React.FC<DashboardHeaderProps> = ({
@@ -21,7 +22,8 @@ export const DashboardHeader: React.FC<DashboardHeaderProps> = ({
   npsFilter,
   onNpsFilterChange,
   onRefresh,
-  loading
+  loading,
+  onOpenReportModal
 }) => {
   const [showCustomModal, setShowCustomModal] = useState(false);
   const [tempStart, setTempStart] = useState(customRange?.startDate || '');
@@ -152,6 +154,19 @@ export const DashboardHeader: React.FC<DashboardHeaderProps> = ({
               Detratores
             </button>
           </div>
+
+          {onOpenReportModal && (
+            <button
+              type="button"
+              onClick={onOpenReportModal}
+              className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs md:text-sm px-3.5 py-2 rounded-xl transition-all shadow-xs cursor-pointer"
+              title="Gerar e Enviar Relatório por E-mail"
+            >
+              <Mail className="w-4 h-4" />
+              <span className="hidden sm:inline">Relatório por E-mail</span>
+              <span className="sm:hidden">Relatório</span>
+            </button>
+          )}
 
           <button
             type="button"

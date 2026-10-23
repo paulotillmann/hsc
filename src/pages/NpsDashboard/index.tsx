@@ -8,6 +8,7 @@ import { RankingsGrid } from './RankingsGrid';
 import { RecentSurveysTable } from './RecentSurveysTable';
 import { SurveyDetailsDrawer } from './SurveyDetailsDrawer';
 import { DashboardSkeleton } from './DashboardSkeleton';
+import { NpsReportModal } from './NpsReportModal';
 import { useNpsDashboardData } from './useNpsDashboardData';
 import { PeriodOption, DateRange } from './types';
 
@@ -16,6 +17,7 @@ export default function NpsDashboard() {
   const [customRange, setCustomRange] = useState<DateRange | undefined>(undefined);
   const [npsFilter, setNpsFilter] = useState<'all' | 'promoter' | 'neutral' | 'detractor'>('all');
   const [searchTerm, setSearchTerm] = useState<string>('');
+  const [isReportModalOpen, setIsReportModalOpen] = useState<boolean>(false);
 
   const {
     loading,
@@ -50,6 +52,7 @@ export default function NpsDashboard() {
         onNpsFilterChange={setNpsFilter}
         onRefresh={fetchData}
         loading={loading}
+        onOpenReportModal={() => setIsReportModalOpen(true)}
       />
 
       <main className="w-full max-w-[1920px] mx-auto px-4 md:px-8 py-6 space-y-6">
@@ -88,6 +91,13 @@ export default function NpsDashboard() {
         detail={selectedSurveyDetail}
         loading={loadingDetail}
         onClose={closeSurveyDetail}
+      />
+
+      <NpsReportModal
+        isOpen={isReportModalOpen}
+        onClose={() => setIsReportModalOpen(false)}
+        defaultPeriod={period}
+        defaultCustomRange={customRange}
       />
     </div>
   );
