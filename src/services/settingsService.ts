@@ -46,7 +46,7 @@ const DEFAULTS: SmtpSettings = {
   smtp_from_email: '',
   smtp_secure: 'tls',
   smtp_financeiro_user: 'contasapagar@santacasaaraguari.org.br',
-  smtp_financeiro_pass: 'Santac@s@123',
+  smtp_financeiro_pass: '',
   smtp_financeiro_from_name: 'Santa Casa de Araguari - Financeiro',
   smtp_financeiro_from_email: 'contasapagar@santacasaaraguari.org.br',
 };

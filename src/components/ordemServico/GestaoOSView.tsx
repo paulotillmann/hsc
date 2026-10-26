@@ -4,7 +4,6 @@ import {
   Database,
   MapPin,
   CheckCircle2,
-  Clock,
   Layers,
   Search,
   ArrowUpDown,
@@ -25,7 +24,6 @@ import {
   PhoneCall,
   Activity,
   Wrench,
-  ShieldAlert,
   Laptop
 } from 'lucide-react';
 import {
@@ -40,6 +38,9 @@ import {
   Tooltip,
   CartesianGrid
 } from 'recharts';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
+import { useAuth } from '../../contexts/AuthContext';
 
 export interface OrdemServicoItem {
   id: string;
@@ -70,9 +71,109 @@ export interface OrdemServicoItem {
   ds_relat_tecnico: string | null;
   created_at: string;
   updated_at: string;
+  historico_ordem_servico?: { nr_sequencia: number }[] | null;
+}
+
+export interface ExecutorInfo {
+  email: string;
+  dbKey: string;
+  displayName: string;
+  fullName: string;
+  avatarUrl: string | null;
+  ativo: boolean;
 }
 
 export type OSTypeCategory = 'Infraestrutura' | 'Sistemas';
+
+/**
+ * Converte a data do Tasy (que pode vir com 'Z' mas está no fuso de Brasília)
+ * para um objeto Date correto interpretando-a em UTC-3.
+ */
+export const parseTasyDate = (dateStr: string | null): Date | null => {
+  if (!dateStr) return null;
+  const normalizedStr = dateStr.replace(/(Z|\+00:00|\+00)$/i, '-03:00');
+  const d = new Date(normalizedStr);
+  return isNaN(d.getTime()) ? null : d;
+};
+
+/**
+ * Formatação amigável de duração em dias, horas e minutos
+ */
+export function formatDurationFriendly(ms: number): string {
+  if (ms <= 0) return '0m';
+  const totalMinutes = Math.floor(ms / (1000 * 60));
+  const days = Math.floor(totalMinutes / (60 * 24));
+  const hours = Math.floor((totalMinutes % (60 * 24)) / 60);
+  const minutes = totalMinutes % 60;
+
+  if (days > 0) {
+    return `${days}d ${hours}h`;
+  }
+  if (hours > 0) {
+    return `${hours}h ${minutes}m`;
+  }
+  return `${minutes}m`;
+}
+
+/**
+ * Formatação de data e hora no padrão pt-BR
+ */
+export function formatDateFriendly(date: Date | string | null): string {
+  if (!date) return '';
+  try {
+    const d = typeof date === 'string' ? parseTasyDate(date) : date;
+    if (!d || isNaN(d.getTime())) return '';
+    return d.toLocaleDateString('pt-BR', {
+      day: '2-digit',
+      month: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      timeZone: 'America/Sao_Paulo'
+    }).replace(', ', ' - ');
+  } catch {
+    return '';
+  }
+}
+
+/**
+ * Formatação padronizada para nomes de setores hospitalares no relatório (Title Case preservando siglas)
+ */
+export function formatSectorDisplayName(raw: string): string {
+  if (!raw) return 'Não Informado';
+  const trimmed = raw.trim();
+
+  // Se já estiver em TitleCase (não todo em maiúsculas), preserva
+  if (trimmed !== trimmed.toUpperCase()) {
+    return trimmed;
+  }
+
+  // Lista de siglas hospitalares / de TI para manter em maiúsculas
+  const acronyms = new Set([
+    'CCIRAS', 'CME', 'CPN', 'NIR', 'SND', 'TI', 'UTI', 'HSC', 'PA', 'PS', 'ADM', 'RH', 'SAME', 'CCIH', 'SCIH'
+  ]);
+
+  // Palavras conectivas para manter em minúsculas (a menos que seja a primeira palavra)
+  const minorWords = new Set(['de', 'da', 'do', 'das', 'dos', 'e', 'em', 'para', 'com', 'por', 'a', 'o']);
+
+  const words = trimmed.split(/\s+/);
+  const formattedWords = words.map((w, index) => {
+    if (w === '-' || w === '/') return w;
+
+    const upper = w.toUpperCase().replace(/[.,;:()]/g, '');
+    if (acronyms.has(upper)) {
+      return w.toUpperCase();
+    }
+
+    const lower = w.toLowerCase();
+    if (index > 0 && minorWords.has(lower)) {
+      return lower;
+    }
+
+    return lower.charAt(0).toUpperCase() + lower.slice(1);
+  });
+
+  return formattedWords.join(' ');
+}
 
 /**
  * Classifica a Ordem de Serviço em Infraestrutura ou Sistemas
@@ -133,7 +234,7 @@ export function classifyOSType(os: OrdemServicoItem): OSTypeCategory {
   return 'Infraestrutura';
 }
 
-function isOSFinalizada(os: OrdemServicoItem): boolean {
+export function isOSFinalizada(os: OrdemServicoItem): boolean {
   const situacao = (os.ds_situacao || '').toLowerCase();
   const encer = (os.nm_usuario_encer || '').trim();
   const estagio = (os.ds_estagio || '').toLowerCase().trim();
@@ -236,6 +337,11 @@ interface GestaoOSViewProps {
   onBackToKanban: () => void;
   dateFilterLabel?: string;
   executorFilterLabel?: string | null;
+  onSelectOrder?: (os: OrdemServicoItem) => void;
+  executors?: ExecutorInfo[];
+  dateFilter?: 'dia' | 'semana' | 'mes' | 'todas';
+  startDate?: string;
+  endDate?: string;
 }
 
 const COLORS = {
@@ -245,6 +351,9 @@ const COLORS = {
   processo: '#721212', // Bordô Intermediário
   escalonado: '#b91c1c', // Rubi
   finalizado: '#10b981', // Verde Sucesso Padrão
+  atrasado: '#e11d48', // Rose / Red
+  emRisco: '#f59e0b', // Amber
+  noPrazo: '#10b981' // Emerald
 };
 
 export default function GestaoOSView({
@@ -252,7 +361,15 @@ export default function GestaoOSView({
   onBackToKanban,
   dateFilterLabel,
   executorFilterLabel,
+  onSelectOrder,
+  executors = [],
+  dateFilter = 'mes',
+  startDate = '',
+  endDate = ''
 }: GestaoOSViewProps) {
+  const { user, profile } = useAuth();
+  const [isExportingPDF, setIsExportingPDF] = useState(false);
+
   // Aba interna da Gestão: 'geral' (Infra vs Sistema + Setores) ou 'recorrencia' (Assuntos & Equipamentos)
   const [activeSubTab, setActiveSubTab] = useState<'geral' | 'recorrencia'>('geral');
 
@@ -264,7 +381,6 @@ export default function GestaoOSView({
   // Filtros da aba de Recorrência (Equipamentos e Assuntos)
   const [equipSearch, setEquipSearch] = useState('');
   const [equipFilterCriticidade, setEquipFilterCriticidade] = useState<'todos' | 'reincidentes' | 'criticos'>('todos');
-  const [selectedTopicFilter, setSelectedTopicFilter] = useState<string | null>(null);
 
   // 1. Estatísticas Gerais e Agregação
   const stats = useMemo(() => {
@@ -411,7 +527,6 @@ export default function GestaoOSView({
     TOPIC_DEFINITIONS.forEach(def => {
       const item = topicMap[def.id];
       if (item.total > 0) {
-        // Ordena os exemplos mais comuns
         const sortedDanos = Array.from(item.danosSet.entries())
           .sort((a, b) => b[1] - a[1])
           .slice(0, 3)
@@ -476,7 +591,6 @@ export default function GestaoOSView({
       })
       .sort((a, b) => b.totalOS - a.totalOS);
 
-    // Contagem de reincidentes (equipamentos com >= 2 chamados)
     const reincidentesCount = equipmentRecurrenceArray.filter(
       e => e.totalOS >= 2 && e.equipamento !== 'SEM EQUIPAMENTO VINCULADO'
     ).length;
@@ -507,6 +621,8 @@ export default function GestaoOSView({
       reincidentesCount,
     };
   }, [orders]);
+
+
 
   // Dados para o Gráfico de Rosca (Infra vs Sistema)
   const donutData = useMemo(() => {
@@ -556,14 +672,12 @@ export default function GestaoOSView({
   const filteredEquipments = useMemo(() => {
     let list = stats.equipmentRecurrence;
 
-    // Filtro por criticidade
     if (equipFilterCriticidade === 'reincidentes') {
       list = list.filter(e => e.totalOS >= 2);
     } else if (equipFilterCriticidade === 'criticos') {
       list = list.filter(e => e.totalOS >= 4);
     }
 
-    // Filtro por texto (equipamento ou setor)
     if (equipSearch.trim()) {
       const q = equipSearch.toLowerCase();
       list = list.filter(
@@ -580,7 +694,7 @@ export default function GestaoOSView({
       return (
         <div className="bg-popover/95 border border-border shadow-xl rounded-xl p-3 text-xs backdrop-blur-md z-50">
           <p className="font-bold text-foreground mb-1.5 border-b border-border/50 pb-1">
-            {payload[0]?.payload?.fullName || label || payload[0]?.name}
+            {payload[0]?.payload?.fullName || payload[0]?.payload?.label || label || payload[0]?.name}
           </p>
           {payload.map((entry: any, index: number) => (
             <div key={`item-${index}`} className="flex items-center justify-between gap-4 py-0.5">
@@ -591,13 +705,246 @@ export default function GestaoOSView({
                 />
                 {entry.name}:
               </span>
-              <span className="font-bold text-foreground">{entry.value} chamados</span>
+              <span className="font-bold text-foreground">
+                {entry.value} {entry.name.includes('%') ? '%' : entry.name.includes('Horas') ? 'h' : 'chamados'}
+              </span>
             </div>
           ))}
         </div>
       );
     }
     return null;
+  };
+
+  // Cálculo do período para o cabeçalho do relatório PDF (modelo C305)
+  const computePeriodoReport = (): string => {
+    if (dateFilter === 'todas' && startDate && endDate) {
+      const s = startDate.split('-').reverse().join('/');
+      const e = endDate.split('-').reverse().join('/');
+      return `${s} à ${e}`;
+    }
+
+    if (dateFilter === 'dia') {
+      const today = new Date();
+      const dStr = today.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' });
+      return `${dStr} à ${dStr}`;
+    }
+
+    if (dateFilter === 'semana') {
+      const today = new Date();
+      const day = today.getDay();
+      const diff = today.getDate() - day + (day === 0 ? -6 : 1);
+      const startOfWeek = new Date(today);
+      startOfWeek.setDate(diff);
+      const endOfWeek = new Date(startOfWeek);
+      endOfWeek.setDate(startOfWeek.getDate() + 6);
+      return `${startOfWeek.toLocaleDateString('pt-BR')} à ${endOfWeek.toLocaleDateString('pt-BR')}`;
+    }
+
+    // Se 'mes' ou default: pega o período das ordens ou o mês atual
+    if (orders.length > 0) {
+      const dates = orders
+        .map(o => parseTasyDate(o.dt_ordem_servico))
+        .filter((d): d is Date => d !== null && !isNaN(d.getTime()))
+        .sort((a, b) => a.getTime() - b.getTime());
+
+      if (dates.length > 0) {
+        const minDate = dates[0];
+        const maxDate = dates[dates.length - 1];
+
+        if (minDate.getMonth() === maxDate.getMonth() && minDate.getFullYear() === maxDate.getFullYear()) {
+          const y = minDate.getFullYear();
+          const m = minDate.getMonth();
+          const firstDay = new Date(y, m, 1);
+          const lastDay = new Date(y, m + 1, 0);
+          return `${firstDay.toLocaleDateString('pt-BR')} à ${lastDay.toLocaleDateString('pt-BR')}`;
+        } else {
+          return `${minDate.toLocaleDateString('pt-BR')} à ${maxDate.toLocaleDateString('pt-BR')}`;
+        }
+      }
+    }
+
+    const today = new Date();
+    const y = today.getFullYear();
+    const m = today.getMonth();
+    const firstDay = new Date(y, m, 1);
+    const lastDay = new Date(y, m + 1, 0);
+    return `${firstDay.toLocaleDateString('pt-BR')} à ${lastDay.toLocaleDateString('pt-BR')}`;
+  };
+
+  // Exportação em PDF no Modelo Oficial C305
+  const handleExportPDF = async () => {
+    try {
+      setIsExportingPDF(true);
+
+      const doc = new jsPDF({
+        orientation: 'portrait',
+        unit: 'mm',
+        format: 'a4'
+      });
+
+      // 1. Tentar carregar logotipo da Santa Casa
+      let logoImg: HTMLImageElement | null = null;
+      let logoLoaded = false;
+      try {
+        logoImg = new Image();
+        logoImg.src = '/LOGO_HSC_PRIMARY.png';
+        await new Promise((resolve) => {
+          if (!logoImg) return resolve(false);
+          logoImg.onload = () => {
+            logoLoaded = true;
+            resolve(true);
+          };
+          logoImg.onerror = () => resolve(false);
+        });
+      } catch (err) {
+        console.warn('Não foi possível carregar logotipo para o PDF:', err);
+      }
+
+      // 2. Agrupar setores e ordenar alfabeticamente
+      const sectorTotalsMap = new Map<string, number>();
+      stats.sectors.forEach(s => {
+        const name = formatSectorDisplayName(s.nome);
+        sectorTotalsMap.set(name, (sectorTotalsMap.get(name) || 0) + s.total);
+      });
+
+      const sortedSectors = Array.from(sectorTotalsMap.entries())
+        .map(([displayName, total]) => ({ displayName, total }))
+        .sort((a, b) => a.displayName.localeCompare(b.displayName, 'pt-BR'));
+
+      const totalOrdersCount = stats.total;
+      const totalSectorsCount = sortedSectors.length;
+      const totalFormatted = totalOrdersCount.toLocaleString('pt-BR', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+      });
+
+      const periodoStr = computePeriodoReport();
+      const now = new Date();
+      const impressoEmStr =
+        now.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' }) +
+        ' ' +
+        now.toLocaleTimeString('pt-BR', {
+          timeZone: 'America/Sao_Paulo',
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit'
+        });
+
+      const userNameStr = profile?.email
+        ? profile.email.split('@')[0]
+        : profile?.full_name?.toLowerCase().replace(/\s+/g, '.') ||
+          user?.email?.split('@')[0] ||
+          'Talysson.resend';
+
+      const tableBody = sortedSectors.map(s => [s.displayName, s.total.toString()]);
+
+      // 3. Gerar documento com autoTable e layout idêntico ao modelo C305
+      autoTable(doc, {
+        startY: 28,
+        margin: { left: 10, right: 10, top: 28, bottom: 17 },
+        head: [['Setor', 'Quant.']],
+        body: tableBody,
+        foot: [
+          [
+            {
+              content: `Total(${totalSectorsCount})`,
+              styles: { halign: 'right', fontStyle: 'bold', fontSize: 8.5 }
+            },
+            {
+              content: totalFormatted,
+              styles: { halign: 'right', fontStyle: 'bold', fontSize: 8.5 }
+            }
+          ]
+        ],
+        theme: 'plain',
+        headStyles: {
+          fillColor: [204, 204, 204],
+          textColor: [0, 0, 0],
+          fontStyle: 'bold',
+          fontSize: 8.5,
+          cellPadding: { top: 1.8, bottom: 1.8, left: 3, right: 3 }
+        },
+        bodyStyles: {
+          fillColor: false,
+          textColor: [0, 0, 0],
+          font: 'helvetica',
+          fontSize: 8,
+          cellPadding: { top: 1.2, bottom: 1.2, left: 3, right: 3 }
+        },
+        footStyles: {
+          fillColor: false,
+          textColor: [0, 0, 0],
+          fontStyle: 'bold',
+          fontSize: 8.5,
+          cellPadding: { top: 2, bottom: 2, left: 3, right: 3 }
+        },
+        columnStyles: {
+          0: { cellWidth: 155, halign: 'left' },
+          1: { cellWidth: 35, halign: 'right' }
+        },
+        didDrawPage: (data) => {
+          // 1. Borda externa retangular contornando a página inteira
+          doc.setDrawColor(0, 0, 0);
+          doc.setLineWidth(0.3);
+          doc.rect(10, 10, 190, 276.5);
+
+          // 2. Linha divisória horizontal do cabeçalho
+          doc.line(10, 28, 200, 28);
+
+          // 3. Logotipo da Santa Casa à esquerda
+          if (logoLoaded && logoImg) {
+            doc.addImage(logoImg, 'PNG', 13, 12.5, 45, 12);
+          } else {
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(14);
+            doc.setTextColor(138, 21, 21);
+            doc.text('SANTA CASA', 14, 19);
+            doc.setFontSize(7.5);
+            doc.setFont('helvetica', 'normal');
+            doc.setTextColor(60, 60, 60);
+            doc.text('De Misericórdia de Araguari-MG', 14, 23);
+          }
+
+          // 4. Título e Período centralizados no lado direito do cabeçalho
+          doc.setTextColor(0, 0, 0);
+          doc.setFont('helvetica', 'bold');
+          doc.setFontSize(13);
+          doc.text('Gestão Ordem de Serviço', 135, 18, { align: 'center' });
+
+          doc.setFont('helvetica', 'normal');
+          doc.setFontSize(8.5);
+          doc.text(`Período: ${periodoStr}`, 135, 23.5, { align: 'center' });
+
+          // 5. Linha divisória horizontal do rodapé
+          doc.line(10, 281.5, 200, 281.5);
+
+          doc.setFont('helvetica', 'normal');
+          doc.setFontSize(7.5);
+          doc.setTextColor(0, 0, 0);
+
+          // Esquerda: Data/hora da impressão
+          doc.text(`Impresso em: ${impressoEmStr}`, 12, 285);
+
+          // Centro: Paginação
+          doc.text(`Página  ${data.pageNumber}`, 105, 285, { align: 'center' });
+
+          // Direita: Login do usuário
+          doc.text(userNameStr, 158, 285);
+
+          // Canto direito: Código do Relatório C305
+          doc.text('C305', 198, 285, { align: 'right' });
+        }
+      });
+
+      const sanitizedPeriod = periodoStr.replace(/[^a-zA-Z0-9]/g, '_');
+      doc.save(`Gestao_Ordem_Servico_${sanitizedPeriod}_C305.pdf`);
+    } catch (error) {
+      console.error('Erro ao gerar PDF modelo C305:', error);
+      alert('Erro ao gerar o relatório em PDF. Por favor, tente novamente.');
+    } finally {
+      setIsExportingPDF(false);
+    }
   };
 
   return (
@@ -629,14 +976,40 @@ export default function GestaoOSView({
                   Filtrando por executor: <strong className="text-foreground">{executorFilterLabel}</strong> ({stats.total} chamados)
                 </>
               ) : (
-                <>Análise de {stats.total} chamados baseada nos filtros aplicados</>
+                <>Análise de {stats.total} chamados no período ({dateFilterLabel || 'Período ativo'})</>
               )}
             </p>
           </div>
         </div>
 
-        {/* Alternador de Abas Internas (Segmented Control) */}
-        <div className="flex items-center gap-1.5 w-full sm:w-auto bg-muted/60 p-1 rounded-xl border border-border/80">
+        {/* Ações da Barra Superior e Alternador de Abas */}
+        <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap w-full lg:w-auto justify-end">
+          {/* Botão de Exportar PDF Modelo C305 */}
+          <button
+            onClick={handleExportPDF}
+            disabled={isExportingPDF}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-card border border-border/80 hover:border-primary/50 text-foreground font-bold text-xs transition-all shadow-sm hover:shadow active:scale-95 disabled:opacity-50 shrink-0 cursor-pointer group"
+            title="Exportar Relatório Oficial em PDF (Modelo C305)"
+          >
+            {isExportingPDF ? (
+              <>
+                <div className="h-3.5 w-3.5 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                <span>Gerando PDF...</span>
+              </>
+            ) : (
+              <>
+                <FileText className="h-4 w-4 text-primary group-hover:scale-110 transition-transform" />
+                <span>Exportar PDF</span>
+                <span className="text-[10px] font-black bg-primary/10 text-primary px-1.5 py-0.2 rounded border border-primary/20">
+                  C305
+                </span>
+              </>
+            )}
+          </button>
+
+          {/* Alternador de Abas Internas (Segmented Control) */}
+          <div className="flex items-center gap-1.5 w-full sm:w-auto bg-muted/60 p-1 rounded-xl border border-border/80 flex-wrap">
+          {/* Aba 1: Visão Geral & Setores */}
           <button
             onClick={() => setActiveSubTab('geral')}
             className={`flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all ${
@@ -649,6 +1022,7 @@ export default function GestaoOSView({
             <span>Visão Geral & Setores</span>
           </button>
 
+          {/* Aba 2: Reincidentes */}
           <button
             onClick={() => setActiveSubTab('recorrencia')}
             className={`flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all relative ${
@@ -667,6 +1041,8 @@ export default function GestaoOSView({
           </button>
         </div>
       </div>
+    </div>
+
 
       {/* ── CONTEÚDO DA ABA 1: VISÃO GERAL & SETORES ── */}
       {activeSubTab === 'geral' && (
@@ -990,11 +1366,21 @@ export default function GestaoOSView({
                 </div>
                 <button
                   onClick={() => setSectorSort(prev => (prev === 'total' ? 'nome' : 'total'))}
-                  className="flex items-center gap-1 px-3 py-1.5 rounded-xl border border-border bg-background hover:bg-muted text-xs font-semibold text-foreground transition-all shrink-0"
+                  className="flex items-center gap-1 px-3 py-1.5 rounded-xl border border-border bg-background hover:bg-muted text-xs font-semibold text-foreground transition-all shrink-0 cursor-pointer"
                   title="Alternar ordenação"
                 >
                   <ArrowUpDown className="h-3.5 w-3.5 text-muted-foreground" />
                   <span>{sectorSort === 'total' ? 'Por Volume' : 'Por Nome'}</span>
+                </button>
+
+                <button
+                  onClick={handleExportPDF}
+                  disabled={isExportingPDF}
+                  className="flex items-center gap-1 px-3 py-1.5 rounded-xl border border-border bg-background hover:bg-muted text-xs font-semibold text-foreground transition-all shrink-0 cursor-pointer"
+                  title="Exportar Relatório Modelo C305 em PDF"
+                >
+                  <Printer className="h-3.5 w-3.5 text-muted-foreground" />
+                  <span>PDF C305</span>
                 </button>
               </div>
             </div>

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Wrench,
@@ -289,6 +289,83 @@ export default function OrdemServico() {
     const matchesSearch = searchString.includes(searchTerm.toLowerCase());
     return matchesSearch;
   });
+
+  // Filtragem estrita para a visualização de Gestão & Indicadores / Relatório C305:
+  // Baseada estritamente na Data de Abertura da O.S. (dt_ordem_servico), idêntico aos relatórios oficiais do Tasy
+  const gestaoOrders = useMemo(() => {
+    return orders.filter(os => {
+      // 1. Data de Abertura da O.S.
+      if (!os.dt_ordem_servico) return false;
+      const openDate = parseTasyDate(os.dt_ordem_servico);
+      if (!openDate || isNaN(openDate.getTime())) return false;
+
+      // 2. Filtro por Período
+      const today = new Date();
+      if (dateFilter === 'dia') {
+        const isToday =
+          openDate.getDate() === today.getDate() &&
+          openDate.getMonth() === today.getMonth() &&
+          openDate.getFullYear() === today.getFullYear();
+        if (!isToday) return false;
+      } else if (dateFilter === 'semana') {
+        const day = today.getDay();
+        const diff = today.getDate() - day + (day === 0 ? -6 : 1);
+        const startOfWeek = new Date(today);
+        startOfWeek.setDate(diff);
+        startOfWeek.setHours(0, 0, 0, 0);
+
+        const endOfWeek = new Date(startOfWeek);
+        endOfWeek.setDate(startOfWeek.getDate() + 6);
+        endOfWeek.setHours(23, 59, 59, 999);
+
+        const isInWeek = openDate >= startOfWeek && openDate <= endOfWeek;
+        if (!isInWeek) return false;
+      } else if (dateFilter === 'mes') {
+        const isInMonth =
+          openDate.getMonth() === today.getMonth() &&
+          openDate.getFullYear() === today.getFullYear();
+        if (!isInMonth) return false;
+      } else if (dateFilter === 'todas') {
+        if (startDate) {
+          const start = new Date(startDate + 'T00:00:00');
+          if (openDate < start) return false;
+        }
+        if (endDate) {
+          const end = new Date(endDate + 'T23:59:59');
+          if (openDate > end) return false;
+        }
+      }
+
+      // 3. Filtro por Executor
+      if (selectedExecutor) {
+        const execName = (os.nm_executor || '').toLowerCase();
+        if (!execName.includes(selectedExecutor.toLowerCase())) {
+          return false;
+        }
+      }
+
+      // 4. Filtro por Busca
+      if (searchTerm.trim()) {
+        const searchString = [
+          os.nr_sequencia,
+          os.ds_grupo_des,
+          os.ds_localizacao,
+          os.ds_equipamento,
+          os.nm_solicitante,
+          os.nm_executor,
+          os.ds_dano_breve,
+          os.ds_dano,
+          os.ds_situacao
+        ].join(' ').toLowerCase();
+
+        if (!searchString.includes(searchTerm.toLowerCase())) {
+          return false;
+        }
+      }
+
+      return true;
+    });
+  }, [orders, dateFilter, startDate, endDate, selectedExecutor, searchTerm]);
 
   const handleCardClick = async (os: OrdemServicoItem) => {
     setSelectedOrder(os);
@@ -1229,7 +1306,7 @@ export default function OrdemServico() {
       {/* Visualização: Kanban vs Gestão */}
       {currentView === 'gestao' ? (
         <GestaoOSView
-          orders={filteredOrders}
+          orders={gestaoOrders}
           onBackToKanban={() => setCurrentView('kanban')}
           dateFilterLabel={
             dateFilter === 'dia'
@@ -1238,6 +1315,8 @@ export default function OrdemServico() {
               ? 'Esta Semana'
               : dateFilter === 'mes'
               ? 'Este Mês'
+              : startDate && endDate
+              ? `${startDate.split('-').reverse().join('/')} à ${endDate.split('-').reverse().join('/')}`
               : 'Todas'
           }
           executorFilterLabel={
@@ -1245,6 +1324,11 @@ export default function OrdemServico() {
               ? executors.find(e => e.dbKey.toLowerCase() === selectedExecutor.toLowerCase())?.displayName || selectedExecutor
               : null
           }
+          onSelectOrder={handleCardClick}
+          executors={executors}
+          dateFilter={dateFilter}
+          startDate={startDate}
+          endDate={endDate}
         />
       ) : (
         <>
