@@ -1103,10 +1103,16 @@ export default function CentroMedico() {
   };
 
   // Disparo / Reenvio de notificação de WhatsApp (utilizado no drag-and-drop e no botão de reenvio exclusivo do Kanban)
-  const sendWhatsAppNotification = async (targetCard: ConsultaAgendada, statusRef: KanbanStatus, isResend = false) => {
+  const sendWhatsAppNotification = async (
+    targetCard: ConsultaAgendada,
+    statusRef: KanbanStatus,
+    isResend = false,
+    instanceChoice?: 'CM01' | 'CM02'
+  ) => {
     const isConfirmacao = statusRef === 'Confirmadas';
     const actionLabel = isConfirmacao ? 'confirmação' : 'agendamento';
     const verb = isResend ? 'Reenviando' : 'Disparando';
+    const selectedInstance: 'CM01' | 'CM02' = instanceChoice || (Math.random() > 0.5 ? 'CM01' : 'CM02');
 
     try {
       showToast('info', `${verb} mensagem de ${actionLabel} por WhatsApp para ${targetCard.paciente}...`);
@@ -1141,15 +1147,14 @@ export default function CentroMedico() {
           linkConfirmacao: linkConfirmacao,
           origin: appOrigin,
           text: customText,
-          instance: instanceChoice,
+          instance: selectedInstance,
           isResend: isResend
         }
       });
 
       if (res.error) {
         console.warn('[WhatsApp Agendamento] Tentando fallback para whatsapp-centro-medico:', res.error);
-        const fallbackInst = instanceChoice || 'CM01';
-        const fallbackPhone = fallbackInst === 'CM02' ? '553499223124' : '553498434630';
+        const fallbackPhone = selectedInstance === 'CM02' ? '553499223124' : '553498434630';
         res = await supabase.functions.invoke('whatsapp-centro-medico', {
           body: {
             cardId: targetCard.id,
@@ -1162,7 +1167,7 @@ export default function CentroMedico() {
             horario: targetCard.horario,
             data: dataFormatada,
             convenio: targetCard.convenio,
-            instance: fallbackInst,
+            instance: selectedInstance,
             sender: fallbackPhone,
             recipient: targetCard.telefone || '',
             telefone: targetCard.telefone || '',
