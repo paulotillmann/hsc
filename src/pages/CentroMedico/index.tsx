@@ -1,5 +1,4 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
 import {
   Stethoscope,
   Calendar,
@@ -2103,22 +2102,15 @@ export default function CentroMedico() {
         )}
 
         {/* Modal de Diagnóstico da Resposta do n8n */}
-        <AnimatePresence>
-          {debugModalOpen && (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-sm"
-              onClick={() => setDebugModalOpen(false)}
+        {debugModalOpen && (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-sm transition-opacity duration-200"
+            onClick={() => setDebugModalOpen(false)}
+          >
+            <div
+              onClick={(e) => e.stopPropagation()}
+              className="bg-card border border-border rounded-2xl shadow-2xl max-w-2xl w-full max-h-[85vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200"
             >
-              <motion.div
-                initial={{ scale: 0.95, opacity: 0, y: 10 }}
-                animate={{ scale: 1, opacity: 1, y: 0 }}
-                exit={{ scale: 0.95, opacity: 0, y: 10 }}
-                onClick={(e) => e.stopPropagation()}
-                className="bg-card border border-border rounded-2xl shadow-2xl max-w-2xl w-full max-h-[85vh] flex flex-col overflow-hidden"
-              >
                 <div className="flex items-center justify-between p-4 border-b border-border bg-muted/20">
                   <div className="flex items-center gap-2">
                     <Activity className="h-5 w-5 text-primary" />
@@ -2210,10 +2202,9 @@ export default function CentroMedico() {
                     </button>
                   </div>
                 </div>
-              </motion.div>
-            </motion.div>
-          )}
-        </AnimatePresence>
+            </div>
+          </div>
+        )}
       </div>
   );
 }
