@@ -769,9 +769,17 @@ export default function CentroMedico() {
     error?: string;
   } | null>(null);
 
+  const toastTimerRef = useRef<any>(null);
+
   const showToast = (type: 'success' | 'error' | 'info', message: string) => {
+    if (toastTimerRef.current) {
+      clearTimeout(toastTimerRef.current);
+    }
     setToast({ type, message });
-    setTimeout(() => setToast(null), 5000);
+    toastTimerRef.current = setTimeout(() => {
+      setToast(null);
+      toastTimerRef.current = null;
+    }, 4500);
   };
 
   // Lista de especialidades únicas para filtro
@@ -2056,48 +2064,43 @@ export default function CentroMedico() {
           )}
         </div>
 
-        {/* Notificações Flutuantes (Toast) com feedback detalhado de sincronização */}
-        <AnimatePresence>
-          {toast && (
-            <motion.div
-              initial={{ opacity: 0, y: -20, scale: 0.95 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: -20, scale: 0.95 }}
-              transition={{ duration: 0.2 }}
-              className="fixed top-5 right-5 z-50 max-w-md w-[calc(100vw-2.5rem)] sm:w-full shadow-2xl rounded-2xl overflow-hidden pointer-events-auto border backdrop-blur-md"
+        {/* Notificações Flutuantes (Toast) com transição CSS nativa e estável (previne erro PopChildMeasure) */}
+        {toast && (
+          <div
+            key={`toast-${toast.type}-${toast.message.slice(0, 15)}`}
+            className="fixed top-5 right-5 z-50 max-w-md w-[calc(100vw-2.5rem)] sm:w-full shadow-2xl rounded-2xl overflow-hidden pointer-events-auto border backdrop-blur-md transition-all duration-300 animate-in fade-in slide-in-from-top-4"
+          >
+            <div
+              className={`p-4 flex items-start gap-3.5 ${
+                toast.type === 'success'
+                  ? 'bg-emerald-950/95 text-emerald-100 border-emerald-500/50 shadow-emerald-500/10'
+                  : toast.type === 'error'
+                  ? 'bg-rose-950/95 text-rose-100 border-rose-500/50 shadow-rose-500/10'
+                  : 'bg-slate-900/95 text-slate-100 border-blue-500/50 shadow-blue-500/10'
+              }`}
             >
-              <div
-                className={`p-4 flex items-start gap-3.5 ${
-                  toast.type === 'success'
-                    ? 'bg-emerald-950/95 text-emerald-100 border-emerald-500/50 shadow-emerald-500/10'
-                    : toast.type === 'error'
-                    ? 'bg-rose-950/95 text-rose-100 border-rose-500/50 shadow-rose-500/10'
-                    : 'bg-slate-900/95 text-slate-100 border-blue-500/50 shadow-blue-500/10'
-                }`}
-              >
-                <div className="shrink-0 mt-0.5">
-                  {toast.type === 'success' && <CheckCircle2 className="h-5 w-5 text-emerald-400" />}
-                  {toast.type === 'error' && <AlertCircle className="h-5 w-5 text-rose-400" />}
-                  {toast.type === 'info' && <RefreshCw className="h-5 w-5 text-blue-400 animate-spin" />}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs font-semibold uppercase tracking-wider opacity-80">
-                    {toast.type === 'success' ? 'Sincronização Concluída' : toast.type === 'error' ? 'Atenção na Sincronização' : 'Atualizando Agenda'}
-                  </p>
-                  <p className="text-sm mt-0.5 leading-relaxed break-words">{toast.message}</p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setToast(null)}
-                  className="text-white/60 hover:text-white p-1 rounded-lg hover:bg-white/10 transition-colors shrink-0"
-                  title="Fechar notificação"
-                >
-                  <XCircle className="h-4 w-4" />
-                </button>
+              <div className="shrink-0 mt-0.5">
+                {toast.type === 'success' && <CheckCircle2 className="h-5 w-5 text-emerald-400" />}
+                {toast.type === 'error' && <AlertCircle className="h-5 w-5 text-rose-400" />}
+                {toast.type === 'info' && <RefreshCw className="h-5 w-5 text-blue-400 animate-spin" />}
               </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-semibold uppercase tracking-wider opacity-80">
+                  {toast.type === 'success' ? 'Sincronização Concluída' : toast.type === 'error' ? 'Atenção na Sincronização' : 'Atualizando Agenda'}
+                </p>
+                <p className="text-sm mt-0.5 leading-relaxed break-words">{toast.message}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setToast(null)}
+                className="text-white/60 hover:text-white p-1 rounded-lg hover:bg-white/10 transition-colors shrink-0 cursor-pointer"
+                title="Fechar notificação"
+              >
+                <XCircle className="h-4 w-4" />
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Modal de Diagnóstico da Resposta do n8n */}
         <AnimatePresence>
