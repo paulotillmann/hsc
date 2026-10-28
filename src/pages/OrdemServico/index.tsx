@@ -1129,37 +1129,64 @@ export default function OrdemServico() {
               </div>
             </div>
 
-            {/* Card / Botão de Gestão & Indicadores */}
+            {/* Card / Botão de Alternância: Gestão & Indicadores vs Kanban */}
             <div
               onClick={() => setCurrentView(prev => (prev === 'gestao' ? 'kanban' : 'gestao'))}
-              className={`relative overflow-hidden border rounded-xl px-3.5 py-1 flex items-center gap-3 min-h-[42px] transition-all duration-300 group cursor-pointer select-none shrink-0 ${
+              className={`relative overflow-hidden border rounded-xl px-3 py-1 flex items-center gap-2.5 min-h-[42px] transition-all duration-300 group cursor-pointer select-none shrink-0 ${
                 currentView === 'gestao'
-                  ? 'bg-primary/10 border-primary text-primary shadow-md shadow-primary/10 ring-2 ring-primary/20'
-                  : 'bg-card border-border/80 hover:border-primary/60 hover:shadow-md hover:shadow-primary/5'
+                  ? 'bg-gradient-to-br from-primary/15 via-primary/5 to-card border-primary text-primary shadow-md shadow-primary/15 ring-2 ring-primary/25 hover:ring-primary/40'
+                  : 'bg-card border-border/80 hover:border-primary/60 hover:shadow-md hover:shadow-primary/5 hover:bg-muted/40'
               }`}
-              title={currentView === 'gestao' ? 'Voltar para o Kanban' : 'Abrir Painel de Gestão e Indicadores'}
+              title={currentView === 'gestao' ? 'Clique para voltar ao Quadro Kanban' : 'Clique para abrir o Painel de Gestão & Indicadores'}
             >
               {/* Background Watermark Icon */}
-              <div className="absolute right-1 -bottom-2 text-slate-100 dark:text-white/5 group-hover:text-primary/10 dark:group-hover:text-primary/15 group-hover:scale-110 transition-all duration-500 pointer-events-none">
-                <BarChart3 className="w-12 h-12 stroke-[1.2]" />
+              <div className="absolute right-0.5 -bottom-2.5 text-slate-100 dark:text-white/5 group-hover:text-primary/10 dark:group-hover:text-primary/15 group-hover:scale-110 group-hover:-rotate-3 transition-all duration-500 pointer-events-none">
+                <BarChart3 className="w-14 h-14 stroke-[1.1]" />
               </div>
 
-              <div className="flex flex-col relative z-10">
+              {/* Ícone em destaque à esquerda */}
+              <div
+                className={`p-1.5 rounded-lg flex items-center justify-center transition-all duration-300 relative z-10 shrink-0 ${
+                  currentView === 'gestao'
+                    ? 'bg-primary text-primary-foreground shadow-sm shadow-primary/30 group-hover:scale-105'
+                    : 'bg-primary/10 text-primary border border-primary/20 group-hover:bg-primary group-hover:text-primary-foreground group-hover:scale-105'
+                }`}
+              >
+                {currentView === 'gestao' ? (
+                  <ArrowLeft className="h-4 w-4 transition-transform group-hover:-translate-x-0.5" />
+                ) : (
+                  <BarChart3 className="h-4 w-4" />
+                )}
+              </div>
+
+              {/* Informações textuais */}
+              <div className="flex flex-col relative z-10 pr-0.5">
                 <div className="flex items-center gap-1.5">
-                  <span className={`text-[10px] font-bold uppercase tracking-wider ${currentView === 'gestao' ? 'text-primary' : 'text-muted-foreground'}`}>
-                    Indicadores
+                  <span className={`text-[9px] font-black uppercase tracking-wider ${
+                    currentView === 'gestao' ? 'text-primary' : 'text-muted-foreground'
+                  }`}>
+                    {currentView === 'gestao' ? 'Visualização Ativa' : 'Indicadores & BI'}
                   </span>
                   <span className="relative flex h-2 w-2">
-                    <span className={`relative inline-flex rounded-full h-2 w-2 ${currentView === 'gestao' ? 'bg-primary animate-pulse' : 'bg-muted-foreground/40'}`}></span>
+                    <span className={`animate-ping absolute inline-flex h-full w-full rounded-full ${
+                      currentView === 'gestao' ? 'bg-primary' : 'bg-primary/60'
+                    } opacity-75`}></span>
+                    <span className={`relative inline-flex rounded-full h-2 w-2 ${
+                      currentView === 'gestao' ? 'bg-primary' : 'bg-primary/80'
+                    }`}></span>
                   </span>
                 </div>
-                <div className="flex items-baseline gap-1.5 mt-0.5">
-                  <span className="text-base font-black text-foreground tracking-tight leading-none flex items-center gap-1">
-                    <BarChart3 className={`h-3.5 w-3.5 ${currentView === 'gestao' ? 'text-primary' : 'text-muted-foreground'}`} />
-                    Gestão
+
+                <div className="flex items-center gap-2 mt-0.5">
+                  <span className="text-sm font-black text-foreground tracking-tight leading-none">
+                    {currentView === 'gestao' ? 'Voltar ao Kanban' : 'Painel de Gestão'}
                   </span>
-                  <span className={`text-[10px] font-bold ${currentView === 'gestao' ? 'text-primary font-black' : 'text-muted-foreground'}`}>
-                    {currentView === 'gestao' ? 'ativa' : 'BI'}
+                  <span className={`text-[10px] font-bold px-1.5 py-0.2 rounded-md border leading-tight ${
+                    currentView === 'gestao'
+                      ? 'bg-primary/15 text-primary border-primary/30'
+                      : 'bg-muted text-muted-foreground border-border/80 group-hover:border-primary/30 group-hover:text-primary'
+                  }`}>
+                    {currentView === 'gestao' ? 'Quadro OS' : `${gestaoOrders.length} OS`}
                   </span>
                 </div>
               </div>

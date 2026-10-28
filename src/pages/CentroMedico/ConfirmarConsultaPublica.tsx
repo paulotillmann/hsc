@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { useSearchParams, useParams, useNavigate } from 'react-router-dom';
-import { motion, AnimatePresence } from 'framer-motion';
+import { useSearchParams, useParams } from 'react-router-dom';
+import { motion } from 'framer-motion';
 import {
   Stethoscope,
   Calendar,
@@ -10,33 +10,13 @@ import {
   ShieldCheck,
   Phone,
   MapPin,
-  Sparkles,
-  ArrowRight,
-  User,
-  CreditCard,
-  ChevronDown
+  AlertCircle
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
-import { INITIAL_CONSULTAS, ConsultaAgendada } from './consultasData';
 
 const KANBAN_CONFIRMED_KEY = 'hsc_centro_medico_confirmacoes_v1';
 const KANBAN_STORAGE_KEY = 'hsc_centro_medico_kanban_manual_status_v1';
 const KANBAN_ADDED_ORDER_KEY = 'hsc_centro_medico_kanban_added_order_v1';
-const KANBAN_CONSULTAS_CACHE_KEY = 'hsc_centro_medico_consultas_cache_v1';
-
-// Função para buscar lista completa de consultas (cache dinâmico do Centro Médico + mock inicial)
-const getAvailableConsultas = (): ConsultaAgendada[] => {
-  try {
-    const raw = localStorage.getItem(KANBAN_CONSULTAS_CACHE_KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        return parsed;
-      }
-    }
-  } catch {}
-  return INITIAL_CONSULTAS;
-};
 
 // Função para formatar data na sequência: dia, mês e ano (DD/MM/AAAA)
 const formatDateToBR = (dateStr?: string): string => {
@@ -54,90 +34,155 @@ const formatDateToBR = (dateStr?: string): string => {
 export default function ConfirmarConsultaPublica() {
   const [searchParams] = useSearchParams();
   const params = useParams<{ id: string }>();
-  const navigate = useNavigate();
 
-  // Lista de todas as consultas disponíveis no sistema
-  const [consultasList, setConsultasList] = useState<ConsultaAgendada[]>(getAvailableConsultas);
-
-  // ID selecionado (via URL param :id, query param ?id, ou primeiro paciente da lista)
-  const initialId = params.id || searchParams.get('id') || consultasList[0]?.id || 'cons-101';
-  const [selectedId, setSelectedId] = useState<string>(initialId);
+  // ID seguro da consulta obtido estritamente via rota (:id) ou query string (?id=)
+  const targetId = params.id || searchParams.get('id') || '';
+  const [selectedId, setSelectedId] = useState<string>(targetId);
 
   const [loading, setLoading] = useState(false);
+  const [loadingDetails, setLoadingDetails] = useState<boolean>(Boolean(targetId));
+  const [notFound, setNotFound] = useState<boolean>(!targetId);
   const [confirmed, setConfirmed] = useState(false);
+  const [remoteDetails, setRemoteDetails] = useState<any>(null);
 
-  // Sincroniza quando a URL muda
+  // Sincroniza se o parâmetro de rota ou query string mudar
   useEffect(() => {
-    if (params.id && params.id !== selectedId) {
-      setSelectedId(params.id);
-    } else if (searchParams.get('id') && searchParams.get('id') !== selectedId) {
-      setSelectedId(searchParams.get('id')!);
+    const nextId = params.id || searchParams.get('id') || '';
+    if (nextId !== selectedId) {
+      setSelectedId(nextId);
+      if (!nextId) {
+        setNotFound(true);
+        setLoadingDetails(false);
+      } else {
+        setLoadingDetails(true);
+      }
     }
   }, [params.id, searchParams]);
 
-  // Recarrega lista se houver atualização em cache
+  // Consulta via RPC Segura no Supabase para obter status e detalhes validados (LGPD & Anti-tampering)
   useEffect(() => {
-    const handleStorageUpdate = () => {
-      setConsultasList(getAvailableConsultas());
-    };
-    window.addEventListener('storage', handleStorageUpdate);
-    return () => window.removeEventListener('storage', handleStorageUpdate);
-  }, []);
+    let isMounted = true;
 
-  // Agendamento do paciente atual encontrado
-  const consultaAtual = useMemo(() => {
-    return consultasList.find(c => c.id === selectedId) || consultasList[0];
-  }, [consultasList, selectedId]);
+    if (!selectedId) {
+      setNotFound(true);
+      setLoadingDetails(false);
+      return;
+    }
 
-  // Monta os dados completos do agendamento do paciente respeitando a fonte de cada paciente
-  const patientData = useMemo(() => {
-    const c = consultaAtual;
-    const rawDate = searchParams.get('data') || c?.data || new Date().toISOString().split('T')[0];
-    const formattedDate = formatDateToBR(rawDate);
-
-    return {
-      id: c?.id || selectedId,
-      paciente: searchParams.get('paciente') || c?.paciente || 'Paciente do Centro Médico',
-      prontuario: searchParams.get('prontuario') || c?.prontuario || 'PRONT-00000',
-      idade: c?.idade || 0,
-      medico: searchParams.get('medico') || c?.medico || 'Médico Plantonista',
-      crm: searchParams.get('crm') || c?.crm || 'CRM/MG',
-      especialidade: searchParams.get('esp') || c?.especialidade || 'Consulta Especializada',
-      horario: searchParams.get('hora') || c?.horario || '11:30',
-      data: formattedDate,
-      consultorio: searchParams.get('consultorio') || c?.consultorio || 'Centro Médico',
-      convenio: searchParams.get('convenio') || c?.convenio || 'Particular / Convênio',
-      telefone: '(34) 3249-1500',
-      local: searchParams.get('local') || 'Centro Médico Santa Casa',
-      endereco: 'Araguari-MG, Praça Dom Almir Marques, n.º 2, Rosário, CEP 38.440-036',
-      bairro: 'Rosário'
-    };
-  }, [consultaAtual, selectedId, searchParams]);
-
-  // Verifica se o paciente atual já está confirmado
-  useEffect(() => {
+    // 1. Checa no localStorage local se já foi confirmada anteriormente neste navegador
     try {
       const stored = localStorage.getItem(KANBAN_CONFIRMED_KEY);
       if (stored) {
         const map = JSON.parse(stored);
-        setConfirmed(Boolean(map[selectedId]?.confirmadoPeloPaciente));
-      } else {
-        setConfirmed(false);
+        if (map[selectedId]?.confirmadoPeloPaciente) {
+          setConfirmed(true);
+        }
       }
-    } catch {
-      setConfirmed(false);
+    } catch {}
+
+    // 2. Consulta via RPC Segura no Supabase (recupera dados estritamente do paciente do card_id)
+    const checkRemoteDetails = async () => {
+      try {
+        setLoadingDetails(true);
+        const { data, error } = await supabase.rpc('obter_detalhes_consulta_publica', { p_card_id: selectedId });
+
+        if (!isMounted) return;
+
+        if (!error && data && (data as any).encontrado) {
+          const rec = data as any;
+          setRemoteDetails(rec);
+          setNotFound(false);
+          if (rec.confirmado_pelo_paciente) {
+            setConfirmed(true);
+          }
+        } else {
+          // Se não encontrou na RPC, checa se há parâmetros de contingência na URL (ex: paciente)
+          const pacienteParam = searchParams.get('paciente');
+          if (pacienteParam) {
+            setNotFound(false);
+          } else {
+            setNotFound(true);
+          }
+        }
+      } catch (err) {
+        console.warn('[ConfirmarConsulta] Falha ao verificar detalhes remotos:', err);
+        if (isMounted) {
+          const pacienteParam = searchParams.get('paciente');
+          setNotFound(!pacienteParam);
+        }
+      } finally {
+        if (isMounted) {
+          setLoadingDetails(false);
+        }
+      }
+    };
+
+    checkRemoteDetails();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [selectedId, searchParams]);
+
+  // Monta os dados completos do agendamento priorizando a RPC do Supabase e impedindo vazamento de terceiros
+  const patientData = useMemo(() => {
+    // 1. Snapshot oficial sanitizado retornado da RPC Segura do banco de dados
+    if (remoteDetails) {
+      return {
+        id: remoteDetails.card_id || selectedId,
+        paciente: remoteDetails.paciente || 'Paciente do Centro Médico',
+        prontuario: 'Agendamento Confirmado',
+        idade: 0,
+        medico: remoteDetails.medico || 'Médico Plantonista',
+        crm: remoteDetails.crm || 'CRM/MG',
+        especialidade: remoteDetails.especialidade || 'Consulta Especializada',
+        horario: remoteDetails.horario || 'Por ordem de chegada',
+        data: formatDateToBR(remoteDetails.data_consulta),
+        consultorio: remoteDetails.consultorio || 'Centro Médico Santa Casa',
+        convenio: remoteDetails.convenio || 'Particular / Convênio',
+        telefone: '(34) 3249-1500',
+        local: 'Centro Médico Santa Casa',
+        endereco: 'Araguari-MG, Praça Dom Almir Marques, n.º 2, Rosário, CEP 38.440-036',
+        bairro: 'Rosário'
+      };
     }
-  }, [selectedId]);
+
+    // 2. Fallback de contingência apenas se os parâmetros explícitos deste agendamento existirem na URL
+    const pacienteParam = searchParams.get('paciente');
+    if (pacienteParam && selectedId) {
+      const rawDate = searchParams.get('data') || new Date().toISOString().split('T')[0];
+      return {
+        id: selectedId,
+        paciente: pacienteParam,
+        prontuario: 'Agendamento Centro Médico',
+        idade: 0,
+        medico: searchParams.get('medico') || 'Médico Plantonista',
+        crm: searchParams.get('crm') || 'CRM/MG',
+        especialidade: searchParams.get('esp') || 'Consulta Especializada',
+        horario: searchParams.get('hora') || 'Por ordem de chegada',
+        data: formatDateToBR(rawDate),
+        consultorio: searchParams.get('consultorio') || 'Centro Médico Santa Casa',
+        convenio: searchParams.get('convenio') || 'Particular / Convênio',
+        telefone: '(34) 3249-1500',
+        local: searchParams.get('local') || 'Centro Médico Santa Casa',
+        endereco: 'Araguari-MG, Praça Dom Almir Marques, n.º 2, Rosário, CEP 38.440-036',
+        bairro: 'Rosário'
+      };
+    }
+
+    return null;
+  }, [remoteDetails, selectedId, searchParams]);
 
   // Handler de Confirmação da Consulta
   const handleConfirmar = async () => {
+    if (!selectedId || !patientData) return;
     setLoading(true);
 
     try {
       const now = Date.now();
       const timeStr = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
 
-      // 1. Atualiza no localStorage as confirmações
+      // 1. Atualiza no localStorage as confirmações deste navegador
       let confMap: Record<string, any> = {};
       try {
         const raw = localStorage.getItem(KANBAN_CONFIRMED_KEY);
@@ -169,17 +214,21 @@ export default function ConfirmarConsultaPublica() {
         localStorage.setItem(KANBAN_ADDED_ORDER_KEY, JSON.stringify(orderMap));
       } catch {}
 
-      // 4. Salva no Supabase se houver tabela
+      // 4. Salva no Supabase via RPC Segura (executada anonimamente com SECURITY DEFINER)
       try {
-        await supabase.from('centro_medico_kanban_cards').upsert({
-          card_id: selectedId,
-          status: 'Confirmadas',
-          confirmado_pelo_paciente: true,
-          updated_at: new Date(now).toISOString()
-        }, { onConflict: 'card_id' });
-      } catch {}
+        await supabase.rpc('confirmar_presenca_paciente', {
+          p_card_id: selectedId,
+          p_paciente: patientData.paciente,
+          p_data_consulta: patientData.data,
+          p_medico: patientData.medico,
+          p_especialidade: patientData.especialidade,
+          p_horario: patientData.horario
+        });
+      } catch (rpcErr) {
+        console.warn('[ConfirmarConsulta] Falha ao executar RPC de confirmação:', rpcErr);
+      }
 
-      // Dispara evento global para atualizar o Centro Médico em tempo real
+      // Dispara evento global para sincronizar caso outra aba esteja aberta
       window.dispatchEvent(
         new CustomEvent('consulta_confirmada_evento', {
           detail: { cardId: selectedId, confirmado: true, timestamp: timeStr, addedAt: now }
@@ -196,6 +245,74 @@ export default function ConfirmarConsultaPublica() {
       setLoading(false);
     }
   };
+
+  // ── ESTADO 1: CARREGANDO DETALHES ──
+  if (loadingDetails) {
+    return (
+      <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col items-center justify-center p-4 relative overflow-hidden">
+        <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
+        <div className="max-w-md w-full text-center space-y-4 relative z-10">
+          <div className="inline-flex items-center justify-center h-16 w-16 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 shadow-inner animate-pulse">
+            <Stethoscope className="h-8 w-8 animate-spin" style={{ animationDuration: '3s' }} />
+          </div>
+          <div className="space-y-1">
+            <h2 className="text-xl font-bold text-white tracking-tight">Verificando Agendamento</h2>
+            <p className="text-xs text-slate-400">Consultando os dados do Centro Médico...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── ESTADO 2: AGENDAMENTO NÃO LOCALIZADO OU SEM ID (LGPD & Anti-vazamento) ──
+  if (notFound || !patientData) {
+    return (
+      <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col items-center justify-center p-4 relative overflow-hidden selection:bg-rose-500 selection:text-white">
+        <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-rose-500/10 rounded-full blur-3xl pointer-events-none" />
+        <div className="max-w-md w-full space-y-4 relative z-10">
+          <div className="text-center space-y-1.5">
+            <div className="inline-flex items-center justify-center h-14 w-14 rounded-2xl bg-rose-500/10 border border-rose-500/30 text-rose-400 shadow-inner mb-0.5">
+              <AlertCircle className="h-7 w-7" />
+            </div>
+            <h1 className="text-2xl font-bold tracking-tight text-white">
+              Agendamento Não Localizado
+            </h1>
+            <p className="text-xs text-slate-400">
+              Não identificamos uma consulta válida com o link acessado.
+            </p>
+          </div>
+
+          <motion.div
+            initial={{ opacity: 0, y: 15 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="bg-slate-900/80 border border-slate-800/80 rounded-2xl p-6 shadow-2xl backdrop-blur-md space-y-4 text-center"
+          >
+            <p className="text-xs text-slate-300 leading-relaxed">
+              Por favor, certifique-se de clicar no <strong>link completo</strong> enviado diretamente pela equipe da Santa Casa via WhatsApp.
+            </p>
+
+            <div className="p-3.5 bg-slate-800/60 border border-slate-700/50 rounded-xl space-y-2 text-xs text-slate-300">
+              <div className="flex items-center justify-center gap-2 text-white font-bold">
+                <Building2 className="h-4 w-4 text-emerald-400" />
+                <span>Centro Médico Santa Casa</span>
+              </div>
+              <div className="flex items-center justify-center gap-2 text-emerald-300 font-mono font-semibold">
+                <Phone className="h-3.5 w-3.5" />
+                <span>(34) 3249-1500</span>
+              </div>
+              <p className="text-[11px] text-slate-400">
+                Praça Dom Almir Marques, n.º 2, Rosário — Araguari/MG
+              </p>
+            </div>
+          </motion.div>
+
+          <div className="text-center text-slate-500 text-xs">
+            Hospital Santa Casa de Misericórdia • Centro Médico
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   // ── SE JÁ ESTÁ CONFIRMADO: RENDERIZA A TELA TOTALMENTE EM VERDE COM OS DADOS DO AGENDAMENTO DESTE PACIENTE ──
   if (confirmed) {

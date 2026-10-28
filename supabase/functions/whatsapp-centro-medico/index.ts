@@ -65,30 +65,50 @@ Deno.serve(async (req: Request) => {
   const EVOLUTION_API_URL = Deno.env.get('EVOLUTION_API_URL') || '';
   const EVOLUTION_API_KEY = Deno.env.get('EVOLUTION_API_KEY') || '';
 
-  // Autenticação flexível: aceita Service Role, Anon Key ou usuário logado via JWT
+  // ── AUTENTICAÇÃO RIGOROSA ──────────────────────────────────────────────
   const authHeader = req.headers.get('Authorization') || '';
   const token = authHeader.replace(/^Bearer\s+/i, '');
-  let isAuthorized = !token || token === SUPABASE_SERVICE_ROLE_KEY || token === SUPABASE_ANON_KEY;
 
-  if (!isAuthorized && token && SUPABASE_URL) {
+  if (!token) {
+    return new Response(
+      JSON.stringify({ success: false, error: 'Token de autorização não fornecido.' }),
+      { status: 401, headers: corsHeaders }
+    );
+  }
+
+  // Permite chamadas internas de sistema via Service Role
+  const isServiceRole = Boolean(SUPABASE_SERVICE_ROLE_KEY && token === SUPABASE_SERVICE_ROLE_KEY);
+  let isAuthorized = isServiceRole;
+
+  // Se não for Service Role, valida o token do usuário logado via Supabase Auth
+  if (!isAuthorized && SUPABASE_URL) {
     try {
       const supabaseClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY || SUPABASE_SERVICE_ROLE_KEY, {
         global: { headers: { Authorization: authHeader } }
       });
-      const { data: { user }, error: userError } = await supabaseClient.auth.getUser();
+      const { data: { user }, error: userError } = await supabaseClient.auth.getUser(token);
       if (!userError && user) {
         isAuthorized = true;
       }
     } catch (e) {
-      console.warn('[WhatsApp Centro Médico Auth] Validação de token:', e);
+      console.warn('[WhatsApp Centro Médico Auth] Falha na validação de token:', e);
     }
   }
 
-  // Remetente (instância): usa a instância vinculada ao número 34988511343 ('HSC TI' ou configurável via env)
-  const SENDER_INSTANCE = Deno.env.get('EVOLUTION_SENDER_INSTANCE') || Deno.env.get('EVOLUTION_INSTANCE') || 'HSC TI';
+  // Bloqueia qualquer usuário anônimo ou requisição com credenciais inválidas
+  if (!isAuthorized) {
+    return new Response(
+      JSON.stringify({ success: false, error: 'Acesso não autorizado para envio de mensagens WhatsApp.' }),
+      { status: 401, headers: corsHeaders }
+    );
+  }
 
-  // Destinatário fixo solicitado: 84998444889 (formato internacional: 5584998444889)
-  const DEFAULT_RECIPIENT = '5584998444889';
+  // Instâncias remetentes padrão do Centro Médico: 'CM01' (553498434630) e 'CM02' (553499223124)
+  const INSTANCE_CM01 = 'CM01';
+  const INSTANCE_CM02 = 'CM02';
+
+  // Destinatário padrão de contingência/teste
+  const DEFAULT_RECIPIENT = Deno.env.get('DEFAULT_WHATSAPP_RECIPIENT') || '5584998444889';
 
   // Mensagem solicitada: "Você tem uma consulta no Centro Médico da Santa Casa"
   const DEFAULT_MESSAGE = 'Você tem uma consulta no Centro Médico da Santa Casa';
@@ -98,16 +118,42 @@ Deno.serve(async (req: Request) => {
     const body = await req.json().catch(() => ({}));
     console.log('[WhatsApp Centro Médico] Payload recebido:', JSON.stringify(body));
 
-    const recipient = body.recipient || DEFAULT_RECIPIENT;
+    const forceTestMode = Deno.env.get('FORCE_TEST_RECIPIENT') === 'true';
+    const rawTargetPhone = body.recipient || body.telefone;
+    let recipient: string;
+
+    if (forceTestMode) {
+      recipient = DEFAULT_RECIPIENT;
+      console.log(`[WhatsApp Centro Médico] Modo de teste ativo (FORCE_TEST_RECIPIENT). Enviando para número de teste: ${recipient}`);
+    } else {
+      const cleanPhone = String(rawTargetPhone || '').replace(/\D/g, '');
+      if (!cleanPhone || cleanPhone.length < 10) {
+        console.warn(`[WhatsApp Centro Médico] Disparo abortado: Paciente "${body.paciente || 'desconhecido'}" não possui telefone válido (${rawTargetPhone || 'vazio'}).`);
+        return new Response(
+          JSON.stringify({
+            success: false,
+            error: `O paciente "${body.paciente || 'selecionado'}" não possui um número de telefone válido cadastrado no sistema.`
+          }),
+          { status: 400, headers: corsHeaders }
+        );
+      }
+      let clean = cleanPhone;
+      if ((clean.length === 11 || clean.length === 10) && !clean.startsWith('55')) {
+        clean = `55${clean}`;
+      }
+      recipient = clean;
+    }
+
     // Permite usar a instância HSC TI (número 34988511343)
-    const instance = body.instance || SENDER_INSTANCE;
+    // Rotação / Seleção da Instância Primária e Backup (CM01 e CM02)
+    const primaryInstance = body.instance === INSTANCE_CM02 ? INSTANCE_CM02 : (body.instance === INSTANCE_CM01 ? INSTANCE_CM01 : (Math.random() > 0.5 ? INSTANCE_CM01 : INSTANCE_CM02));
+    const backupInstance = primaryInstance === INSTANCE_CM01 ? INSTANCE_CM02 : INSTANCE_CM01;
+
     let messageText = body.text || DEFAULT_MESSAGE;
-    // Formatar datas no padrão brasileiro DD/MM/AAAA (dia, mês e ano)
     messageText = messageText.replace(/(\d{4})-(\d{2})-(\d{2})/g, '$3/$2/$1');
 
-    // 2. Se as credenciais da Evolution API não estiverem disponíveis (ex: ambiente local sem secrets)
     if (!EVOLUTION_API_URL || !EVOLUTION_API_KEY) {
-      console.warn('[WhatsApp Centro Médico] EVOLUTION_API_URL ou EVOLUTION_API_KEY não configuradas no ambiente Supabase.');
+      console.warn('[WhatsApp Centro Médico] EVOLUTION_API_URL ou EVOLUTION_API_KEY não configuradas no ambiente.');
       return new Response(
         JSON.stringify({
           success: true,
@@ -115,7 +161,7 @@ Deno.serve(async (req: Request) => {
           message: 'Envio simulado com sucesso (configure EVOLUTION_API_URL e EVOLUTION_API_KEY no Supabase para envio em produção)',
           details: {
             recipient,
-            instance,
+            instance: primaryInstance,
             text: messageText
           }
         }),
@@ -123,20 +169,37 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    // 3. Enviar mensagem via Evolution API
-    const delivery = await sendWhatsAppMessage(
+    // Disparo com failover automático entre as instâncias CM01 e CM02
+    let usedInstance = primaryInstance;
+    let delivery = await sendWhatsAppMessage(
       EVOLUTION_API_URL,
       EVOLUTION_API_KEY,
-      instance,
+      primaryInstance,
       recipient,
       messageText
     );
 
     if (!delivery.success) {
-      throw new Error(`Erro ao enviar mensagem via Evolution API: ${delivery.error}`);
+      console.warn(`[WhatsApp Centro Médico] Falha na instância ${primaryInstance} (${delivery.error}). Acionando contingência com ${backupInstance}...`);
+      const fallbackDelivery = await sendWhatsAppMessage(
+        EVOLUTION_API_URL,
+        EVOLUTION_API_KEY,
+        backupInstance,
+        recipient,
+        messageText
+      );
+      if (fallbackDelivery.success) {
+        delivery = fallbackDelivery;
+        usedInstance = backupInstance;
+        console.log(`[WhatsApp Centro Médico] Mensagem enviada com sucesso pela instância de contingência ${backupInstance}!`);
+      }
     }
 
-    console.log(`[WhatsApp Centro Médico] Mensagem enviada com sucesso para ${recipient} via ${instance}`);
+    if (!delivery.success) {
+      throw new Error(`Erro ao enviar mensagem via Evolution API (Tentado em ${primaryInstance} e ${backupInstance}): ${delivery.error}`);
+    }
+
+    console.log(`[WhatsApp Centro Médico] Mensagem enviada com sucesso para ${recipient} via ${usedInstance}`);
 
     return new Response(
       JSON.stringify({
@@ -144,7 +207,7 @@ Deno.serve(async (req: Request) => {
         message: 'Mensagem de WhatsApp enviada com sucesso!',
         details: {
           recipient,
-          instance,
+          instance: usedInstance,
           text: messageText
         }
       }),

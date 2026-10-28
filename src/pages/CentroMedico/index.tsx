@@ -22,7 +22,6 @@ import {
   CalendarDays,
   Activity,
   Check,
-  Kanban,
   Send,
   MoveRight,
   GripVertical,
@@ -541,25 +540,27 @@ const persistConfirmedPatient = async (cardId: string, confirmado: boolean) => {
   try {
     const current = getStoredConfirmedPatientsMap();
     const now = Date.now();
-    if (confirmado) {
-      current[cardId] = {
-        confirmadoPeloPaciente: true,
-        confirmadoEm: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
-      };
-      recordCardAddedOrder(cardId, now);
-    } else {
-      delete current[cardId];
-    }
-    localStorage.setItem(KANBAN_CONFIRMED_KEY, JSON.stringify(current));
+      const timeStr = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+      if (confirmado) {
+        current[cardId] = {
+          confirmadoPeloPaciente: true,
+          confirmadoEm: timeStr
+        };
+        recordCardAddedOrder(cardId, now);
+      } else {
+        delete current[cardId];
+      }
+      localStorage.setItem(KANBAN_CONFIRMED_KEY, JSON.stringify(current));
 
-    try {
-      await supabase.from('centro_medico_kanban_cards').upsert({
-        card_id: cardId,
-        status: confirmado ? 'Confirmadas' : 'Agendamentos',
-        confirmado_pelo_paciente: confirmado,
-        updated_at: new Date(now).toISOString()
-      }, { onConflict: 'card_id' });
-    } catch {}
+      try {
+        await supabase.from('centro_medico_kanban_cards').upsert({
+          card_id: cardId,
+          status: confirmado ? 'Confirmadas' : 'Agendamentos',
+          confirmado_pelo_paciente: confirmado,
+          confirmado_em: confirmado ? timeStr : null,
+          updated_at: new Date(now).toISOString()
+        }, { onConflict: 'card_id' });
+      } catch {}
 
     // Notifica outros componentes da tela
     window.dispatchEvent(new CustomEvent('consulta_confirmada_evento', { detail: { cardId, confirmado, addedAt: now } }));
@@ -593,6 +594,12 @@ const persistCardManualStatus = async (
         status: newStatus,
         paciente: cardData?.paciente || null,
         data_consulta: cardData?.data || null,
+        medico: cardData?.medico || null,
+        crm: cardData?.crm || null,
+        especialidade: cardData?.especialidade || null,
+        horario: cardData?.horario || null,
+        consultorio: cardData?.consultorio || null,
+        convenio: cardData?.convenio || null,
         updated_at: new Date(now).toISOString()
       }, { onConflict: 'card_id' });
     } catch {
@@ -640,10 +647,10 @@ export default function CentroMedico() {
     });
   });
 
-  // Salva cache de consultas para acesso pela tela de confirmação de consulta
+  // Salva cache temporário na sessão (limpo automaticamente ao fechar o navegador)
   useEffect(() => {
     try {
-      localStorage.setItem('hsc_centro_medico_consultas_cache_v1', JSON.stringify(consultas));
+      sessionStorage.setItem('hsc_centro_medico_consultas_cache_v1', JSON.stringify(consultas));
     } catch {}
   }, [consultas]);
 
@@ -683,15 +690,22 @@ export default function CentroMedico() {
       try {
         const { data, error } = await supabase
           .from('centro_medico_kanban_cards')
-          .select('card_id, status, updated_at');
+          .select('card_id, status, confirmado_pelo_paciente, confirmado_em, updated_at');
 
         if (!error && data && data.length > 0) {
           const currentMap = getStoredManualStatusMap();
           const currentOrderMap = getStoredAddedOrderMap();
+          const currentConfMap = getStoredConfirmedPatientsMap();
 
           data.forEach((row: any) => {
             if (row.card_id && row.status) {
               currentMap[row.card_id] = row.status as KanbanStatus;
+            }
+            if (row.card_id && row.confirmado_pelo_paciente) {
+              currentConfMap[row.card_id] = {
+                confirmadoPeloPaciente: true,
+                confirmadoEm: row.confirmado_em || undefined
+              };
             }
             if (row.card_id && row.updated_at && !currentOrderMap[row.card_id]) {
               currentOrderMap[row.card_id] = new Date(row.updated_at).getTime();
@@ -700,17 +714,22 @@ export default function CentroMedico() {
 
           localStorage.setItem(KANBAN_STORAGE_KEY, JSON.stringify(currentMap));
           localStorage.setItem(KANBAN_ADDED_ORDER_KEY, JSON.stringify(currentOrderMap));
+          localStorage.setItem(KANBAN_CONFIRMED_KEY, JSON.stringify(currentConfMap));
 
+          setConfirmedPatientsMap(currentConfMap);
           setAddedOrderMap(currentOrderMap);
           setConsultas(prev => prev.map(c => {
             if (isStatusCanceladoTasy(c.statusReal, c.status)) {
               return { ...c, status: 'Canceladas' };
             }
+            const isConf = Boolean(currentConfMap[c.id]?.confirmadoPeloPaciente);
             const manualStatus = currentMap[c.id];
             const addedTimestamp = currentOrderMap[c.id];
             return {
               ...c,
-              ...(manualStatus ? { status: manualStatus } : {}),
+              ...(manualStatus ? { status: manualStatus } : (isConf ? { status: 'Confirmadas' } : {})),
+              confirmadoPeloPaciente: isConf,
+              confirmadoEm: currentConfMap[c.id]?.confirmadoEm,
               ...(addedTimestamp ? { addedAt: addedTimestamp } : {})
             };
           }));
@@ -735,9 +754,9 @@ export default function CentroMedico() {
   });
   const [resendingCardId, setResendingCardId] = useState<string | null>(null);
   const [isSendingAll, setIsSendingAll] = useState(false);
-  const [sendingProgress, setSendingProgress] = useState<{ current: number; total: number } | null>(null);
+  const [sendingProgress, setSendingProgress] = useState<{ current: number; total: number; instanceName?: string } | null>(null);
   const [isResendingAllEnviadas, setIsResendingAllEnviadas] = useState(false);
-  const [resendingAllProgress, setResendingAllProgress] = useState<{ current: number; total: number } | null>(null);
+  const [resendingAllProgress, setResendingAllProgress] = useState<{ current: number; total: number; instanceName?: string } | null>(null);
   const [toast, setToast] = useState<{ type: 'success' | 'error' | 'info'; message: string } | null>(null);
   const [debugModalOpen, setDebugModalOpen] = useState(false);
   const [debugData, setDebugData] = useState<{
@@ -1108,19 +1127,22 @@ export default function CentroMedico() {
           horario: targetCard.horario,
           data: dataFormatada,
           convenio: targetCard.convenio,
-          telefone: targetCard.telefone || '34988511343',
-          recipient: '5584998444889',
+          telefone: targetCard.telefone || '',
+          recipient: targetCard.telefone || '',
           status: statusRef,
           tipo: isConfirmacao ? 'confirmacao' : 'envio',
           linkConfirmacao: linkConfirmacao,
           origin: appOrigin,
           text: customText,
+          instance: instanceChoice,
           isResend: isResend
         }
       });
 
       if (res.error) {
         console.warn('[WhatsApp Agendamento] Tentando fallback para whatsapp-centro-medico:', res.error);
+        const fallbackInst = instanceChoice || 'CM01';
+        const fallbackPhone = fallbackInst === 'CM02' ? '553499223124' : '553498434630';
         res = await supabase.functions.invoke('whatsapp-centro-medico', {
           body: {
             cardId: targetCard.id,
@@ -1133,8 +1155,10 @@ export default function CentroMedico() {
             horario: targetCard.horario,
             data: dataFormatada,
             convenio: targetCard.convenio,
-            sender: '34988511343',
-            recipient: '5584998444889',
+            instance: fallbackInst,
+            sender: fallbackPhone,
+            recipient: targetCard.telefone || '',
+            telefone: targetCard.telefone || '',
             text: customText || 'Você tem uma consulta no Centro Médico da Santa Casa'
           }
         });
@@ -1250,23 +1274,33 @@ export default function CentroMedico() {
       return c;
     }));
 
-    // Dispara WhatsApp e persiste cada paciente
+    // Dispara WhatsApp intercalando entre CM01 e CM02 com intervalos humanizados anti-bloqueio
     let successCount = 0;
     for (let i = 0; i < agendamentosCards.length; i++) {
       const card = agendamentosCards[i];
-      setSendingProgress({ current: i + 1, total: agendamentosCards.length });
+      // Intercalação 1 a 1: par usa CM01, ímpar usa CM02
+      const targetInstance = CM_INSTANCES[i % 2];
+      setSendingProgress({ current: i + 1, total: agendamentosCards.length, instanceName: targetInstance.name });
+
       const updatedCard: ConsultaAgendada = { ...card, status: 'Enviadas', statusReal: 'Enviadas', addedAt: now };
       persistCardManualStatus(card.id, 'Enviadas', updatedCard);
 
       try {
-        await sendWhatsAppNotification(updatedCard, 'Enviadas', false);
+        await sendWhatsAppNotification(updatedCard, 'Enviadas', false, targetInstance.name);
         successCount++;
       } catch (err) {
-        console.error(`Erro ao disparar WhatsApp para ${card.paciente}:`, err);
+        console.error(`Erro ao disparar WhatsApp via ${targetInstance.name} para ${card.paciente}:`, err);
       }
 
+      // Intervalo de segurança humanizado entre mensagens para proteção do chip
       if (i < agendamentosCards.length - 1) {
-        await new Promise(resolve => setTimeout(resolve, 600));
+        if ((i + 1) % 10 === 0) {
+          showToast('info', 'Pausa de segurança anti-bloqueio (15s) entre lotes...');
+          await new Promise(resolve => setTimeout(resolve, 15000));
+        } else {
+          const delay = getRandomDelay(3000, 5500);
+          await new Promise(resolve => setTimeout(resolve, delay));
+        }
       }
     }
 
@@ -1291,17 +1325,26 @@ export default function CentroMedico() {
     let successCount = 0;
     for (let i = 0; i < enviadasCards.length; i++) {
       const card = enviadasCards[i];
-      setResendingAllProgress({ current: i + 1, total: enviadasCards.length });
+      // Intercalação 1 a 1: par usa CM01, ímpar usa CM02
+      const targetInstance = CM_INSTANCES[i % 2];
+      setResendingAllProgress({ current: i + 1, total: enviadasCards.length, instanceName: targetInstance.name });
 
       try {
-        await sendWhatsAppNotification(card, 'Enviadas', true);
+        await sendWhatsAppNotification(card, 'Enviadas', true, targetInstance.name);
         successCount++;
       } catch (err) {
-        console.error(`Erro ao reenviar WhatsApp para ${card.paciente}:`, err);
+        console.error(`Erro ao reenviar WhatsApp via ${targetInstance.name} para ${card.paciente}:`, err);
       }
 
+      // Intervalo de segurança humanizado entre mensagens para proteção do chip
       if (i < enviadasCards.length - 1) {
-        await new Promise(resolve => setTimeout(resolve, 600));
+        if ((i + 1) % 10 === 0) {
+          showToast('info', 'Pausa de segurança anti-bloqueio (15s) entre lotes...');
+          await new Promise(resolve => setTimeout(resolve, 15000));
+        } else {
+          const delay = getRandomDelay(3000, 5500);
+          await new Promise(resolve => setTimeout(resolve, delay));
+        }
       }
     }
 
@@ -1428,31 +1471,116 @@ export default function CentroMedico() {
   }, [escalas, consultas]);
 
   return (
-    <div className="flex-1 space-y-4 min-h-[85vh] pb-6 w-full mx-auto px-1 sm:px-2 pt-2 text-foreground transition-all">
-      {/* Header do Módulo Responsivo */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-card border border-border/80 p-4 sm:p-5 rounded-2xl shadow-sm w-full min-w-0">
-        <div className="space-y-1 min-w-0 w-full">
-          <div className="flex items-start sm:items-center gap-3 w-full min-w-0">
-            <div className="h-10 w-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center border border-primary/20 shadow-inner shrink-0 mt-0.5 sm:mt-0">
-              <Stethoscope className="h-6 w-6" />
-            </div>
-            <div className="min-w-0 flex-1">
-              <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-foreground flex flex-wrap items-center gap-2">
-                <span>Centro Médico</span>
-                <span className="text-[11px] px-2 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20 font-medium shrink-0">
-                  DEV LOCALHOST
-                </span>
-              </h1>
-              <p className="text-xs text-muted-foreground break-words mt-0.5">
-                Gestão integrada de escalas médicas, plantonistas e acompanhamento em modo Kanban.
-              </p>
-            </div>
+    <div className="flex-1 space-y-3.5 pb-6 w-full text-foreground transition-all">
+      {/* Header do Módulo Responsivo com Filtros no Canto Direito */}
+      <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4 bg-card border border-border/80 p-3.5 sm:p-4 rounded-2xl shadow-sm w-full min-w-0">
+        <div className="flex items-start sm:items-center gap-3 min-w-0">
+          <div className="h-10 w-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center border border-primary/20 shadow-inner shrink-0 mt-0.5 sm:mt-0">
+            <Stethoscope className="h-6 w-6" />
           </div>
+          <div className="min-w-0">
+            <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-foreground flex items-center gap-2">
+              <span>Centro Médico</span>
+            </h1>
+            <p className="text-xs text-muted-foreground break-words mt-0.5">
+              Gestão integrada de escalas médicas, plantonistas e acompanhamento em modo Kanban.
+            </p>
+          </div>
+        </div>
+
+        {/* Filtros no canto direito do cabeçalho */}
+        <div className="flex flex-wrap items-center gap-2 sm:gap-2.5 justify-start xl:justify-end min-w-0 max-w-full">
+
+          {/* Seletor de Data em Pill Box sem barra de rolagem */}
+          <div className="flex items-center justify-between sm:justify-start gap-1 bg-background border border-border/80 px-1.5 h-9 rounded-xl text-xs shadow-xs hover:border-primary/40 transition-all shrink-0">
+            <button
+              type="button"
+              onClick={() => handleStepDay(-1)}
+              title="Dia Anterior"
+              className="px-2 h-7 rounded-lg hover:bg-muted text-foreground transition-all flex items-center gap-1 font-medium text-xs active:scale-95 shrink-0"
+            >
+              <ChevronLeft className="h-3.5 w-3.5 text-muted-foreground" />
+              <span className="hidden sm:inline">Anterior</span>
+            </button>
+
+            <div className="flex items-center gap-1.5 px-2 h-7 bg-muted/40 rounded-lg border border-border/40 hover:bg-muted/70 transition-colors shrink-0">
+              <Calendar className="h-3 w-3 text-primary shrink-0" />
+              <input
+                type="date"
+                value={selectedDate}
+                onChange={e => handleDateChange(e.target.value)}
+                className="bg-transparent text-foreground font-semibold focus:outline-none cursor-pointer text-xs w-[105px] sm:w-[115px]"
+              />
+            </div>
+
+            <button
+              type="button"
+              onClick={() => handleDateChange(getDateOffset(0))}
+              title="Ir para Hoje"
+              className={`px-2.5 h-7 rounded-lg text-xs font-bold transition-all shadow-xs active:scale-95 shrink-0 ${
+                selectedDate === getDateOffset(0)
+                  ? 'bg-primary text-primary-foreground shadow-sm ring-1 ring-primary/30'
+                  : 'hover:bg-muted text-muted-foreground'
+              }`}
+            >
+              Hoje
+            </button>
+
+            <button
+              type="button"
+              onClick={() => handleStepDay(1)}
+              title="Próximo Dia"
+              className="px-2 h-7 rounded-lg hover:bg-muted text-foreground transition-all flex items-center gap-1 font-medium text-xs active:scale-95 shrink-0"
+            >
+              <span className="hidden sm:inline">Próximo</span>
+              <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
+            </button>
+          </div>
+
+          {/* Filtro de Especialidade com Largura Flexível */}
+          <div className="flex items-center gap-2 bg-background border border-border/80 px-3 h-9 rounded-xl text-xs shadow-xs hover:border-primary/40 focus-within:ring-2 focus-within:ring-primary/20 transition-all sm:min-w-[170px] shrink-0">
+            <Filter className="h-3.5 w-3.5 text-primary shrink-0" />
+            <select
+              value={selectedEspecialidade}
+              onChange={e => setSelectedEspecialidade(e.target.value)}
+              className="bg-transparent text-foreground focus:outline-none font-semibold cursor-pointer w-full text-xs min-w-0"
+            >
+              {especialidades.map(esp => (
+                <option key={esp} value={esp} className="bg-card text-foreground">
+                  {esp === 'TODAS' ? 'Todas Especialidades' : esp}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Campo de Busca Rápida Compacto */}
+          <div className="relative w-44 sm:w-52 lg:w-60 h-9 shrink-0">
+            <Search className="h-3.5 w-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+            <input
+              type="text"
+              placeholder="Buscar paciente, médico..."
+              value={searchTerm}
+              onChange={e => setSearchTerm(e.target.value)}
+              className="w-full h-full pl-8 pr-3 bg-background border border-border/80 rounded-xl text-xs placeholder:text-muted-foreground/70 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/50 transition-all shadow-xs"
+            />
+          </div>
+
+          {/* Botão de Atualização de Agenda (Gatilho para n8n) */}
+          <button
+            type="button"
+            onClick={handleSyncWebhook}
+            disabled={isSyncing}
+            title="Consultar o n8n para atualizar os agendamentos do Tasy agora"
+            className="flex items-center justify-center gap-2 px-3.5 h-9 rounded-xl text-xs font-semibold bg-primary text-primary-foreground hover:bg-primary/90 transition-all shadow-sm active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer shrink-0 whitespace-nowrap"
+          >
+            <RefreshCw className={`h-3.5 w-3.5 shrink-0 ${isSyncing ? 'animate-spin' : ''}`} />
+            <span>{isSyncing ? 'Atualizando...' : 'Atualizar Agenda'}</span>
+          </button>
         </div>
       </div>
 
       {/* Cards de Métricas / Estatísticas Responsivos */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 w-full min-w-0">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 w-full min-w-0">
         <div className="bg-card border border-border/80 p-3.5 sm:p-4 rounded-xl shadow-sm flex items-center justify-between gap-3 min-w-0">
           <div className="min-w-0 flex-1">
             <p className="text-xs text-muted-foreground font-medium truncate">Plantonistas Ativos</p>
@@ -1494,112 +1622,10 @@ export default function CentroMedico() {
         </div>
       </div>
 
-      {/* Navegação entre Abas, Controle de Datas e Filtros (Totalmente Responsivo) */}
-      <div className="bg-card border border-border/80 p-3.5 sm:p-5 rounded-2xl shadow-sm space-y-4 relative w-full min-w-0">
+      {/* Conteúdo Principal das Abas (Kanban / Escalas) */}
+      <div className="bg-card border border-border/80 p-3.5 sm:p-4 rounded-2xl shadow-sm relative w-full min-w-0 overflow-hidden">
         {/* Glow sutil de fundo */}
         <div className="absolute top-0 right-0 -mt-8 -mr-8 w-40 h-40 bg-primary/5 rounded-full blur-3xl pointer-events-none" />
-
-        <div className="flex flex-wrap items-center gap-3 relative z-10 w-full min-w-0">
-          {/* Identificação da Agenda */}
-          <div className="flex items-center gap-2 px-3.5 h-10 rounded-xl bg-muted/60 border border-border/50 text-foreground font-bold text-xs sm:text-sm shrink-0 shadow-xs">
-            <Kanban className="h-4 w-4 shrink-0 text-primary" />
-            <span>Agenda</span>
-            <span className="ml-0.5 px-2 py-0.5 rounded-full text-[10px] bg-primary/10 text-primary font-bold border border-primary/20">
-              {filteredConsultas.length}
-            </span>
-          </div>
-
-          {/* Seletor de Data em Pill Box sem barra de rolagem */}
-          <div className="flex items-center justify-between sm:justify-start gap-1.5 bg-background border border-border/80 px-1.5 h-10 rounded-xl text-xs shadow-xs hover:border-primary/40 transition-all shrink-0">
-            <button
-              type="button"
-              onClick={() => handleStepDay(-1)}
-              title="Dia Anterior"
-              className="px-2.5 h-7 rounded-lg hover:bg-muted text-foreground transition-all flex items-center gap-1 font-medium text-xs active:scale-95 shrink-0"
-            >
-              <ChevronLeft className="h-4 w-4 text-muted-foreground" />
-              <span className="hidden sm:inline">Anterior</span>
-            </button>
-
-            <div className="flex items-center gap-1.5 px-2 h-7 bg-muted/40 rounded-lg border border-border/40 hover:bg-muted/70 transition-colors shrink-0">
-              <Calendar className="h-3.5 w-3.5 text-primary shrink-0" />
-              <input
-                type="date"
-                value={selectedDate}
-                onChange={e => handleDateChange(e.target.value)}
-                className="bg-transparent text-foreground font-semibold focus:outline-none cursor-pointer text-xs w-[105px] sm:w-[115px]"
-              />
-            </div>
-
-            <button
-              type="button"
-              onClick={() => handleDateChange(getDateOffset(0))}
-              title="Ir para Hoje"
-              className={`px-3 h-7 rounded-lg text-xs font-bold transition-all shadow-xs active:scale-95 shrink-0 ${
-                selectedDate === getDateOffset(0)
-                  ? 'bg-primary text-primary-foreground shadow-sm ring-1 ring-primary/30'
-                  : 'hover:bg-muted text-muted-foreground'
-              }`}
-            >
-              Hoje
-            </button>
-
-            <button
-              type="button"
-              onClick={() => handleStepDay(1)}
-              title="Próximo Dia"
-              className="px-2.5 h-7 rounded-lg hover:bg-muted text-foreground transition-all flex items-center gap-1 font-medium text-xs active:scale-95 shrink-0"
-            >
-              <span className="hidden sm:inline">Próximo</span>
-              <ChevronRight className="h-4 w-4 text-muted-foreground" />
-            </button>
-          </div>
-
-          {/* Filtro de Especialidade com Largura Flexível */}
-          <div className="flex items-center gap-2 bg-background border border-border/80 px-3.5 h-10 rounded-xl text-xs shadow-xs hover:border-primary/40 focus-within:ring-2 focus-within:ring-primary/20 transition-all sm:min-w-[210px] shrink-0">
-            <Filter className="h-3.5 w-3.5 text-primary shrink-0" />
-            <select
-              value={selectedEspecialidade}
-              onChange={e => setSelectedEspecialidade(e.target.value)}
-              className="bg-transparent text-foreground focus:outline-none font-semibold cursor-pointer w-full text-xs min-w-0"
-            >
-              {especialidades.map(esp => (
-                <option key={esp} value={esp} className="bg-card text-foreground">
-                  {esp === 'TODAS' ? 'Todas Especialidades' : esp}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Botão de Atualização de Agenda (Gatilho para n8n) */}
-          <button
-            type="button"
-            onClick={handleSyncWebhook}
-            disabled={isSyncing}
-            title="Consultar o n8n para atualizar os agendamentos do Tasy agora"
-            className="flex items-center justify-center gap-2 px-4 h-10 rounded-xl text-xs font-semibold bg-primary text-primary-foreground hover:bg-primary/90 transition-all shadow-sm active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer shrink-0 whitespace-nowrap"
-          >
-            <RefreshCw className={`h-3.5 w-3.5 shrink-0 ${isSyncing ? 'animate-spin' : ''}`} />
-            <span>{isSyncing ? 'Atualizando Agenda...' : 'Atualizar Agenda'}</span>
-          </button>
-        </div>
-
-        {/* Input de Busca com Largura Total e Padding Confortável */}
-        <div className="relative group z-10 w-full min-w-0">
-          <Search className="h-4 w-4 absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground group-focus-within:text-primary transition-colors shrink-0" />
-          <input
-            type="text"
-            placeholder={
-              activeTab === 'escalas'
-                ? 'Buscar por médico, CRM, especialidade ou setor...'
-                : 'Buscar por paciente, médico ou classificação...'
-            }
-            value={searchTerm}
-            onChange={e => setSearchTerm(e.target.value)}
-            className="w-full pl-11 pr-4 py-2.5 bg-background border border-border/80 rounded-2xl text-xs sm:text-sm placeholder:text-muted-foreground/70 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/50 transition-all shadow-xs"
-          />
-        </div>
-
         {/* Conteúdo Principal das Abas */}
         {/* ── ABA KANBAN ── */}
         {activeTab === 'kanban' && (
@@ -1636,7 +1662,7 @@ export default function CentroMedico() {
                       onDragOver={e => handleDragOver(e, col.id)}
                       onDragLeave={handleDragLeave}
                       onDrop={e => handleDrop(e, col.id)}
-                      className={`bg-background border rounded-2xl p-3 sm:p-3.5 space-y-3 min-h-[500px] sm:min-h-[540px] flex flex-col justify-between transition-all duration-200 w-full min-w-0 ${
+                      className={`bg-background border rounded-2xl p-3 sm:p-3.5 space-y-3 min-h-[520px] lg:h-[calc(100vh-340px)] lg:min-h-[580px] flex flex-col justify-between transition-all duration-200 w-full min-w-0 ${
                         col.border
                       } ${
                         isOver
@@ -1714,7 +1740,7 @@ export default function CentroMedico() {
                                 <RefreshCw className="h-3.5 w-3.5 animate-spin shrink-0" />
                                 <span>
                                   {sendingProgress
-                                    ? `Enviando (${sendingProgress.current}/${sendingProgress.total})...`
+                                    ? `Enviando (${sendingProgress.current}/${sendingProgress.total}${sendingProgress.instanceName ? ` • ${sendingProgress.instanceName}` : ''})...`
                                     : 'Enviando todos...'}
                                 </span>
                               </>
@@ -1749,7 +1775,7 @@ export default function CentroMedico() {
                                 <RefreshCw className="h-3.5 w-3.5 animate-spin shrink-0" />
                                 <span>
                                   {resendingAllProgress
-                                    ? `Enviando (${resendingAllProgress.current}/${resendingAllProgress.total})...`
+                                    ? `Enviando (${resendingAllProgress.current}/${resendingAllProgress.total}${resendingAllProgress.instanceName ? ` • ${resendingAllProgress.instanceName}` : ''})...`
                                     : 'Enviando todos...'}
                                 </span>
                               </>
