@@ -8,6 +8,18 @@ const corsHeaders = {
   'Content-Type': 'application/json',
 };
 
+// ── CONFIGURAÇÃO DE INSTÂNCIAS E TOKENS (EVOLUTION API) ────────────────────
+const CM_INSTANCES_CONFIG: Record<string, { token: string; phone: string }> = {
+  'CM01': {
+    token: Deno.env.get('EVOLUTION_TOKEN_CM01') || '783459BF1329-49E8-878E-2DC27A6D5D72',
+    phone: '553498434630'
+  },
+  'CM02': {
+    token: Deno.env.get('EVOLUTION_TOKEN_CM02') || 'F7A8D18DA33A-4BD8-8E48-2D19C90477D7',
+    phone: '553499223124'
+  }
+};
+
 // ── ENVIO PARA A EVOLUTION API ─────────────────────────────────────────────
 async function sendWhatsAppMessage(
   apiUrl: string,
@@ -32,11 +44,14 @@ async function sendWhatsAppMessage(
 
   console.log(`[WhatsApp Centro Médico] Enviando POST para: ${url} (Destinatário: ${cleanRecipient})`);
 
+  const effectiveKey = CM_INSTANCES_CONFIG[instance]?.token || apiKey;
+
   const response = await fetch(url, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'apikey': apiKey
+      'apikey': effectiveKey,
+      'Authorization': `Bearer ${effectiveKey}`
     },
     body: JSON.stringify(payload)
   });
