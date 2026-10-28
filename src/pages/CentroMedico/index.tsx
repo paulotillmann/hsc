@@ -1002,6 +1002,7 @@ export default function CentroMedico() {
         setConsultas(prev => {
           const currentMemMap = new Map(prev.map(c => [c.id, c.status]));
           const localSavedMap = getStoredManualStatusMap();
+          const localConfirmedMap = getStoredConfirmedPatientsMap();
 
           return rawConsultasList.map((incoming: any, idx: number) => {
             const target = incoming?.json && typeof incoming.json === 'object' 
