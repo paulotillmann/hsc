@@ -1114,6 +1114,13 @@ export default function CentroMedico() {
     const verb = isResend ? 'Reenviando' : 'Disparando';
     const selectedInstance: 'CM01' | 'CM02' = instanceChoice || (Math.random() > 0.5 ? 'CM01' : 'CM02');
 
+    // Validação preventiva de telefone
+    const cleanPhoneDigits = String(targetCard.telefone || '').replace(/\D/g, '');
+    if (!cleanPhoneDigits || cleanPhoneDigits.length < 10) {
+      showToast('error', `O paciente ${targetCard.paciente} não possui telefone válido cadastrado no Tasy (${targetCard.telefone || 'vazio'}).`);
+      return;
+    }
+
     try {
       showToast('info', `${verb} mensagem de ${actionLabel} por WhatsApp para ${targetCard.paciente}...`);
 
@@ -1179,10 +1186,19 @@ export default function CentroMedico() {
       const { data, error } = res;
 
       if (error) {
-        console.warn('[WhatsApp Agendamento] Erro ao invocar Edge Function:', error);
-        showToast('error', `Falha no envio do WhatsApp: ${error.message || 'Erro de comunicação'}`);
+        let errorDetail = error.message || 'Erro de comunicação';
+        try {
+          if ('context' in error && (error as any).context) {
+            const errBody = await (error as any).context.json();
+            errorDetail = errBody?.error || errBody?.message || errorDetail;
+          }
+        } catch {}
+        console.warn('[WhatsApp Agendamento] Erro retornado pela Edge Function:', errorDetail, error);
+        showToast('error', `Falha no envio do WhatsApp: ${errorDetail}`);
       } else if (data?.success) {
         showToast('success', `WhatsApp de ${actionLabel} ${isResend ? 'reenviado' : 'enviado'} com sucesso para ${targetCard.paciente}!`);
+      } else if (data?.error) {
+        showToast('error', `WhatsApp: ${data.error}`);
       } else {
         showToast('info', data?.message || 'Notificação processada.');
       }
