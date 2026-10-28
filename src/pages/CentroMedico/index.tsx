@@ -683,7 +683,7 @@ export default function CentroMedico() {
     };
   }, []);
 
-  // Efeito ao carregar o componente para sincronizar posições salvas no Supabase
+  // Sincronização em tempo real (Supabase Realtime) e periódica das confirmações de pacientes
   useEffect(() => {
     const syncRemoteKanbanStatus = async () => {
       try {
@@ -724,9 +724,13 @@ export default function CentroMedico() {
             const isConf = Boolean(currentConfMap[c.id]?.confirmadoPeloPaciente);
             const manualStatus = currentMap[c.id];
             const addedTimestamp = currentOrderMap[c.id];
+
+            // REGRA AUTOMÁTICA: se o paciente já confirmou pelo link (isConf), vai OBRIGATORIAMENTE para 'Confirmadas' (CONFIRMAÇÃO)
+            const targetStatus: KanbanStatus = isConf ? 'Confirmadas' : (manualStatus || c.status);
+
             return {
               ...c,
-              ...(manualStatus ? { status: manualStatus } : (isConf ? { status: 'Confirmadas' } : {})),
+              status: targetStatus,
               confirmadoPeloPaciente: isConf,
               confirmadoEm: currentConfMap[c.id]?.confirmadoEm,
               ...(addedTimestamp ? { addedAt: addedTimestamp } : {})
@@ -734,11 +738,87 @@ export default function CentroMedico() {
           }));
         }
       } catch {
-        // Fallback silencioso mantendo o localStorage
+        // Fallback silencioso
       }
     };
 
     syncRemoteKanbanStatus();
+
+    // ── SUPABASE REALTIME ──
+    // Escuta em tempo real quando o paciente confirma pelo link em qualquer celular/dispositivo
+    const realtimeChannel = supabase
+      .channel('centro_medico_realtime_kanban')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'centro_medico_kanban_cards' },
+        (payload: any) => {
+          const row = payload.new;
+          if (!row || !row.card_id) return;
+
+          const cardId = String(row.card_id);
+          const isConfirmed = Boolean(row.confirmado_pelo_paciente);
+          const timeStr = row.confirmado_em || new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+          const rowStatus = (row.status as KanbanStatus) || (isConfirmed ? 'Confirmadas' : 'Enviadas');
+
+          // Atualiza mapas no localStorage
+          const currentMap = getStoredManualStatusMap();
+          const currentOrderMap = getStoredAddedOrderMap();
+          const currentConfMap = getStoredConfirmedPatientsMap();
+
+          currentMap[cardId] = rowStatus;
+          if (isConfirmed) {
+            currentConfMap[cardId] = {
+              confirmadoPeloPaciente: true,
+              confirmadoEm: timeStr
+            };
+            currentOrderMap[cardId] = Date.now();
+          }
+
+          localStorage.setItem(KANBAN_STORAGE_KEY, JSON.stringify(currentMap));
+          localStorage.setItem(KANBAN_ADDED_ORDER_KEY, JSON.stringify(currentOrderMap));
+          localStorage.setItem(KANBAN_CONFIRMED_KEY, JSON.stringify(currentConfMap));
+
+          setConfirmedPatientsMap(prev => ({
+            ...prev,
+            ...(isConfirmed ? { [cardId]: { confirmadoPeloPaciente: true, confirmadoEm: timeStr } } : {})
+          }));
+
+          setAddedOrderMap(prev => ({
+            ...prev,
+            ...(isConfirmed ? { [cardId]: Date.now() } : {})
+          }));
+
+          // Move o card automaticamente na interface em tempo real
+          setConsultas(prev => prev.map(c => {
+            if (c.id === cardId) {
+              const nextStatus: KanbanStatus = isConfirmed ? 'Confirmadas' : (rowStatus || c.status);
+              return {
+                ...c,
+                status: nextStatus,
+                confirmadoPeloPaciente: isConfirmed,
+                confirmadoEm: isConfirmed ? timeStr : c.confirmadoEm,
+                addedAt: isConfirmed ? Date.now() : c.addedAt
+              };
+            }
+            return c;
+          }));
+
+          // Notificação de confirmação em tempo real na tela do atendente
+          if (isConfirmed && payload.eventType === 'UPDATE') {
+            const pacienteNome = row.paciente || 'O paciente';
+            showToast('success', `🎉 ${pacienteNome} confirmou presença pelo link! Movido para CONFIRMAÇÃO.`);
+          }
+        }
+      )
+      .subscribe();
+
+    // Polling de contingência a cada 15 segundos
+    const pollInterval = setInterval(syncRemoteKanbanStatus, 15000);
+
+    return () => {
+      supabase.removeChannel(realtimeChannel);
+      clearInterval(pollInterval);
+    };
   }, []);
   
   // Estados de Drag and Drop
@@ -981,9 +1061,13 @@ export default function CentroMedico() {
             const realStatus = String(getVal(['DS_STATUS_AGENDA', 'statusReal', 'status_real', 'ds_status', 'ie_status'], 'Normal'));
 
             const isCancelado = isStatusCanceladoTasy(realStatus, target?.ds_status_agenda || target?.status);
-
+            const isConfirmed = Boolean(localConfirmedMap[rawId]?.confirmadoPeloPaciente);
             const manualStatus = localSavedMap[rawId] || currentMemMap.get(rawId);
-            const targetColumn: KanbanStatus = isCancelado ? 'Canceladas' : (manualStatus || 'Agendamentos');
+
+            // REGRA: se o paciente já confirmou pelo link (isConfirmed), entra direto na coluna CONFIRMAÇÃO
+            const targetColumn: KanbanStatus = isCancelado
+              ? 'Canceladas'
+              : (isConfirmed ? 'Confirmadas' : (manualStatus || 'Agendamentos'));
 
             return {
               id: String(rawId),
@@ -999,7 +1083,9 @@ export default function CentroMedico() {
               convenio,
               telefone,
               status: targetColumn,
-              statusReal: realStatus
+              statusReal: realStatus,
+              confirmadoPeloPaciente: isConfirmed,
+              confirmadoEm: localConfirmedMap[rawId]?.confirmadoEm
             };
           });
         });
