@@ -81,7 +81,7 @@ const KANBAN_COLUMNS: {
 }[] = [
   {
     id: 'Agendamentos',
-    label: 'Agenda',
+    label: 'AGENDA',
     color: 'text-blue-600 dark:text-blue-400',
     badgeBg: 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/30',
     border: 'border-blue-500/30',
@@ -90,7 +90,7 @@ const KANBAN_COLUMNS: {
   },
   {
     id: 'Enviadas',
-    label: 'Confirmação de agendamento',
+    label: 'ENVIADO',
     color: 'text-purple-600 dark:text-purple-400',
     badgeBg: 'bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/30',
     border: 'border-purple-500/30',
@@ -98,7 +98,7 @@ const KANBAN_COLUMNS: {
   },
   {
     id: 'Confirmadas',
-    label: 'Envio de confirmação',
+    label: 'CONFIRMAÇÃO',
     color: 'text-emerald-600 dark:text-emerald-400',
     badgeBg: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30',
     border: 'border-emerald-500/30',
@@ -106,7 +106,7 @@ const KANBAN_COLUMNS: {
   },
   {
     id: 'Canceladas',
-    label: 'Canceladas',
+    label: 'CANCELADAS',
     color: 'text-rose-600 dark:text-rose-400',
     badgeBg: 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/30',
     border: 'border-rose-500/30',
@@ -1130,8 +1130,8 @@ export default function CentroMedico() {
 
       const dataFormatada = formatDateToBR(targetCard.data);
       const customText = isConfirmacao
-        ? `🏥 *Centro Médico - Hospital Santa Casa*\nOlá, *${targetCard.paciente}*!\n\nConfirmamos os dados da sua consulta no Centro Médico:\n📅 *Data:* ${dataFormatada}\n⏰ *Horário:* O atendimento é realizado por ordem de chegada.\n👨‍⚕️ *Médico(a):* ${targetCard.medico}${targetCard.crm ? ` (CRM: ${targetCard.crm})` : ''} - ${targetCard.especialidade}\n📍 *Local:* Centro Médico da Santa Casa\n\n🔗 *Confirmação de Consulta:*\n\n${linkConfirmacao}\n\n_Hospital Santa Casa de Misericórdia_`
-        : `🏥 *Centro Médico - Hospital Santa Casa*\nOlá, *${targetCard.paciente}*!\n\nVocê tem uma consulta agendada no Centro Médico:\n👨‍⚕️ *Médico(a):* ${targetCard.medico}${targetCard.crm ? ` (CRM: ${targetCard.crm})` : ''} - ${targetCard.especialidade}\n📅 *Data:* ${dataFormatada}\n⏰ *Horário:* O atendimento é realizado por ordem de chegada.\n📍 *Local:* Centro Médico da Santa Casa\n\n_Hospital Santa Casa de Misericórdia_`;
+        ? `🏥 *Centro Médico - Hospital Santa Casa*\nOlá, *${targetCard.paciente}*!\n\nSua consulta no Centro Médico está *CONFIRMADA*:\n📅 *Data:* ${dataFormatada}\n⏰ *Horário:* O atendimento é realizado por ordem de chegada.\n👨‍⚕️ *Médico(a):* ${targetCard.medico}${targetCard.crm ? ` (CRM: ${targetCard.crm})` : ''} - ${targetCard.especialidade}\n📍 *Local:* Centro Médico da Santa Casa\n\nAgradecemos a sua confirmação e aguardamos sua presença!\n\n_Hospital Santa Casa de Misericórdia_`
+        : `🏥 *Centro Médico - Hospital Santa Casa*\nOlá, *${targetCard.paciente}*!\n\nVocê tem uma consulta agendada no Centro Médico:\n👨‍⚕️ *Médico(a):* ${targetCard.medico}${targetCard.crm ? ` (CRM: ${targetCard.crm})` : ''} - ${targetCard.especialidade}\n📅 *Data:* ${dataFormatada}\n⏰ *Horário:* O atendimento é realizado por ordem de chegada.\n📍 *Local:* Centro Médico da Santa Casa\n\nPor favor, *confirme sua presença* clicando no link abaixo:\n🔗 ${linkConfirmacao}\n\n_Hospital Santa Casa de Misericórdia_`;
 
       const appOrigin = typeof window !== 'undefined' ? window.location.origin : '';
 
@@ -1337,18 +1337,18 @@ export default function CentroMedico() {
     showToast('success', `${successCount} paciente(s) movidos para "Enviadas" com sucesso!`);
   };
 
-  // Reenviar WhatsApp para todos os pacientes da coluna "Confirmação de agendamento" (Enviadas)
+  // Reenviar WhatsApp para todos os pacientes da coluna "ENVIADO" (Enviadas)
   const handleResendAllEnviadas = async () => {
     if (isResendingAllEnviadas || isSendingAll) return;
     const enviadasCards = filteredConsultas.filter(c => c.status === 'Enviadas');
     if (enviadasCards.length === 0) {
-      showToast('info', 'Não há pacientes na coluna Confirmação de agendamento para enviar.');
+      showToast('info', 'Não há pacientes na coluna ENVIADO para enviar.');
       return;
     }
 
     setIsResendingAllEnviadas(true);
     setResendingAllProgress({ current: 0, total: enviadasCards.length });
-    showToast('info', `Iniciando reenvio de WhatsApp para ${enviadasCards.length} paciente(s) da Confirmação de agendamento...`);
+    showToast('info', `Iniciando reenvio de WhatsApp para ${enviadasCards.length} paciente(s) da ENVIADO...`);
 
     let successCount = 0;
     for (let i = 0; i < enviadasCards.length; i++) {
@@ -1378,7 +1378,7 @@ export default function CentroMedico() {
 
     setIsResendingAllEnviadas(false);
     setResendingAllProgress(null);
-    showToast('success', `WhatsApp reenviado com sucesso para ${successCount} paciente(s) da Confirmação de agendamento!`);
+    showToast('success', `WhatsApp reenviado com sucesso para ${successCount} paciente(s) da ENVIADO!`);
   };
 
   // Ação de Confirmação de Consulta do Paciente
@@ -1755,7 +1755,7 @@ export default function CentroMedico() {
                             title={
                               colCards.length === 0
                                 ? 'Nenhum agendamento para enviar'
-                                : `Mover todos os ${colCards.length} pacientes para Confirmação de agendamento e disparar WhatsApp`
+                                : `Mover todos os ${colCards.length} pacientes para ENVIADO e disparar WhatsApp`
                             }
                             className={`w-full flex items-center justify-center gap-2 py-2 px-3 rounded-xl text-xs font-semibold transition-all active:scale-[0.98] cursor-pointer shadow-xs disabled:opacity-50 disabled:cursor-not-allowed text-center break-words mt-1 ${
                               isSendingAll
@@ -1781,7 +1781,7 @@ export default function CentroMedico() {
                           </button>
                         )}
 
-                        {/* Botão de Enviar Todos na coluna "Confirmação de agendamento" (Enviadas) */}
+                        {/* Botão de Enviar Todos na coluna "ENVIADO" (Enviadas) */}
                         {col.id === 'Enviadas' && (
                           <button
                             type="button"
@@ -1790,7 +1790,7 @@ export default function CentroMedico() {
                             title={
                               colCards.length === 0
                                 ? 'Nenhum paciente para enviar'
-                                : `Reenviar notificação de WhatsApp para todos os ${colCards.length} pacientes da Confirmação de agendamento`
+                                : `Reenviar notificação de WhatsApp para todos os ${colCards.length} pacientes da ENVIADO`
                             }
                             className={`w-full flex items-center justify-center gap-2 py-2 px-3 rounded-xl text-xs font-semibold transition-all active:scale-[0.98] cursor-pointer shadow-xs disabled:opacity-50 disabled:cursor-not-allowed text-center break-words mt-1 ${
                               isResendingAllEnviadas

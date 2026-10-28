@@ -74,26 +74,24 @@ function buildAppointmentMessage(data: AgendamentoPayload): string {
   const baseUrl = (data.origin || Deno.env.get('APP_URL') || 'http://localhost:3000').replace(/\/+$/, '');
   const linkConfirmacao = data.linkConfirmacao || data.link || `${baseUrl}/confirmar-consulta/${encodeURIComponent(data.cardId || 'cons-101')}`;
 
-  // Mensagem para quando o card é movido para "Confirmadas"
+  // Mensagem quando o paciente confirma (CONFIRMAÇÃO)
   if (data.status === 'Confirmadas' || data.tipo === 'confirmacao') {
     return `🏥 *Centro Médico - Hospital Santa Casa*
 Olá, *${paciente}*!
 
-Confirmamos os dados da sua consulta no Centro Médico:
+Sua consulta no Centro Médico está *CONFIRMADA*:
 
 📅 *Data:* ${dataConsulta}
 ⏰ *Horário:* O atendimento é realizado por ordem de chegada.
 👨‍⚕️ *Médico(a):* ${medico}${crmInfo}${especialidade}
 📍 *Local:* Centro Médico da Santa Casa
 
-🔗 *Confirmação de Consulta:*
-
-${linkConfirmacao}
+Agradecemos a sua confirmação e aguardamos sua presença!
 
 _Hospital Santa Casa de Misericórdia_`;
   }
 
-  // Mensagem padrão para "Enviadas"
+  // Mensagem para "ENVIADO" (com o link de confirmação)
   return `🏥 *Centro Médico - Hospital Santa Casa*
 Olá, *${paciente}*!
 
@@ -103,6 +101,9 @@ Você tem uma consulta agendada no Centro Médico:
 📅 *Data:* ${dataConsulta}
 ⏰ *Horário:* O atendimento é realizado por ordem de chegada.
 📍 *Local:* Centro Médico da Santa Casa
+
+Por favor, *confirme sua presença* clicando no link abaixo:
+🔗 ${linkConfirmacao}
 
 _Hospital Santa Casa de Misericórdia_`;
 }
