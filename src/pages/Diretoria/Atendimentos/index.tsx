@@ -486,82 +486,352 @@ export default function AtendimentosDiretoria() {
     document.body.removeChild(link);
   };
 
-  // ── Exportação PDF (Fiel ao Relatório da Santa Casa - Imagem 1) ────────────
-  const exportarPDF = () => {
-    if (conveniosComPercentual.length === 0) return;
+  // ── Exportação PDF Executivo (Moderno com Logo Oficial da Santa Casa) ──────
+  const [gerandoPdf, setGerandoPdf] = useState<boolean>(false);
 
-    const doc = new jsPDF('portrait');
+  const exportarPDF = async () => {
+    if (conveniosComPercentual.length === 0 || gerandoPdf) return;
+    setGerandoPdf(true);
 
-    // Cabeçalho Santa Casa
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(14);
-    doc.setTextColor(15, 23, 42);
-    doc.text('SANTA CASA', 14, 18);
-    
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(9);
-    doc.setTextColor(100, 116, 139);
-    doc.text('De Misericórdia de Araguari-MG', 14, 23);
+    try {
+      const doc = new jsPDF({
+        orientation: 'portrait',
+        unit: 'mm',
+        format: 'a4'
+      });
 
-    // Título Principal Centralizado
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(13);
-    doc.setTextColor(15, 23, 42);
-    doc.text('TOTAL DE ATENDIMENTOS POR CONVÊNIO', 105, 18, { align: 'center' });
+      const pageWidth = doc.internal.pageSize.getWidth(); // 210mm
+      const pageHeight = doc.internal.pageSize.getHeight(); // 297mm
+      const marginX = 14;
+      const contentWidth = pageWidth - marginX * 2; // 182mm
 
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(9.5);
-    doc.setTextColor(71, 85, 105);
-    doc.text(`De ${formatarDataBR(dataInicio)} até ${formatarDataBR(dataFim)}`, 105, 24, { align: 'center' });
+      // Cores Institucionais Santa Casa
+      const corBordeaux: [number, number, number] = [107, 20, 26];
+      const corSlateDark: [number, number, number] = [15, 23, 42];
+      const corSlateMuted: [number, number, number] = [100, 116, 139];
 
-    // Linha divisória
-    doc.setDrawColor(203, 213, 225);
-    doc.setLineWidth(0.5);
-    doc.line(14, 28, 196, 28);
+      // 1. Barra Superior Institucional
+      doc.setFillColor(...corBordeaux);
+      doc.rect(0, 0, pageWidth, 3.5, 'F');
 
-    // Tabela no formato exato da Imagem 1
-    const head = [['Convênio', 'Qtd. Atendimentos']];
-    const data = conveniosOrdenados.map(c => [
-      c.dsConvenio,
-      c.qtde.toLocaleString('pt-BR')
-    ]);
+      // 2. Carregar Logo Oficial do Hospital (/LOGO_HSC_PRIMARY.png)
+      let logoCarregada = false;
+      try {
+        const imgObj = await new Promise<HTMLImageElement>((resolve, reject) => {
+          const img = new Image();
+          img.crossOrigin = 'Anonymous';
+          img.onload = () => resolve(img);
+          img.onerror = (err) => reject(err);
+          img.src = '/LOGO_HSC_PRIMARY.png';
+        });
 
-    // Linha Final de TOTAL
-    data.push([
-      'TOTAL',
-      (metricasConsolidadas.totalGeral || 0).toLocaleString('pt-BR')
-    ]);
-
-    autoTable(doc, {
-      head,
-      body: data,
-      startY: 32,
-      styles: {
-        fontSize: 9.5,
-        cellPadding: 3,
-        textColor: [15, 23, 42]
-      },
-      headStyles: {
-        fillColor: [203, 213, 225],
-        textColor: [15, 23, 42],
-        fontStyle: 'bold'
-      },
-      alternateRowStyles: {
-        fillColor: [255, 255, 255]
-      },
-      columnStyles: {
-        0: { halign: 'left' },
-        1: { halign: 'center', fontStyle: 'normal' }
-      },
-      didParseCell: function (dataHook) {
-        if (dataHook.row.index === data.length - 1) {
-          dataHook.cell.styles.fontStyle = 'bold';
-          dataHook.cell.styles.fillColor = [241, 245, 249];
+        const maxLogoW = 42;
+        const maxLogoH = 12;
+        const ratio = (imgObj.naturalWidth || 460) / (imgObj.naturalHeight || 105);
+        let logoW = maxLogoW;
+        let logoH = logoW / ratio;
+        if (logoH > maxLogoH) {
+          logoH = maxLogoH;
+          logoW = logoH * ratio;
         }
-      }
-    });
 
-    doc.save(`relatorio_atendimentos_santacasa_${dataInicio}_a_${dataFim}.pdf`);
+        // Posiciona a logo à esquerda, alinhada verticalmente com o título e período
+        doc.addImage(imgObj, 'PNG', marginX, 10, logoW, logoH);
+        logoCarregada = true;
+      } catch (e) {
+        console.warn('Não foi possível carregar a imagem da logo para o PDF:', e);
+      }
+
+      if (!logoCarregada) {
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(13);
+        doc.setTextColor(...corBordeaux);
+        doc.text('SANTA CASA', marginX, 14.5);
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(8.5);
+        doc.setTextColor(...corSlateMuted);
+        doc.text('De Misericórdia de Araguari-MG', marginX, 19);
+      }
+
+      // 3. Título Principal e Período Centralizados ao Lado da Logo
+      const tituloX = 114; // Centralizado com equilíbrio ao lado da logo
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(13);
+      doc.setTextColor(...corSlateDark);
+      doc.text('TOTAL DE ATENDIMENTOS POR CONVÊNIO', tituloX, 13.5, { align: 'center' });
+
+      // Badge centralizado com o período consultado logo abaixo do título
+      const textoPeriodo = `Período: De ${formatarDataBR(dataInicio)} até ${formatarDataBR(dataFim)}`;
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(8.5);
+      const periodoWidth = doc.getTextWidth(textoPeriodo) + 10;
+      doc.setFillColor(248, 250, 252);
+      doc.setDrawColor(203, 213, 225);
+      doc.setLineWidth(0.25);
+      doc.roundedRect(tituloX - periodoWidth / 2, 15.8, periodoWidth, 6, 3, 3, 'FD');
+      doc.setTextColor(71, 85, 105);
+      doc.text(textoPeriodo, tituloX, 19.9, { align: 'center' });
+
+      // Linha divisória sutil abaixo do cabeçalho institucional
+      doc.setDrawColor(226, 232, 240);
+      doc.setLineWidth(0.35);
+      doc.line(marginX, 25, pageWidth - marginX, 25);
+
+      // 4. Quadro de Identificação dos Filtros Utilizados no Relatório
+      const formatarResumoFiltro = (
+        selecionados: string[],
+        opcoes: { cd: string; ds: string }[],
+        textoTodos: string
+      ) => {
+        if (selecionados.length === 0 || selecionados.length === opcoes.length) {
+          return textoTodos;
+        }
+        const nomes = selecionados.map(cd => opcoes.find(o => o.cd === cd)?.ds || cd);
+        if (nomes.length <= 2) return nomes.join(', ');
+        return `${nomes.slice(0, 2).join(', ')} (+${nomes.length - 2})`;
+      };
+
+      const itensFiltro = [
+        {
+          label: 'Convênio(s):',
+          valor: buscaTabela.trim()
+            ? `${formatarResumoFiltro(conveniosSelecionados, OPCOES_CONVENIOS, 'Todos')} (Busca: "${buscaTabela.trim()}")`
+            : formatarResumoFiltro(conveniosSelecionados, OPCOES_CONVENIOS, 'Todos os Convênios'),
+          ativo: conveniosSelecionados.length > 0 || buscaTabela.trim() !== ''
+        },
+        {
+          label: 'Setor(es):',
+          valor: formatarResumoFiltro(setoresSelecionados, OPCOES_SETORES, 'Todos os Setores'),
+          ativo: setoresSelecionados.length > 0
+        },
+        {
+          label: 'Clínica(s):',
+          valor: formatarResumoFiltro(clinicasSelecionadas, OPCOES_CLINICAS, 'Todas as Clínicas'),
+          ativo: clinicasSelecionadas.length > 0
+        },
+        {
+          label: 'Tipo de Atendimento:',
+          valor: formatarResumoFiltro(tiposSelecionados, OPCOES_TIPOS_ATENDIMENTO, 'Todos os Tipos'),
+          ativo: tiposSelecionados.length > 0
+        }
+      ];
+
+      const filtroBoxY = 27.5;
+      const filtroBoxH = 13.5;
+      doc.setFillColor(248, 250, 252);
+      doc.setDrawColor(226, 232, 240);
+      doc.setLineWidth(0.25);
+      doc.roundedRect(marginX, filtroBoxY, contentWidth, filtroBoxH, 2, 2, 'FD');
+
+      // Barra lateral bordô indicando bloco de parâmetros
+      doc.setFillColor(...corBordeaux);
+      doc.rect(marginX + 0.2, filtroBoxY + 1.8, 1.2, filtroBoxH - 3.6, 'F');
+
+      itensFiltro.forEach((f, idx) => {
+        const col = idx % 2;
+        const row = Math.floor(idx / 2);
+        const posX = col === 0 ? marginX + 4 : marginX + contentWidth / 2 + 2;
+        const posY = filtroBoxY + 5.2 + row * 5.2;
+
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(7.5);
+        doc.setTextColor(...corSlateMuted);
+        doc.text(f.label, posX, posY);
+
+        const labelW = doc.getTextWidth(f.label) + 1.8;
+        doc.setFont('helvetica', f.ativo ? 'bold' : 'normal');
+        doc.setFontSize(7.5);
+        doc.setTextColor(...(f.ativo ? corBordeaux : corSlateDark));
+
+        // Trunca suavemente se ultrapassar a largura da coluna
+        const maxValWidth = contentWidth / 2 - labelW - 6;
+        let textoValor = f.valor;
+        while (doc.getTextWidth(textoValor) > maxValWidth && textoValor.length > 10) {
+          textoValor = textoValor.slice(0, -4) + '...';
+        }
+        doc.text(textoValor, posX + labelW, posY);
+      });
+
+      let currentY = filtroBoxY + filtroBoxH + 4.5;
+
+      // 4. Cards de KPIs Executivos
+      const kpis = [
+        {
+          titulo: 'TOTAL GERAL',
+          valor: (metricasConsolidadas.totalGeral || 0).toLocaleString('pt-BR'),
+          sub: `${conveniosOrdenados.length} convênios listados`,
+          cor: [37, 99, 235] as [number, number, number] // Blue
+        },
+        {
+          titulo: 'ATENDIMENTOS SUS',
+          valor: (metricasConsolidadas.totalSus || 0).toLocaleString('pt-BR'),
+          sub: `${(metricasConsolidadas.percentualSus || 0).toFixed(1)}% do total`,
+          cor: [16, 185, 129] as [number, number, number] // Emerald
+        },
+        {
+          titulo: 'PLANOS PRIVADOS',
+          valor: (metricasConsolidadas.totalPrivado || 0).toLocaleString('pt-BR'),
+          sub: `${(metricasConsolidadas.percentualPrivado || 0).toFixed(1)}% do total`,
+          cor: [124, 58, 237] as [number, number, number] // Violet
+        },
+        {
+          titulo: 'PARTICULAR',
+          valor: (metricasConsolidadas.totalParticular || 0).toLocaleString('pt-BR'),
+          sub: `${(metricasConsolidadas.percentualParticular || 0).toFixed(1)}% do total`,
+          cor: [217, 119, 6] as [number, number, number] // Amber
+        }
+      ];
+
+      const gap = 3.6;
+      const cardW = (contentWidth - gap * 3) / 4;
+      const cardH = 19;
+
+      kpis.forEach((kpi, idx) => {
+        const cardX = marginX + idx * (cardW + gap);
+
+        // Fundo do card
+        doc.setFillColor(248, 250, 252);
+        doc.setDrawColor(226, 232, 240);
+        doc.setLineWidth(0.3);
+        doc.roundedRect(cardX, currentY, cardW, cardH, 2, 2, 'FD');
+
+        // Detalhe colorido superior do card
+        doc.setFillColor(...kpi.cor);
+        doc.rect(cardX + 0.3, currentY + 0.3, cardW - 0.6, 1.4, 'F');
+
+        // Label
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(6.8);
+        doc.setTextColor(...corSlateMuted);
+        doc.text(kpi.titulo, cardX + 3.5, currentY + 5.8);
+
+        // Valor principal
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(12);
+        doc.setTextColor(...corSlateDark);
+        doc.text(kpi.valor, cardX + 3.5, currentY + 12.2);
+
+        // Subtexto percentual
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(7);
+        doc.setTextColor(...kpi.cor);
+        doc.text(kpi.sub, cardX + 3.5, currentY + 16.5);
+      });
+
+      currentY += cardH + 6;
+
+      // 5. Tabela Moderna de Atendimentos por Convênio
+      const head = [['#', 'Convênio / Operadora', 'Qtd. Atendimentos', 'Participação (%)']];
+      const data = conveniosOrdenados.map((c, index) => [
+        String(index + 1).padStart(2, '0'),
+        c.dsConvenio,
+        c.qtde.toLocaleString('pt-BR'),
+        `${c.percentual.toFixed(2).replace('.', ',')}%`
+      ]);
+
+      // Linha Final de TOTAL
+      data.push([
+        '',
+        'TOTAL GERAL CONSOLIDADO',
+        (metricasConsolidadas.totalGeral || 0).toLocaleString('pt-BR'),
+        '100,00%'
+      ]);
+
+      autoTable(doc, {
+        head,
+        body: data,
+        startY: currentY,
+        margin: { left: marginX, right: marginX, bottom: 18 },
+        theme: 'grid',
+        styles: {
+          font: 'helvetica',
+          fontSize: 8.8,
+          cellPadding: { top: 2.6, right: 3.5, bottom: 2.6, left: 3.5 },
+          textColor: corSlateDark,
+          lineColor: [226, 232, 240],
+          lineWidth: 0.25
+        },
+        headStyles: {
+          fillColor: corBordeaux,
+          textColor: [255, 255, 255],
+          fontStyle: 'bold',
+          fontSize: 8.5,
+          cellPadding: { top: 3.2, right: 3.5, bottom: 3.2, left: 3.5 }
+        },
+        alternateRowStyles: {
+          fillColor: [248, 250, 252]
+        },
+        columnStyles: {
+          0: { halign: 'center', cellWidth: 12, textColor: corSlateMuted },
+          1: { halign: 'left', cellWidth: 'auto', fontStyle: 'bold' },
+          2: { halign: 'right', cellWidth: 42, fontStyle: 'bold' },
+          3: { halign: 'right', cellWidth: 38 }
+        },
+        didParseCell: function (dataHook) {
+          // Alinhamento dos cabeçalhos numéricos
+          if (dataHook.section === 'head') {
+            if (dataHook.column.index === 0) {
+              dataHook.cell.styles.halign = 'center';
+            } else if (dataHook.column.index === 2 || dataHook.column.index === 3) {
+              dataHook.cell.styles.halign = 'right';
+            }
+          }
+
+          // Linha de Total Geral Consolidado
+          if (dataHook.section === 'body' && dataHook.row.index === data.length - 1) {
+            dataHook.cell.styles.fontStyle = 'bold';
+            dataHook.cell.styles.fillColor = [253, 242, 242];
+            dataHook.cell.styles.textColor = corBordeaux;
+            dataHook.cell.styles.fontSize = 9.5;
+          }
+        }
+      });
+
+      // 6. Rodapé Institucional em Todas as Páginas
+      const totalPages = doc.getNumberOfPages();
+      for (let i = 1; i <= totalPages; i++) {
+        doc.setPage(i);
+
+        // Barra fina bordeaux no topo caso haja mais de 1 página
+        if (i > 1) {
+          doc.setFillColor(...corBordeaux);
+          doc.rect(0, 0, pageWidth, 2.5, 'F');
+        }
+
+        // Linha do rodapé
+        doc.setDrawColor(226, 232, 240);
+        doc.setLineWidth(0.3);
+        doc.line(marginX, pageHeight - 12, pageWidth - marginX, pageHeight - 12);
+
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(7.5);
+        doc.setTextColor(...corBordeaux);
+        doc.text(
+          'Hospital Santa Casa de Misericórdia de Araguari',
+          marginX,
+          pageHeight - 7.5
+        );
+
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(...corSlateMuted);
+        doc.text(
+          '  •  Relatório Executivo de Atendimentos',
+          marginX + doc.getTextWidth('Hospital Santa Casa de Misericórdia de Araguari'),
+          pageHeight - 7.5
+        );
+
+        doc.text(
+          `Página ${i} de ${totalPages}`,
+          pageWidth - marginX,
+          pageHeight - 7.5,
+          { align: 'right' }
+        );
+      }
+
+      doc.save(`relatorio_atendimentos_santacasa_${dataInicio}_a_${dataFim}.pdf`);
+    } finally {
+      setGerandoPdf(false);
+    }
   };
 
   return (
@@ -609,10 +879,15 @@ export default function AtendimentosDiretoria() {
           {/* Exportar PDF com layout Santa Casa */}
           <button
             onClick={exportarPDF}
-            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold bg-card hover:bg-muted text-foreground border border-border shadow-xs transition-all active:scale-95 cursor-pointer"
+            disabled={gerandoPdf || carregando || conveniosComPercentual.length === 0}
+            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold bg-card hover:bg-muted text-foreground border border-border shadow-xs transition-all active:scale-95 disabled:opacity-50 cursor-pointer"
           >
-            <FileText className="h-3.5 w-3.5 text-rose-600" />
-            <span>PDF</span>
+            {gerandoPdf ? (
+              <RefreshCw className="h-3.5 w-3.5 text-rose-600 animate-spin" />
+            ) : (
+              <FileText className="h-3.5 w-3.5 text-rose-600" />
+            )}
+            <span>{gerandoPdf ? 'Gerando PDF...' : 'PDF'}</span>
           </button>
         </div>
       </div>
