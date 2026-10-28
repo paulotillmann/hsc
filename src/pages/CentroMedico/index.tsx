@@ -812,8 +812,8 @@ export default function CentroMedico() {
       )
       .subscribe();
 
-    // Polling de contingência a cada 15 segundos
-    const pollInterval = setInterval(syncRemoteKanbanStatus, 15000);
+    // Sincronização periódica de confirmações a cada 3 minutos (180.000 ms)
+    const pollInterval = setInterval(syncRemoteKanbanStatus, 3 * 60 * 1000);
 
     return () => {
       supabase.removeChannel(realtimeChannel);
@@ -998,6 +998,32 @@ export default function CentroMedico() {
         raw: responseData
       });
 
+      // Sincroniza confirmações e status do Supabase junto com os dados do Tasy
+      try {
+        const { data: kanbanRows } = await supabase
+          .from('centro_medico_kanban_cards')
+          .select('card_id, status, confirmado_pelo_paciente, confirmado_em, updated_at');
+        if (kanbanRows && kanbanRows.length > 0) {
+          const cMap = getStoredManualStatusMap();
+          const oMap = getStoredAddedOrderMap();
+          const cfMap = getStoredConfirmedPatientsMap();
+          kanbanRows.forEach((row: any) => {
+            if (row.card_id && row.status) cMap[row.card_id] = row.status as KanbanStatus;
+            if (row.card_id && row.confirmado_pelo_paciente) {
+              cfMap[row.card_id] = { confirmadoPeloPaciente: true, confirmadoEm: row.confirmado_em || undefined };
+            }
+            if (row.card_id && row.updated_at && !oMap[row.card_id]) {
+              oMap[row.card_id] = new Date(row.updated_at).getTime();
+            }
+          });
+          localStorage.setItem(KANBAN_STORAGE_KEY, JSON.stringify(cMap));
+          localStorage.setItem(KANBAN_ADDED_ORDER_KEY, JSON.stringify(oMap));
+          localStorage.setItem(KANBAN_CONFIRMED_KEY, JSON.stringify(cfMap));
+          setConfirmedPatientsMap(cfMap);
+          setAddedOrderMap(oMap);
+        }
+      } catch {}
+
       if (rawConsultasList.length > 0) {
         setConsultas(prev => {
           const currentMemMap = new Map(prev.map(c => [c.id, c.status]));
@@ -1151,6 +1177,17 @@ export default function CentroMedico() {
     const todayStr = getDateOffset(0);
     handleSyncWebhookForDate(todayStr);
   }, []);
+
+  // Sincronização automática do Tasy (n8n) e confirmações de consulta a cada 3 minutos
+  useEffect(() => {
+    const tasySyncInterval = setInterval(() => {
+      if (!isSyncing && !isSendingAll && !isResendingAllEnviadas && selectedDate) {
+        handleSyncWebhookForDate(selectedDate);
+      }
+    }, 3 * 60 * 1000);
+
+    return () => clearInterval(tasySyncInterval);
+  }, [selectedDate, isSyncing, isSendingAll, isResendingAllEnviadas]);
 
   // Mover Card de Consulta entre Colunas do Kanban
   const moveCardToStatus = async (cardId: string, newStatus: KanbanStatus) => {
