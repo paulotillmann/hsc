@@ -99,9 +99,12 @@ function MultiSelectDropdown({
   }, []);
 
   const opcoesFiltradas = useMemo(() => {
-    if (!termoBusca.trim()) return options;
+    const ordenadas = [...options].sort((a, b) =>
+      a.ds.localeCompare(b.ds, 'pt-BR', { sensitivity: 'base' })
+    );
+    if (!termoBusca.trim()) return ordenadas;
     const t = termoBusca.toLowerCase().trim();
-    return options.filter(
+    return ordenadas.filter(
       opt => opt.ds.toLowerCase().includes(t) || opt.cd.includes(t)
     );
   }, [options, termoBusca]);
@@ -265,8 +268,7 @@ export default function AtendimentosDiretoria() {
   const carregarDados = useCallback(async (ignorarCache: boolean = false) => {
     setCarregando(true);
     try {
-      // Se houver exatamente 1 convênio selecionado, passa o código, senão '0'
-      const convParam = conveniosSelecionados.length === 1 ? conveniosSelecionados[0] : '0';
+      // Sempre consulta todos os convênios ('0') no período para preservar Total, SUS e Não SUS do período
       const setorParam = setoresSelecionados.length === 1 ? setoresSelecionados[0] : '0';
       const clinicaParam = clinicasSelecionadas.length === 1 ? clinicasSelecionadas[0] : '0';
       const tipoParam = tiposSelecionados.length === 1 ? tiposSelecionados[0] : '0';
@@ -274,7 +276,7 @@ export default function AtendimentosDiretoria() {
       const res = await atendimentosService.buscarAtendimentos({
         dtInicio: dataInicio,
         dtFim: dataFim,
-        convenio: convParam,
+        convenio: '0',
         setor: setorParam,
         tipoAtendimento: tipoParam,
         clinica: clinicaParam
@@ -285,7 +287,7 @@ export default function AtendimentosDiretoria() {
     } finally {
       setCarregando(false);
     }
-  }, [dataInicio, dataFim, conveniosSelecionados, setoresSelecionados, clinicasSelecionadas, tiposSelecionados]);
+  }, [dataInicio, dataFim, setoresSelecionados, clinicasSelecionadas, tiposSelecionados]);
 
   // Dispara a consulta sempre que filtros ou datas mudam
   useEffect(() => {
@@ -323,17 +325,34 @@ export default function AtendimentosDiretoria() {
     return `${dia}/${mes}/${ano}`;
   };
 
+  // ── Função Auxiliar para Normalizar Texto (Remove Acentos para Comparação) ─
+  const normalizarTexto = (str: string) =>
+    (str || '')
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .trim();
+
   // ── Mapa de Nomes dos Convênios Selecionados para Filtragem na Tela ────────
   const nomesConveniosSelecionados = useMemo(() => {
-    if (conveniosSelecionados.length === 0) return null;
-    const setNomes = new Set<string>();
+    if (
+      conveniosSelecionados.length === 0 ||
+      conveniosSelecionados.length === OPCOES_CONVENIOS.length
+    ) {
+      return null;
+    }
+    const listaNomes: string[] = [];
     conveniosSelecionados.forEach(cd => {
       const opt = OPCOES_CONVENIOS.find(o => o.cd === cd);
       if (opt) {
-        setNomes.add(opt.ds.toLowerCase().trim());
+        const norm = normalizarTexto(opt.ds);
+        listaNomes.push(norm);
+        if (cd === '4') {
+          listaNomes.push('sus');
+        }
       }
     });
-    return setNomes;
+    return listaNomes;
   }, [conveniosSelecionados]);
 
   // ── Filtragem de Convênios na Tabela (Multi-Select + Busca Livre) ──────────
@@ -341,19 +360,21 @@ export default function AtendimentosDiretoria() {
     if (!dados?.convenios) return [];
     return dados.convenios.filter(c => {
       // Filtro de Multi-Select de Convênios
-      if (nomesConveniosSelecionados && nomesConveniosSelecionados.size > 0) {
-        const nomeAtual = c.dsConvenio.toLowerCase().trim();
-        // Verifica se algum convênio selecionado bate com o nome
-        const match = Array.from(nomesConveniosSelecionados).some(n =>
-          nomeAtual.includes(n) || n.includes(nomeAtual)
-        );
+      if (nomesConveniosSelecionados && nomesConveniosSelecionados.length > 0) {
+        const nomeAtual = normalizarTexto(c.dsConvenio);
+        const match = nomesConveniosSelecionados.some(n => {
+          if (n === 'sus') {
+            return nomeAtual === 'sus' || nomeAtual.startsWith('sus ') || nomeAtual.startsWith('sus-');
+          }
+          return nomeAtual.includes(n) || n.includes(nomeAtual);
+        });
         if (!match) return false;
       }
 
       // Filtro de Busca Livre por texto
       if (buscaTabela.trim()) {
-        const query = buscaTabela.toLowerCase().trim();
-        if (!c.dsConvenio.toLowerCase().includes(query)) {
+        const query = normalizarTexto(buscaTabela);
+        if (!normalizarTexto(c.dsConvenio).includes(query)) {
           return false;
         }
       }
@@ -456,6 +477,87 @@ export default function AtendimentosDiretoria() {
 
     return resultado;
   }, [conveniosComPercentual, metricasConsolidadas.totalGeral]);
+
+  // ── Coluna Dinâmica de Convênio na Planilha Consolidada Mensal ─────────────
+  const infoConvenioPlanilha = useMemo(() => {
+    if (conveniosSelecionados.length === 0) {
+      return {
+        temSelecao: false,
+        todosSelecionados: false,
+        tituloColuna: 'Convênio',
+        tituloCompleto: 'Selecione um convênio no filtro para exibir nesta coluna'
+      };
+    }
+
+    if (conveniosSelecionados.length === OPCOES_CONVENIOS.length) {
+      return {
+        temSelecao: true,
+        todosSelecionados: true,
+        tituloColuna: 'Todos os Convênios',
+        tituloCompleto: 'Todos os convênios selecionados'
+      };
+    }
+
+    const nomes = conveniosSelecionados.map(
+      cd => OPCOES_CONVENIOS.find(o => o.cd === cd)?.ds || `Cód. ${cd}`
+    );
+
+    const tituloColuna =
+      nomes.length === 1
+        ? nomes[0]
+        : nomes.length === 2
+        ? `${nomes[0]} / ${nomes[1]}`
+        : `${nomes[0]} (+${nomes.length - 1})`;
+
+    return {
+      temSelecao: true,
+      todosSelecionados: false,
+      tituloColuna,
+      tituloCompleto: nomes.join(', ')
+    };
+  }, [conveniosSelecionados]);
+
+  const evolucaoMensalProcessada = useMemo(() => {
+    const listaBase = dados?.evolucaoMensal || [];
+    if (!infoConvenioPlanilha.temSelecao) {
+      return listaBase.map(row => ({
+        ...row,
+        valorConvenioSelecionado: null as number | null
+      }));
+    }
+
+    // Se "Todos os Convênios" estiverem marcados, traz o Total do período no mês
+    if (infoConvenioPlanilha.todosSelecionados) {
+      return listaBase.map(row => ({
+        ...row,
+        valorConvenioSelecionado: row.total
+      }));
+    }
+
+    const apenasSus = conveniosSelecionados.length === 1 && conveniosSelecionados[0] === '4';
+    const somaTodosNoBanco = (dados?.convenios || []).reduce((acc, c) => acc + c.qtde, 0);
+    const somaFiltrados = conveniosFiltrados.reduce((acc, c) => acc + c.qtde, 0);
+
+    const proporcaoSobreTotal =
+      somaTodosNoBanco > 0 ? Math.min(1, somaFiltrados / somaTodosNoBanco) : 0;
+
+    return listaBase.map(row => {
+      let valorConv = 0;
+      if (apenasSus) {
+        valorConv = row.sus;
+      } else if (listaBase.length === 1) {
+        // Quando há apenas 1 mês no período consultado, usa a soma exata dos convênios selecionados
+        valorConv = somaFiltrados;
+      } else {
+        valorConv = Math.round(row.total * proporcaoSobreTotal);
+      }
+
+      return {
+        ...row,
+        valorConvenioSelecionado: valorConv
+      };
+    });
+  }, [dados?.evolucaoMensal, dados?.convenios, infoConvenioPlanilha, conveniosSelecionados, conveniosFiltrados]);
 
   // ── Exportação CSV / Excel ─────────────────────────────────────────────────
   const exportarCSV = () => {
@@ -1540,7 +1642,16 @@ export default function AtendimentosDiretoria() {
                     <th className="py-3 px-4 text-emerald-600 dark:text-emerald-400">SUS</th>
                     <th className="py-3 px-4 text-violet-600 dark:text-violet-400">Não SUS</th>
                     <th className="py-3 px-4">Clínica</th>
-                    <th className="py-3 px-4">IPSEMG</th>
+                    <th
+                      className={`py-3 px-4 ${
+                        infoConvenioPlanilha.temSelecao
+                          ? 'text-primary font-extrabold bg-primary/5'
+                          : 'text-muted-foreground'
+                      }`}
+                      title={infoConvenioPlanilha.tituloCompleto}
+                    >
+                      {infoConvenioPlanilha.tituloColuna}
+                    </th>
                     <th className="py-3 px-4">SUS (Clínica)</th>
                     <th className="py-3 px-4">Total Clínica</th>
                     <th className="py-3 px-4 text-blue-600 dark:text-blue-400">Média Diária</th>
@@ -1548,7 +1659,7 @@ export default function AtendimentosDiretoria() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border/40 text-xs">
-                  {(dados?.evolucaoMensal || []).map(row => (
+                  {evolucaoMensalProcessada.map(row => (
                     <tr key={row.mes} className="hover:bg-muted/30 transition-colors font-mono">
                       <td className="py-3 px-4 text-left font-sans font-bold text-foreground">
                         {row.mes} ({row.mesNome})
@@ -1565,8 +1676,16 @@ export default function AtendimentosDiretoria() {
                       <td className="py-3 px-4 font-semibold text-foreground">
                         {row.clinica.toLocaleString('pt-BR')}
                       </td>
-                      <td className="py-3 px-4 text-muted-foreground">
-                        {row.ipsemg.toLocaleString('pt-BR')}
+                      <td
+                        className={`py-3 px-4 ${
+                          row.valorConvenioSelecionado !== null
+                            ? 'font-bold text-primary bg-primary/5'
+                            : 'text-muted-foreground/50'
+                        }`}
+                      >
+                        {row.valorConvenioSelecionado !== null
+                          ? row.valorConvenioSelecionado.toLocaleString('pt-BR')
+                          : '-'}
                       </td>
                       <td className="py-3 px-4 text-muted-foreground">
                         {row.susClinica.toLocaleString('pt-BR')}
