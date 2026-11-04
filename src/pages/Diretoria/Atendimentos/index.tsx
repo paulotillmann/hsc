@@ -99,9 +99,12 @@ function MultiSelectDropdown({
   }, []);
 
   const opcoesFiltradas = useMemo(() => {
-    if (!termoBusca.trim()) return options;
+    const ordenadas = [...options].sort((a, b) =>
+      a.ds.localeCompare(b.ds, 'pt-BR', { sensitivity: 'base' })
+    );
+    if (!termoBusca.trim()) return ordenadas;
     const t = termoBusca.toLowerCase().trim();
-    return options.filter(
+    return ordenadas.filter(
       opt => opt.ds.toLowerCase().includes(t) || opt.cd.includes(t)
     );
   }, [options, termoBusca]);
@@ -145,13 +148,12 @@ function MultiSelectDropdown({
       <button
         type="button"
         onClick={() => setAberto(prev => !prev)}
-        className={`w-full flex items-center justify-between gap-2 px-3.5 py-2.5 text-sm rounded-xl bg-background border text-left transition-all cursor-pointer ${
-          aberto
+        className={`w-full flex items-center justify-between gap-2 px-3.5 py-2.5 text-sm rounded-xl bg-background border text-left transition-all cursor-pointer ${aberto
             ? 'border-primary ring-2 ring-primary/20 shadow-xs font-medium'
             : selected.length > 0
-            ? 'border-primary/60 text-foreground font-semibold bg-primary/5'
-            : 'border-border text-foreground hover:border-border/80'
-        }`}
+              ? 'border-primary/60 text-foreground font-semibold bg-primary/5'
+              : 'border-border text-foreground hover:border-border/80'
+          }`}
       >
         <span className="truncate">{textoBotao}</span>
         <div className="flex items-center gap-1.5 flex-shrink-0">
@@ -212,18 +214,16 @@ function MultiSelectDropdown({
                   <label
                     key={opt.cd}
                     onClick={() => toggleItem(opt.cd)}
-                    className={`flex items-center gap-3 px-3 py-2 rounded-xl cursor-pointer transition-colors ${
-                      isSelected
+                    className={`flex items-center gap-3 px-3 py-2 rounded-xl cursor-pointer transition-colors ${isSelected
                         ? 'bg-primary/10 text-primary font-semibold'
                         : 'hover:bg-muted text-foreground'
-                    }`}
+                      }`}
                   >
                     <div
-                      className={`h-4.5 w-4.5 rounded-md flex items-center justify-center border transition-all flex-shrink-0 ${
-                        isSelected
+                      className={`h-4.5 w-4.5 rounded-md flex items-center justify-center border transition-all flex-shrink-0 ${isSelected
                           ? 'bg-primary border-primary text-primary-foreground shadow-2xs'
                           : 'border-border bg-background'
-                      }`}
+                        }`}
                     >
                       {isSelected && <Check className="h-3.5 w-3.5 stroke-[3]" />}
                     </div>
@@ -265,8 +265,7 @@ export default function AtendimentosDiretoria() {
   const carregarDados = useCallback(async (ignorarCache: boolean = false) => {
     setCarregando(true);
     try {
-      // Se houver exatamente 1 convênio selecionado, passa o código, senão '0'
-      const convParam = conveniosSelecionados.length === 1 ? conveniosSelecionados[0] : '0';
+      // Sempre consulta todos os convênios ('0') no período para preservar Total, SUS e Não SUS do período
       const setorParam = setoresSelecionados.length === 1 ? setoresSelecionados[0] : '0';
       const clinicaParam = clinicasSelecionadas.length === 1 ? clinicasSelecionadas[0] : '0';
       const tipoParam = tiposSelecionados.length === 1 ? tiposSelecionados[0] : '0';
@@ -274,7 +273,7 @@ export default function AtendimentosDiretoria() {
       const res = await atendimentosService.buscarAtendimentos({
         dtInicio: dataInicio,
         dtFim: dataFim,
-        convenio: convParam,
+        convenio: '0',
         setor: setorParam,
         tipoAtendimento: tipoParam,
         clinica: clinicaParam
@@ -285,7 +284,7 @@ export default function AtendimentosDiretoria() {
     } finally {
       setCarregando(false);
     }
-  }, [dataInicio, dataFim, conveniosSelecionados, setoresSelecionados, clinicasSelecionadas, tiposSelecionados]);
+  }, [dataInicio, dataFim, setoresSelecionados, clinicasSelecionadas, tiposSelecionados]);
 
   // Dispara a consulta sempre que filtros ou datas mudam
   useEffect(() => {
@@ -323,17 +322,34 @@ export default function AtendimentosDiretoria() {
     return `${dia}/${mes}/${ano}`;
   };
 
+  // ── Função Auxiliar para Normalizar Texto (Remove Acentos para Comparação) ─
+  const normalizarTexto = (str: string) =>
+    (str || '')
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .trim();
+
   // ── Mapa de Nomes dos Convênios Selecionados para Filtragem na Tela ────────
   const nomesConveniosSelecionados = useMemo(() => {
-    if (conveniosSelecionados.length === 0) return null;
-    const setNomes = new Set<string>();
+    if (
+      conveniosSelecionados.length === 0 ||
+      conveniosSelecionados.length === OPCOES_CONVENIOS.length
+    ) {
+      return null;
+    }
+    const listaNomes: string[] = [];
     conveniosSelecionados.forEach(cd => {
       const opt = OPCOES_CONVENIOS.find(o => o.cd === cd);
       if (opt) {
-        setNomes.add(opt.ds.toLowerCase().trim());
+        const norm = normalizarTexto(opt.ds);
+        listaNomes.push(norm);
+        if (cd === '4') {
+          listaNomes.push('sus');
+        }
       }
     });
-    return setNomes;
+    return listaNomes;
   }, [conveniosSelecionados]);
 
   // ── Filtragem de Convênios na Tabela (Multi-Select + Busca Livre) ──────────
@@ -341,19 +357,21 @@ export default function AtendimentosDiretoria() {
     if (!dados?.convenios) return [];
     return dados.convenios.filter(c => {
       // Filtro de Multi-Select de Convênios
-      if (nomesConveniosSelecionados && nomesConveniosSelecionados.size > 0) {
-        const nomeAtual = c.dsConvenio.toLowerCase().trim();
-        // Verifica se algum convênio selecionado bate com o nome
-        const match = Array.from(nomesConveniosSelecionados).some(n =>
-          nomeAtual.includes(n) || n.includes(nomeAtual)
-        );
+      if (nomesConveniosSelecionados && nomesConveniosSelecionados.length > 0) {
+        const nomeAtual = normalizarTexto(c.dsConvenio);
+        const match = nomesConveniosSelecionados.some(n => {
+          if (n === 'sus') {
+            return nomeAtual === 'sus' || nomeAtual.startsWith('sus ') || nomeAtual.startsWith('sus-');
+          }
+          return nomeAtual.includes(n) || n.includes(nomeAtual);
+        });
         if (!match) return false;
       }
 
       // Filtro de Busca Livre por texto
       if (buscaTabela.trim()) {
-        const query = buscaTabela.toLowerCase().trim();
-        if (!c.dsConvenio.toLowerCase().includes(query)) {
+        const query = normalizarTexto(buscaTabela);
+        if (!normalizarTexto(c.dsConvenio).includes(query)) {
           return false;
         }
       }
@@ -457,6 +475,87 @@ export default function AtendimentosDiretoria() {
     return resultado;
   }, [conveniosComPercentual, metricasConsolidadas.totalGeral]);
 
+  // ── Coluna Dinâmica de Convênio na Planilha Consolidada Mensal ─────────────
+  const infoConvenioPlanilha = useMemo(() => {
+    if (conveniosSelecionados.length === 0) {
+      return {
+        temSelecao: false,
+        todosSelecionados: false,
+        tituloColuna: 'Convênio',
+        tituloCompleto: 'Selecione um convênio no filtro para exibir nesta coluna'
+      };
+    }
+
+    if (conveniosSelecionados.length === OPCOES_CONVENIOS.length) {
+      return {
+        temSelecao: true,
+        todosSelecionados: true,
+        tituloColuna: 'Todos os Convênios',
+        tituloCompleto: 'Todos os convênios selecionados'
+      };
+    }
+
+    const nomes = conveniosSelecionados.map(
+      cd => OPCOES_CONVENIOS.find(o => o.cd === cd)?.ds || `Cód. ${cd}`
+    );
+
+    const tituloColuna =
+      nomes.length === 1
+        ? nomes[0]
+        : nomes.length === 2
+          ? `${nomes[0]} / ${nomes[1]}`
+          : `${nomes[0]} (+${nomes.length - 1})`;
+
+    return {
+      temSelecao: true,
+      todosSelecionados: false,
+      tituloColuna,
+      tituloCompleto: nomes.join(', ')
+    };
+  }, [conveniosSelecionados]);
+
+  const evolucaoMensalProcessada = useMemo(() => {
+    const listaBase = dados?.evolucaoMensal || [];
+    if (!infoConvenioPlanilha.temSelecao) {
+      return listaBase.map(row => ({
+        ...row,
+        valorConvenioSelecionado: null as number | null
+      }));
+    }
+
+    // Se "Todos os Convênios" estiverem marcados, traz o Total do período no mês
+    if (infoConvenioPlanilha.todosSelecionados) {
+      return listaBase.map(row => ({
+        ...row,
+        valorConvenioSelecionado: row.total
+      }));
+    }
+
+    const apenasSus = conveniosSelecionados.length === 1 && conveniosSelecionados[0] === '4';
+    const somaTodosNoBanco = (dados?.convenios || []).reduce((acc, c) => acc + c.qtde, 0);
+    const somaFiltrados = conveniosFiltrados.reduce((acc, c) => acc + c.qtde, 0);
+
+    const proporcaoSobreTotal =
+      somaTodosNoBanco > 0 ? Math.min(1, somaFiltrados / somaTodosNoBanco) : 0;
+
+    return listaBase.map(row => {
+      let valorConv = 0;
+      if (apenasSus) {
+        valorConv = row.sus;
+      } else if (listaBase.length === 1) {
+        // Quando há apenas 1 mês no período consultado, usa a soma exata dos convênios selecionados
+        valorConv = somaFiltrados;
+      } else {
+        valorConv = Math.round(row.total * proporcaoSobreTotal);
+      }
+
+      return {
+        ...row,
+        valorConvenioSelecionado: valorConv
+      };
+    });
+  }, [dados?.evolucaoMensal, dados?.convenios, infoConvenioPlanilha, conveniosSelecionados, conveniosFiltrados]);
+
   // ── Exportação CSV / Excel ─────────────────────────────────────────────────
   const exportarCSV = () => {
     if (conveniosComPercentual.length === 0) return;
@@ -486,82 +585,352 @@ export default function AtendimentosDiretoria() {
     document.body.removeChild(link);
   };
 
-  // ── Exportação PDF (Fiel ao Relatório da Santa Casa - Imagem 1) ────────────
-  const exportarPDF = () => {
-    if (conveniosComPercentual.length === 0) return;
+  // ── Exportação PDF Executivo (Moderno com Logo Oficial da Santa Casa) ──────
+  const [gerandoPdf, setGerandoPdf] = useState<boolean>(false);
 
-    const doc = new jsPDF('portrait');
+  const exportarPDF = async () => {
+    if (conveniosComPercentual.length === 0 || gerandoPdf) return;
+    setGerandoPdf(true);
 
-    // Cabeçalho Santa Casa
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(14);
-    doc.setTextColor(15, 23, 42);
-    doc.text('SANTA CASA', 14, 18);
-    
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(9);
-    doc.setTextColor(100, 116, 139);
-    doc.text('De Misericórdia de Araguari-MG', 14, 23);
+    try {
+      const doc = new jsPDF({
+        orientation: 'portrait',
+        unit: 'mm',
+        format: 'a4'
+      });
 
-    // Título Principal Centralizado
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(13);
-    doc.setTextColor(15, 23, 42);
-    doc.text('TOTAL DE ATENDIMENTOS POR CONVÊNIO', 105, 18, { align: 'center' });
+      const pageWidth = doc.internal.pageSize.getWidth(); // 210mm
+      const pageHeight = doc.internal.pageSize.getHeight(); // 297mm
+      const marginX = 14;
+      const contentWidth = pageWidth - marginX * 2; // 182mm
 
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(9.5);
-    doc.setTextColor(71, 85, 105);
-    doc.text(`De ${formatarDataBR(dataInicio)} até ${formatarDataBR(dataFim)}`, 105, 24, { align: 'center' });
+      // Cores Institucionais Santa Casa
+      const corBordeaux: [number, number, number] = [107, 20, 26];
+      const corSlateDark: [number, number, number] = [15, 23, 42];
+      const corSlateMuted: [number, number, number] = [100, 116, 139];
 
-    // Linha divisória
-    doc.setDrawColor(203, 213, 225);
-    doc.setLineWidth(0.5);
-    doc.line(14, 28, 196, 28);
+      // 1. Barra Superior Institucional
+      doc.setFillColor(...corBordeaux);
+      doc.rect(0, 0, pageWidth, 3.5, 'F');
 
-    // Tabela no formato exato da Imagem 1
-    const head = [['Convênio', 'Qtd. Atendimentos']];
-    const data = conveniosOrdenados.map(c => [
-      c.dsConvenio,
-      c.qtde.toLocaleString('pt-BR')
-    ]);
+      // 2. Carregar Logo Oficial do Hospital (/LOGO_HSC_PRIMARY.png)
+      let logoCarregada = false;
+      try {
+        const imgObj = await new Promise<HTMLImageElement>((resolve, reject) => {
+          const img = new Image();
+          img.crossOrigin = 'Anonymous';
+          img.onload = () => resolve(img);
+          img.onerror = (err) => reject(err);
+          img.src = '/LOGO_HSC_PRIMARY.png';
+        });
 
-    // Linha Final de TOTAL
-    data.push([
-      'TOTAL',
-      (metricasConsolidadas.totalGeral || 0).toLocaleString('pt-BR')
-    ]);
-
-    autoTable(doc, {
-      head,
-      body: data,
-      startY: 32,
-      styles: {
-        fontSize: 9.5,
-        cellPadding: 3,
-        textColor: [15, 23, 42]
-      },
-      headStyles: {
-        fillColor: [203, 213, 225],
-        textColor: [15, 23, 42],
-        fontStyle: 'bold'
-      },
-      alternateRowStyles: {
-        fillColor: [255, 255, 255]
-      },
-      columnStyles: {
-        0: { halign: 'left' },
-        1: { halign: 'center', fontStyle: 'normal' }
-      },
-      didParseCell: function (dataHook) {
-        if (dataHook.row.index === data.length - 1) {
-          dataHook.cell.styles.fontStyle = 'bold';
-          dataHook.cell.styles.fillColor = [241, 245, 249];
+        const maxLogoW = 42;
+        const maxLogoH = 12;
+        const ratio = (imgObj.naturalWidth || 460) / (imgObj.naturalHeight || 105);
+        let logoW = maxLogoW;
+        let logoH = logoW / ratio;
+        if (logoH > maxLogoH) {
+          logoH = maxLogoH;
+          logoW = logoH * ratio;
         }
-      }
-    });
 
-    doc.save(`relatorio_atendimentos_santacasa_${dataInicio}_a_${dataFim}.pdf`);
+        // Posiciona a logo à esquerda, alinhada verticalmente com o título e período
+        doc.addImage(imgObj, 'PNG', marginX, 10, logoW, logoH);
+        logoCarregada = true;
+      } catch (e) {
+        console.warn('Não foi possível carregar a imagem da logo para o PDF:', e);
+      }
+
+      if (!logoCarregada) {
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(13);
+        doc.setTextColor(...corBordeaux);
+        doc.text('SANTA CASA', marginX, 14.5);
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(8.5);
+        doc.setTextColor(...corSlateMuted);
+        doc.text('De Misericórdia de Araguari-MG', marginX, 19);
+      }
+
+      // 3. Título Principal e Período Centralizados ao Lado da Logo
+      const tituloX = 114; // Centralizado com equilíbrio ao lado da logo
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(13);
+      doc.setTextColor(...corSlateDark);
+      doc.text('TOTAL DE ATENDIMENTOS POR CONVÊNIO', tituloX, 13.5, { align: 'center' });
+
+      // Badge centralizado com o período consultado logo abaixo do título
+      const textoPeriodo = `Período: De ${formatarDataBR(dataInicio)} até ${formatarDataBR(dataFim)}`;
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(8.5);
+      const periodoWidth = doc.getTextWidth(textoPeriodo) + 10;
+      doc.setFillColor(248, 250, 252);
+      doc.setDrawColor(203, 213, 225);
+      doc.setLineWidth(0.25);
+      doc.roundedRect(tituloX - periodoWidth / 2, 15.8, periodoWidth, 6, 3, 3, 'FD');
+      doc.setTextColor(71, 85, 105);
+      doc.text(textoPeriodo, tituloX, 19.9, { align: 'center' });
+
+      // Linha divisória sutil abaixo do cabeçalho institucional
+      doc.setDrawColor(226, 232, 240);
+      doc.setLineWidth(0.35);
+      doc.line(marginX, 25, pageWidth - marginX, 25);
+
+      // 4. Quadro de Identificação dos Filtros Utilizados no Relatório
+      const formatarResumoFiltro = (
+        selecionados: string[],
+        opcoes: { cd: string; ds: string }[],
+        textoTodos: string
+      ) => {
+        if (selecionados.length === 0 || selecionados.length === opcoes.length) {
+          return textoTodos;
+        }
+        const nomes = selecionados.map(cd => opcoes.find(o => o.cd === cd)?.ds || cd);
+        if (nomes.length <= 2) return nomes.join(', ');
+        return `${nomes.slice(0, 2).join(', ')} (+${nomes.length - 2})`;
+      };
+
+      const itensFiltro = [
+        {
+          label: 'Convênio(s):',
+          valor: buscaTabela.trim()
+            ? `${formatarResumoFiltro(conveniosSelecionados, OPCOES_CONVENIOS, 'Todos')} (Busca: "${buscaTabela.trim()}")`
+            : formatarResumoFiltro(conveniosSelecionados, OPCOES_CONVENIOS, 'Todos os Convênios'),
+          ativo: conveniosSelecionados.length > 0 || buscaTabela.trim() !== ''
+        },
+        {
+          label: 'Setor(es):',
+          valor: formatarResumoFiltro(setoresSelecionados, OPCOES_SETORES, 'Todos os Setores'),
+          ativo: setoresSelecionados.length > 0
+        },
+        {
+          label: 'Clínica(s):',
+          valor: formatarResumoFiltro(clinicasSelecionadas, OPCOES_CLINICAS, 'Todas as Clínicas'),
+          ativo: clinicasSelecionadas.length > 0
+        },
+        {
+          label: 'Tipo de Atendimento:',
+          valor: formatarResumoFiltro(tiposSelecionados, OPCOES_TIPOS_ATENDIMENTO, 'Todos os Tipos'),
+          ativo: tiposSelecionados.length > 0
+        }
+      ];
+
+      const filtroBoxY = 27.5;
+      const filtroBoxH = 13.5;
+      doc.setFillColor(248, 250, 252);
+      doc.setDrawColor(226, 232, 240);
+      doc.setLineWidth(0.25);
+      doc.roundedRect(marginX, filtroBoxY, contentWidth, filtroBoxH, 2, 2, 'FD');
+
+      // Barra lateral bordô indicando bloco de parâmetros
+      doc.setFillColor(...corBordeaux);
+      doc.rect(marginX + 0.2, filtroBoxY + 1.8, 1.2, filtroBoxH - 3.6, 'F');
+
+      itensFiltro.forEach((f, idx) => {
+        const col = idx % 2;
+        const row = Math.floor(idx / 2);
+        const posX = col === 0 ? marginX + 4 : marginX + contentWidth / 2 + 2;
+        const posY = filtroBoxY + 5.2 + row * 5.2;
+
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(7.5);
+        doc.setTextColor(...corSlateMuted);
+        doc.text(f.label, posX, posY);
+
+        const labelW = doc.getTextWidth(f.label) + 1.8;
+        doc.setFont('helvetica', f.ativo ? 'bold' : 'normal');
+        doc.setFontSize(7.5);
+        doc.setTextColor(...(f.ativo ? corBordeaux : corSlateDark));
+
+        // Trunca suavemente se ultrapassar a largura da coluna
+        const maxValWidth = contentWidth / 2 - labelW - 6;
+        let textoValor = f.valor;
+        while (doc.getTextWidth(textoValor) > maxValWidth && textoValor.length > 10) {
+          textoValor = textoValor.slice(0, -4) + '...';
+        }
+        doc.text(textoValor, posX + labelW, posY);
+      });
+
+      let currentY = filtroBoxY + filtroBoxH + 4.5;
+
+      // 4. Cards de KPIs Executivos
+      const kpis = [
+        {
+          titulo: 'TOTAL GERAL',
+          valor: (metricasConsolidadas.totalGeral || 0).toLocaleString('pt-BR'),
+          sub: `${conveniosOrdenados.length} convênios listados`,
+          cor: [37, 99, 235] as [number, number, number] // Blue
+        },
+        {
+          titulo: 'ATENDIMENTOS SUS',
+          valor: (metricasConsolidadas.totalSus || 0).toLocaleString('pt-BR'),
+          sub: `${(metricasConsolidadas.percentualSus || 0).toFixed(1)}% do total`,
+          cor: [16, 185, 129] as [number, number, number] // Emerald
+        },
+        {
+          titulo: 'PLANOS PRIVADOS',
+          valor: (metricasConsolidadas.totalPrivado || 0).toLocaleString('pt-BR'),
+          sub: `${(metricasConsolidadas.percentualPrivado || 0).toFixed(1)}% do total`,
+          cor: [124, 58, 237] as [number, number, number] // Violet
+        },
+        {
+          titulo: 'PARTICULAR',
+          valor: (metricasConsolidadas.totalParticular || 0).toLocaleString('pt-BR'),
+          sub: `${(metricasConsolidadas.percentualParticular || 0).toFixed(1)}% do total`,
+          cor: [217, 119, 6] as [number, number, number] // Amber
+        }
+      ];
+
+      const gap = 3.6;
+      const cardW = (contentWidth - gap * 3) / 4;
+      const cardH = 19;
+
+      kpis.forEach((kpi, idx) => {
+        const cardX = marginX + idx * (cardW + gap);
+
+        // Fundo do card
+        doc.setFillColor(248, 250, 252);
+        doc.setDrawColor(226, 232, 240);
+        doc.setLineWidth(0.3);
+        doc.roundedRect(cardX, currentY, cardW, cardH, 2, 2, 'FD');
+
+        // Detalhe colorido superior do card
+        doc.setFillColor(...kpi.cor);
+        doc.rect(cardX + 0.3, currentY + 0.3, cardW - 0.6, 1.4, 'F');
+
+        // Label
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(6.8);
+        doc.setTextColor(...corSlateMuted);
+        doc.text(kpi.titulo, cardX + 3.5, currentY + 5.8);
+
+        // Valor principal
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(12);
+        doc.setTextColor(...corSlateDark);
+        doc.text(kpi.valor, cardX + 3.5, currentY + 12.2);
+
+        // Subtexto percentual
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(7);
+        doc.setTextColor(...kpi.cor);
+        doc.text(kpi.sub, cardX + 3.5, currentY + 16.5);
+      });
+
+      currentY += cardH + 6;
+
+      // 5. Tabela Moderna de Atendimentos por Convênio
+      const head = [['#', 'Convênio / Operadora', 'Qtd. Atendimentos', 'Participação (%)']];
+      const data = conveniosOrdenados.map((c, index) => [
+        String(index + 1).padStart(2, '0'),
+        c.dsConvenio,
+        c.qtde.toLocaleString('pt-BR'),
+        `${c.percentual.toFixed(2).replace('.', ',')}%`
+      ]);
+
+      // Linha Final de TOTAL
+      data.push([
+        '',
+        'TOTAL GERAL CONSOLIDADO',
+        (metricasConsolidadas.totalGeral || 0).toLocaleString('pt-BR'),
+        '100,00%'
+      ]);
+
+      autoTable(doc, {
+        head,
+        body: data,
+        startY: currentY,
+        margin: { left: marginX, right: marginX, bottom: 18 },
+        theme: 'grid',
+        styles: {
+          font: 'helvetica',
+          fontSize: 8.8,
+          cellPadding: { top: 2.6, right: 3.5, bottom: 2.6, left: 3.5 },
+          textColor: corSlateDark,
+          lineColor: [226, 232, 240],
+          lineWidth: 0.25
+        },
+        headStyles: {
+          fillColor: corBordeaux,
+          textColor: [255, 255, 255],
+          fontStyle: 'bold',
+          fontSize: 8.5,
+          cellPadding: { top: 3.2, right: 3.5, bottom: 3.2, left: 3.5 }
+        },
+        alternateRowStyles: {
+          fillColor: [248, 250, 252]
+        },
+        columnStyles: {
+          0: { halign: 'center', cellWidth: 12, textColor: corSlateMuted },
+          1: { halign: 'left', cellWidth: 'auto', fontStyle: 'bold' },
+          2: { halign: 'right', cellWidth: 42, fontStyle: 'bold' },
+          3: { halign: 'right', cellWidth: 38 }
+        },
+        didParseCell: function (dataHook) {
+          // Alinhamento dos cabeçalhos numéricos
+          if (dataHook.section === 'head') {
+            if (dataHook.column.index === 0) {
+              dataHook.cell.styles.halign = 'center';
+            } else if (dataHook.column.index === 2 || dataHook.column.index === 3) {
+              dataHook.cell.styles.halign = 'right';
+            }
+          }
+
+          // Linha de Total Geral Consolidado
+          if (dataHook.section === 'body' && dataHook.row.index === data.length - 1) {
+            dataHook.cell.styles.fontStyle = 'bold';
+            dataHook.cell.styles.fillColor = [253, 242, 242];
+            dataHook.cell.styles.textColor = corBordeaux;
+            dataHook.cell.styles.fontSize = 9.5;
+          }
+        }
+      });
+
+      // 6. Rodapé Institucional em Todas as Páginas
+      const totalPages = doc.getNumberOfPages();
+      for (let i = 1; i <= totalPages; i++) {
+        doc.setPage(i);
+
+        // Barra fina bordeaux no topo caso haja mais de 1 página
+        if (i > 1) {
+          doc.setFillColor(...corBordeaux);
+          doc.rect(0, 0, pageWidth, 2.5, 'F');
+        }
+
+        // Linha do rodapé
+        doc.setDrawColor(226, 232, 240);
+        doc.setLineWidth(0.3);
+        doc.line(marginX, pageHeight - 12, pageWidth - marginX, pageHeight - 12);
+
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(7.5);
+        doc.setTextColor(...corBordeaux);
+        doc.text(
+          'Hospital Santa Casa de Misericórdia de Araguari',
+          marginX,
+          pageHeight - 7.5
+        );
+
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(...corSlateMuted);
+        doc.text(
+          '  •  Relatório Executivo de Atendimentos',
+          marginX + doc.getTextWidth('Hospital Santa Casa de Misericórdia de Araguari'),
+          pageHeight - 7.5
+        );
+
+        doc.text(
+          `Página ${i} de ${totalPages}`,
+          pageWidth - marginX,
+          pageHeight - 7.5,
+          { align: 'right' }
+        );
+      }
+
+      doc.save(`relatorio_atendimentos_santacasa_${dataInicio}_a_${dataFim}.pdf`);
+    } finally {
+      setGerandoPdf(false);
+    }
   };
 
   return (
@@ -578,11 +947,10 @@ export default function AtendimentosDiretoria() {
             </h1>
             <div
               title={dados?.isMock ? 'Modo Demonstração' : `Conectado ao Oracle Tasy • Atualizado às ${dados?.dataAtualizacao || ''}`}
-              className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold border shadow-2xs ${
-                dados?.isMock
+              className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold border shadow-2xs ${dados?.isMock
                   ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20'
                   : 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20'
-              }`}
+                }`}
             >
               <div className={`h-1.5 w-1.5 rounded-full ${dados?.isMock ? 'bg-amber-500 animate-pulse' : 'bg-emerald-500 animate-pulse'}`} />
               <span className="uppercase tracking-wider text-[10px]">SYNC</span>
@@ -609,10 +977,15 @@ export default function AtendimentosDiretoria() {
           {/* Exportar PDF com layout Santa Casa */}
           <button
             onClick={exportarPDF}
-            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold bg-card hover:bg-muted text-foreground border border-border shadow-xs transition-all active:scale-95 cursor-pointer"
+            disabled={gerandoPdf || carregando || conveniosComPercentual.length === 0}
+            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold bg-card hover:bg-muted text-foreground border border-border shadow-xs transition-all active:scale-95 disabled:opacity-50 cursor-pointer"
           >
-            <FileText className="h-3.5 w-3.5 text-rose-600" />
-            <span>PDF</span>
+            {gerandoPdf ? (
+              <RefreshCw className="h-3.5 w-3.5 text-rose-600 animate-spin" />
+            ) : (
+              <FileText className="h-3.5 w-3.5 text-rose-600" />
+            )}
+            <span>{gerandoPdf ? 'Gerando PDF...' : 'PDF'}</span>
           </button>
         </div>
       </div>
@@ -631,41 +1004,37 @@ export default function AtendimentosDiretoria() {
             <span className="text-[11px] font-semibold text-muted-foreground mr-1">Atalhos:</span>
             <button
               onClick={() => aplicarPeriodoRapido('2026-10-01', '2026-10-07')}
-              className={`px-2.5 py-1 text-xs rounded-lg transition-colors cursor-pointer ${
-                dataInicio === '2026-10-01' && dataFim === '2026-10-07'
+              className={`px-2.5 py-1 text-xs rounded-lg transition-colors cursor-pointer ${dataInicio === '2026-10-01' && dataFim === '2026-10-07'
                   ? 'bg-primary text-primary-foreground font-bold shadow-xs'
                   : 'bg-muted text-muted-foreground hover:bg-muted/80'
-              }`}
+                }`}
             >
               01 a 07/Out/26
             </button>
             <button
               onClick={() => aplicarPeriodoRapido('2026-09-01', '2026-09-30')}
-              className={`px-2.5 py-1 text-xs rounded-lg transition-colors cursor-pointer ${
-                dataInicio === '2026-09-01' && dataFim === '2026-09-30'
+              className={`px-2.5 py-1 text-xs rounded-lg transition-colors cursor-pointer ${dataInicio === '2026-09-01' && dataFim === '2026-09-30'
                   ? 'bg-primary text-primary-foreground font-bold shadow-xs'
                   : 'bg-muted text-muted-foreground hover:bg-muted/80'
-              }`}
+                }`}
             >
               Setembro/26
             </button>
             <button
               onClick={() => aplicarPeriodoRapido('2026-08-01', '2026-08-31')}
-              className={`px-2.5 py-1 text-xs rounded-lg transition-colors cursor-pointer ${
-                dataInicio === '2026-08-01' && dataFim === '2026-08-31'
+              className={`px-2.5 py-1 text-xs rounded-lg transition-colors cursor-pointer ${dataInicio === '2026-08-01' && dataFim === '2026-08-31'
                   ? 'bg-primary text-primary-foreground font-bold shadow-xs'
                   : 'bg-muted text-muted-foreground hover:bg-muted/80'
-              }`}
+                }`}
             >
               Agosto/26
             </button>
             <button
               onClick={() => aplicarPeriodoRapido('2026-01-01', '2026-10-07')}
-              className={`px-2.5 py-1 text-xs rounded-lg transition-colors cursor-pointer ${
-                dataInicio === '2026-01-01' && dataFim === '2026-10-07'
+              className={`px-2.5 py-1 text-xs rounded-lg transition-colors cursor-pointer ${dataInicio === '2026-01-01' && dataFim === '2026-10-07'
                   ? 'bg-primary text-primary-foreground font-bold shadow-xs'
                   : 'bg-muted text-muted-foreground hover:bg-muted/80'
-              }`}
+                }`}
             >
               Ano 2026
             </button>
@@ -779,11 +1148,10 @@ export default function AtendimentosDiretoria() {
         <div className="flex items-center gap-2">
           <button
             onClick={() => setAbaAtiva('convenios')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-              abaAtiva === 'convenios'
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${abaAtiva === 'convenios'
                 ? 'bg-primary text-primary-foreground shadow-xs'
                 : 'bg-card text-muted-foreground hover:bg-muted hover:text-foreground border border-border/60'
-            }`}
+              }`}
           >
             <Layers className="h-4 w-4" />
             <span>Total por Convênio (Relatório)</span>
@@ -791,11 +1159,10 @@ export default function AtendimentosDiretoria() {
 
           <button
             onClick={() => setAbaAtiva('evolucao_mensal')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-              abaAtiva === 'evolucao_mensal'
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${abaAtiva === 'evolucao_mensal'
                 ? 'bg-primary text-primary-foreground shadow-xs'
                 : 'bg-card text-muted-foreground hover:bg-muted hover:text-foreground border border-border/60'
-            }`}
+              }`}
           >
             <TableIcon className="h-4 w-4" />
             <span>Acompanhamento Mensal & Produtividade</span>
@@ -1143,7 +1510,7 @@ export default function AtendimentosDiretoria() {
                 <span className="text-3xl font-extrabold text-foreground">
                   {Math.round(
                     (dados?.evolucaoMensal || []).reduce((acc, m) => acc + m.mediaDiaria, 0) /
-                      (dados?.evolucaoMensal?.length || 1)
+                    (dados?.evolucaoMensal?.length || 1)
                   )}
                 </span>
                 <span className="text-xs text-muted-foreground ml-2">pacientes / dia</span>
@@ -1161,7 +1528,7 @@ export default function AtendimentosDiretoria() {
                 <span className="text-3xl font-extrabold text-emerald-600 dark:text-emerald-400">
                   {Math.round(
                     (dados?.evolucaoMensal || []).reduce((acc, m) => acc + m.porTurno6h, 0) /
-                      (dados?.evolucaoMensal?.length || 1)
+                    (dados?.evolucaoMensal?.length || 1)
                   )}
                 </span>
                 <span className="text-xs text-muted-foreground ml-2">pacientes / plantão</span>
@@ -1265,7 +1632,15 @@ export default function AtendimentosDiretoria() {
                     <th className="py-3 px-4 text-emerald-600 dark:text-emerald-400">SUS</th>
                     <th className="py-3 px-4 text-violet-600 dark:text-violet-400">Não SUS</th>
                     <th className="py-3 px-4">Clínica</th>
-                    <th className="py-3 px-4">IPSEMG</th>
+                    <th
+                      className={`py-3 px-4 ${infoConvenioPlanilha.temSelecao
+                          ? 'text-primary font-extrabold bg-primary/5'
+                          : 'text-muted-foreground'
+                        }`}
+                      title={infoConvenioPlanilha.tituloCompleto}
+                    >
+                      {infoConvenioPlanilha.tituloColuna}
+                    </th>
                     <th className="py-3 px-4">SUS (Clínica)</th>
                     <th className="py-3 px-4">Total Clínica</th>
                     <th className="py-3 px-4 text-blue-600 dark:text-blue-400">Média Diária</th>
@@ -1273,7 +1648,7 @@ export default function AtendimentosDiretoria() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border/40 text-xs">
-                  {(dados?.evolucaoMensal || []).map(row => (
+                  {evolucaoMensalProcessada.map(row => (
                     <tr key={row.mes} className="hover:bg-muted/30 transition-colors font-mono">
                       <td className="py-3 px-4 text-left font-sans font-bold text-foreground">
                         {row.mes} ({row.mesNome})
@@ -1290,8 +1665,15 @@ export default function AtendimentosDiretoria() {
                       <td className="py-3 px-4 font-semibold text-foreground">
                         {row.clinica.toLocaleString('pt-BR')}
                       </td>
-                      <td className="py-3 px-4 text-muted-foreground">
-                        {row.ipsemg.toLocaleString('pt-BR')}
+                      <td
+                        className={`py-3 px-4 ${row.valorConvenioSelecionado !== null
+                            ? 'font-bold text-primary bg-primary/5'
+                            : 'text-muted-foreground/50'
+                          }`}
+                      >
+                        {row.valorConvenioSelecionado !== null
+                          ? row.valorConvenioSelecionado.toLocaleString('pt-BR')
+                          : '-'}
                       </td>
                       <td className="py-3 px-4 text-muted-foreground">
                         {row.susClinica.toLocaleString('pt-BR')}

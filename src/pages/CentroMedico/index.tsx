@@ -1,5 +1,4 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
 import {
   Stethoscope,
   Calendar,
@@ -22,7 +21,6 @@ import {
   CalendarDays,
   Activity,
   Check,
-  Kanban,
   Send,
   MoveRight,
   GripVertical,
@@ -34,7 +32,7 @@ import { webhookService } from '../../services/webhookService';
 import { supabase } from '../../lib/supabase';
 
 // Tipos de Status do Kanban
-export type KanbanStatus = 'Agendamentos' | 'Enviadas' | 'Confirmadas' | 'Concluídas' | 'Canceladas';
+export type KanbanStatus = 'Agendamentos' | 'Enviadas' | 'Remarcar' | 'Confirmadas' | 'Concluídas' | 'Canceladas';
 
 // Interfaces de Dados
 export interface EscalaMedica {
@@ -83,7 +81,7 @@ const KANBAN_COLUMNS: {
 }[] = [
   {
     id: 'Agendamentos',
-    label: 'Agenda',
+    label: 'AGENDA',
     color: 'text-blue-600 dark:text-blue-400',
     badgeBg: 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/30',
     border: 'border-blue-500/30',
@@ -92,15 +90,23 @@ const KANBAN_COLUMNS: {
   },
   {
     id: 'Enviadas',
-    label: 'Confirmação de agendamento',
+    label: 'ENVIADO',
     color: 'text-purple-600 dark:text-purple-400',
     badgeBg: 'bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/30',
     border: 'border-purple-500/30',
     dotColor: 'bg-purple-500'
   },
   {
+    id: 'Remarcar',
+    label: 'REMARCAR',
+    color: 'text-amber-600 dark:text-amber-400',
+    badgeBg: 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30',
+    border: 'border-amber-500/30',
+    dotColor: 'bg-amber-500'
+  },
+  {
     id: 'Confirmadas',
-    label: 'Envio de confirmação',
+    label: 'CONFIRMAÇÃO',
     color: 'text-emerald-600 dark:text-emerald-400',
     badgeBg: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30',
     border: 'border-emerald-500/30',
@@ -108,7 +114,7 @@ const KANBAN_COLUMNS: {
   },
   {
     id: 'Canceladas',
-    label: 'Canceladas',
+    label: 'CANCELADAS',
     color: 'text-rose-600 dark:text-rose-400',
     badgeBg: 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/30',
     border: 'border-rose-500/30',
@@ -117,11 +123,16 @@ const KANBAN_COLUMNS: {
   }
 ];
 
-// Helper para verificar se a consulta veio com status cancelado do Tasy
+// Helper para verificar se a consulta veio com status cancelado do Tasy (retorna 'C' ou 'Cancelado'/'Cancelada')
 const isStatusCanceladoTasy = (statusReal?: string, statusOriginal?: string): boolean => {
   const s1 = (statusReal || '').trim().toLowerCase();
   const s2 = (statusOriginal || '').trim().toLowerCase();
-  return s1.includes('cancelad') || s2.includes('cancelad');
+  return (
+    s1 === 'c' ||
+    s2 === 'c' ||
+    s1.includes('cancelad') ||
+    s2.includes('cancelad')
+  );
 };
 
 // Funções auxiliares para datas
@@ -541,25 +552,27 @@ const persistConfirmedPatient = async (cardId: string, confirmado: boolean) => {
   try {
     const current = getStoredConfirmedPatientsMap();
     const now = Date.now();
-    if (confirmado) {
-      current[cardId] = {
-        confirmadoPeloPaciente: true,
-        confirmadoEm: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
-      };
-      recordCardAddedOrder(cardId, now);
-    } else {
-      delete current[cardId];
-    }
-    localStorage.setItem(KANBAN_CONFIRMED_KEY, JSON.stringify(current));
+      const timeStr = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+      if (confirmado) {
+        current[cardId] = {
+          confirmadoPeloPaciente: true,
+          confirmadoEm: timeStr
+        };
+        recordCardAddedOrder(cardId, now);
+      } else {
+        delete current[cardId];
+      }
+      localStorage.setItem(KANBAN_CONFIRMED_KEY, JSON.stringify(current));
 
-    try {
-      await supabase.from('centro_medico_kanban_cards').upsert({
-        card_id: cardId,
-        status: confirmado ? 'Confirmadas' : 'Agendamentos',
-        confirmado_pelo_paciente: confirmado,
-        updated_at: new Date(now).toISOString()
-      }, { onConflict: 'card_id' });
-    } catch {}
+      try {
+        await supabase.from('centro_medico_kanban_cards').upsert({
+          card_id: cardId,
+          status: confirmado ? 'Confirmadas' : 'Agendamentos',
+          confirmado_pelo_paciente: confirmado,
+          confirmado_em: confirmado ? timeStr : null,
+          updated_at: new Date(now).toISOString()
+        }, { onConflict: 'card_id' });
+      } catch {}
 
     // Notifica outros componentes da tela
     window.dispatchEvent(new CustomEvent('consulta_confirmada_evento', { detail: { cardId, confirmado, addedAt: now } }));
@@ -593,6 +606,12 @@ const persistCardManualStatus = async (
         status: newStatus,
         paciente: cardData?.paciente || null,
         data_consulta: cardData?.data || null,
+        medico: cardData?.medico || null,
+        crm: cardData?.crm || null,
+        especialidade: cardData?.especialidade || null,
+        horario: cardData?.horario || null,
+        consultorio: cardData?.consultorio || null,
+        convenio: cardData?.convenio || null,
         updated_at: new Date(now).toISOString()
       }, { onConflict: 'card_id' });
     } catch {
@@ -640,10 +659,10 @@ export default function CentroMedico() {
     });
   });
 
-  // Salva cache de consultas para acesso pela tela de confirmação de consulta
+  // Salva cache temporário na sessão (limpo automaticamente ao fechar o navegador)
   useEffect(() => {
     try {
-      localStorage.setItem('hsc_centro_medico_consultas_cache_v1', JSON.stringify(consultas));
+      sessionStorage.setItem('hsc_centro_medico_consultas_cache_v1', JSON.stringify(consultas));
     } catch {}
   }, [consultas]);
 
@@ -652,6 +671,7 @@ export default function CentroMedico() {
     const handleRemoteConfirmEvent = (e?: any) => {
       const updatedConf = getStoredConfirmedPatientsMap();
       const updatedOrder = getStoredAddedOrderMap();
+      const updatedManual = getStoredManualStatusMap();
 
       if (e?.detail?.cardId && e?.detail?.addedAt) {
         updatedOrder[e.detail.cardId] = e.detail.addedAt;
@@ -660,13 +680,23 @@ export default function CentroMedico() {
       setConfirmedPatientsMap(updatedConf);
       setAddedOrderMap(updatedOrder);
 
-      setConsultas(prev => prev.map(c => ({
-        ...c,
-        confirmadoPeloPaciente: Boolean(updatedConf[c.id]?.confirmadoPeloPaciente),
-        confirmadoEm: updatedConf[c.id]?.confirmadoEm,
-        status: updatedConf[c.id]?.confirmadoPeloPaciente ? 'Confirmadas' : c.status,
-        addedAt: updatedOrder[c.id] ?? c.addedAt
-      })));
+      setConsultas(prev => prev.map(c => {
+        const manualSt = updatedManual[c.id];
+        const isConf = Boolean(updatedConf[c.id]?.confirmadoPeloPaciente);
+        const nextStatus: KanbanStatus = manualSt === 'Remarcar'
+          ? 'Remarcar'
+          : manualSt === 'Canceladas'
+            ? 'Canceladas'
+            : (isConf ? 'Confirmadas' : (manualSt || c.status));
+
+        return {
+          ...c,
+          confirmadoPeloPaciente: isConf,
+          confirmadoEm: updatedConf[c.id]?.confirmadoEm,
+          status: nextStatus,
+          addedAt: updatedOrder[c.id] ?? c.addedAt
+        };
+      }));
     };
 
     window.addEventListener('consulta_confirmada_evento', handleRemoteConfirmEvent);
@@ -677,21 +707,30 @@ export default function CentroMedico() {
     };
   }, []);
 
-  // Efeito ao carregar o componente para sincronizar posições salvas no Supabase
+  // Sincronização em tempo real (Supabase Realtime) e periódica das confirmações de pacientes
   useEffect(() => {
     const syncRemoteKanbanStatus = async () => {
       try {
         const { data, error } = await supabase
           .from('centro_medico_kanban_cards')
-          .select('card_id, status, updated_at');
+          .select('card_id, status, confirmado_pelo_paciente, confirmado_em, updated_at');
 
         if (!error && data && data.length > 0) {
           const currentMap = getStoredManualStatusMap();
           const currentOrderMap = getStoredAddedOrderMap();
+          const currentConfMap = getStoredConfirmedPatientsMap();
 
           data.forEach((row: any) => {
             if (row.card_id && row.status) {
               currentMap[row.card_id] = row.status as KanbanStatus;
+            }
+            if (row.card_id && row.confirmado_pelo_paciente) {
+              currentConfMap[row.card_id] = {
+                confirmadoPeloPaciente: true,
+                confirmadoEm: row.confirmado_em || undefined
+              };
+            } else if (row.card_id && (row.status === 'Remarcar' || row.status === 'Canceladas')) {
+              delete currentConfMap[row.card_id];
             }
             if (row.card_id && row.updated_at && !currentOrderMap[row.card_id]) {
               currentOrderMap[row.card_id] = new Date(row.updated_at).getTime();
@@ -700,27 +739,119 @@ export default function CentroMedico() {
 
           localStorage.setItem(KANBAN_STORAGE_KEY, JSON.stringify(currentMap));
           localStorage.setItem(KANBAN_ADDED_ORDER_KEY, JSON.stringify(currentOrderMap));
+          localStorage.setItem(KANBAN_CONFIRMED_KEY, JSON.stringify(currentConfMap));
 
+          setConfirmedPatientsMap(currentConfMap);
           setAddedOrderMap(currentOrderMap);
           setConsultas(prev => prev.map(c => {
             if (isStatusCanceladoTasy(c.statusReal, c.status)) {
               return { ...c, status: 'Canceladas' };
             }
+            const isConf = Boolean(currentConfMap[c.id]?.confirmadoPeloPaciente);
             const manualStatus = currentMap[c.id];
             const addedTimestamp = currentOrderMap[c.id];
+
+            // REGRA AUTOMÁTICA: se o paciente já confirmou pelo link (isConf), vai OBRIGATORIAMENTE para 'Confirmadas' (CONFIRMAÇÃO)
+            const targetStatus: KanbanStatus = manualStatus === 'Remarcar' ? 'Remarcar' : manualStatus === 'Canceladas' ? 'Canceladas' : (isConf ? 'Confirmadas' : (manualStatus || c.status));
+
             return {
               ...c,
-              ...(manualStatus ? { status: manualStatus } : {}),
+              status: targetStatus,
+              confirmadoPeloPaciente: isConf,
+              confirmadoEm: currentConfMap[c.id]?.confirmadoEm,
               ...(addedTimestamp ? { addedAt: addedTimestamp } : {})
             };
           }));
         }
       } catch {
-        // Fallback silencioso mantendo o localStorage
+        // Fallback silencioso
       }
     };
 
     syncRemoteKanbanStatus();
+
+    // ── SUPABASE REALTIME ──
+    // Escuta em tempo real quando o paciente confirma pelo link em qualquer celular/dispositivo
+    const realtimeChannel = supabase
+      .channel('centro_medico_realtime_kanban')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'centro_medico_kanban_cards' },
+        (payload: any) => {
+          const row = payload.new;
+          if (!row || !row.card_id) return;
+
+          const cardId = String(row.card_id);
+          const isConfirmed = Boolean(row.confirmado_pelo_paciente);
+          const timeStr = row.confirmado_em || new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+          const rowStatus = (row.status as KanbanStatus) || (isConfirmed ? 'Confirmadas' : 'Enviadas');
+
+          // Atualiza mapas no localStorage
+          const currentMap = getStoredManualStatusMap();
+          const currentOrderMap = getStoredAddedOrderMap();
+          const currentConfMap = getStoredConfirmedPatientsMap();
+
+          currentMap[cardId] = rowStatus;
+          if (isConfirmed) {
+            currentConfMap[cardId] = {
+              confirmadoPeloPaciente: true,
+              confirmadoEm: timeStr
+            };
+            currentOrderMap[cardId] = Date.now();
+          } else {
+            delete currentConfMap[cardId];
+          }
+
+          localStorage.setItem(KANBAN_STORAGE_KEY, JSON.stringify(currentMap));
+          localStorage.setItem(KANBAN_ADDED_ORDER_KEY, JSON.stringify(currentOrderMap));
+          localStorage.setItem(KANBAN_CONFIRMED_KEY, JSON.stringify(currentConfMap));
+
+          setConfirmedPatientsMap({ ...currentConfMap });
+
+          setAddedOrderMap(prev => ({
+            ...prev,
+            ...(isConfirmed ? { [cardId]: Date.now() } : {})
+          }));
+
+          // Move o card automaticamente na interface em tempo real
+          setConsultas(prev => prev.map(c => {
+            if (c.id === cardId) {
+              const nextStatus: KanbanStatus = rowStatus === 'Remarcar'
+                ? 'Remarcar'
+                : rowStatus === 'Canceladas'
+                  ? 'Canceladas'
+                  : (isConfirmed ? 'Confirmadas' : (rowStatus || c.status));
+              return {
+                ...c,
+                status: nextStatus,
+                confirmadoPeloPaciente: isConfirmed,
+                confirmadoEm: isConfirmed ? timeStr : undefined,
+                addedAt: isConfirmed ? Date.now() : c.addedAt
+              };
+            }
+            return c;
+          }));
+
+          // Notificação de confirmação, remarcação ou cancelamento em tempo real na tela do atendente
+          const pacienteNome = row.paciente || 'O paciente';
+          if (isConfirmed) {
+            showToast('success', `🎉 ${pacienteNome} confirmou presença pelo link! Movido para CONFIRMAÇÃO.`);
+          } else if (rowStatus === 'Remarcar') {
+            showToast('info', `🔄 ${pacienteNome} solicitou REMARCAR a consulta pelo link! Movido para REMARCAR.`);
+          } else if (rowStatus === 'Canceladas') {
+            showToast('error', `❌ ${pacienteNome} CANCELOU a consulta pelo link! Movido para CANCELADAS.`);
+          }
+        }
+      )
+      .subscribe();
+
+    // Sincronização periódica de confirmações a cada 3 minutos (180.000 ms)
+    const pollInterval = setInterval(syncRemoteKanbanStatus, 3 * 60 * 1000);
+
+    return () => {
+      supabase.removeChannel(realtimeChannel);
+      clearInterval(pollInterval);
+    };
   }, []);
   
   // Estados de Drag and Drop
@@ -735,9 +866,9 @@ export default function CentroMedico() {
   });
   const [resendingCardId, setResendingCardId] = useState<string | null>(null);
   const [isSendingAll, setIsSendingAll] = useState(false);
-  const [sendingProgress, setSendingProgress] = useState<{ current: number; total: number } | null>(null);
+  const [sendingProgress, setSendingProgress] = useState<{ current: number; total: number; instanceName?: string } | null>(null);
   const [isResendingAllEnviadas, setIsResendingAllEnviadas] = useState(false);
-  const [resendingAllProgress, setResendingAllProgress] = useState<{ current: number; total: number } | null>(null);
+  const [resendingAllProgress, setResendingAllProgress] = useState<{ current: number; total: number; instanceName?: string } | null>(null);
   const [toast, setToast] = useState<{ type: 'success' | 'error' | 'info'; message: string } | null>(null);
   const [debugModalOpen, setDebugModalOpen] = useState(false);
   const [debugData, setDebugData] = useState<{
@@ -750,9 +881,17 @@ export default function CentroMedico() {
     error?: string;
   } | null>(null);
 
+  const toastTimerRef = useRef<any>(null);
+
   const showToast = (type: 'success' | 'error' | 'info', message: string) => {
+    if (toastTimerRef.current) {
+      clearTimeout(toastTimerRef.current);
+    }
     setToast({ type, message });
-    setTimeout(() => setToast(null), 5000);
+    toastTimerRef.current = setTimeout(() => {
+      setToast(null);
+      toastTimerRef.current = null;
+    }, 4500);
   };
 
   // Lista de especialidades únicas para filtro
@@ -892,12 +1031,44 @@ export default function CentroMedico() {
         raw: responseData
       });
 
+      // Sincroniza confirmações e status do Supabase junto com os dados do Tasy
+      let remoteSavedRows: any[] = [];
+      try {
+        const { data: kanbanRows } = await supabase
+          .from('centro_medico_kanban_cards')
+          .select('card_id, status, paciente, data_consulta, medico, crm, especialidade, horario, consultorio, convenio, confirmado_pelo_paciente, confirmado_em, updated_at');
+        if (kanbanRows) remoteSavedRows = kanbanRows;
+        if (kanbanRows && kanbanRows.length > 0) {
+          const cMap = getStoredManualStatusMap();
+          const oMap = getStoredAddedOrderMap();
+          const cfMap = getStoredConfirmedPatientsMap();
+          kanbanRows.forEach((row: any) => {
+            if (row.card_id && row.status) cMap[row.card_id] = row.status as KanbanStatus;
+            if (row.card_id && row.confirmado_pelo_paciente) {
+              cfMap[row.card_id] = { confirmadoPeloPaciente: true, confirmadoEm: row.confirmado_em || undefined };
+            }
+            if (row.card_id && row.updated_at && !oMap[row.card_id]) {
+              oMap[row.card_id] = new Date(row.updated_at).getTime();
+            }
+          });
+          localStorage.setItem(KANBAN_STORAGE_KEY, JSON.stringify(cMap));
+          localStorage.setItem(KANBAN_ADDED_ORDER_KEY, JSON.stringify(oMap));
+          localStorage.setItem(KANBAN_CONFIRMED_KEY, JSON.stringify(cfMap));
+          setConfirmedPatientsMap(cfMap);
+          setAddedOrderMap(oMap);
+        }
+      } catch {}
+
       if (rawConsultasList.length > 0) {
         setConsultas(prev => {
+          const previousRealCardsForDate = !usingMock
+            ? prev.filter(c => c.data === targetDate && !c.id.startsWith('cons-'))
+            : [];
           const currentMemMap = new Map(prev.map(c => [c.id, c.status]));
           const localSavedMap = getStoredManualStatusMap();
+          const localConfirmedMap = getStoredConfirmedPatientsMap();
 
-          return rawConsultasList.map((incoming: any, idx: number) => {
+          const mappedConsultas: ConsultaAgendada[] = rawConsultasList.map((incoming: any, idx: number) => {
             const target = incoming?.json && typeof incoming.json === 'object' 
               ? { ...incoming.json, ...incoming } 
               : incoming;
@@ -951,13 +1122,18 @@ export default function CentroMedico() {
             // Telefone da coluna NR_TELEFONE
             const telefone = String(getVal(['NR_TELEFONE', 'telefone', 'nr_telefone_celular', 'nr_celular', 'phone', 'celular'], ''));
             
-            // Status real da coluna DS_STATUS_AGENDA
-            const realStatus = String(getVal(['DS_STATUS_AGENDA', 'statusReal', 'status_real', 'ds_status', 'ie_status'], 'Normal'));
+            // Status real da coluna DS_STATUS_AGENDA / IE_STATUS_AGENDA (no Tasy cancelado retorna 'C')
+            const realStatus = String(getVal(['IE_STATUS_AGENDA', 'DS_STATUS_AGENDA', 'STATUS', 'IE_STATUS', 'statusReal', 'status_real', 'ds_status', 'ie_status'], 'Normal'));
+            const extraStatus = String(getVal(['DS_STATUS_AGENDA', 'IE_STATUS_AGENDA', 'STATUS', 'status'], ''));
 
-            const isCancelado = isStatusCanceladoTasy(realStatus, target?.ds_status_agenda || target?.status);
-
+            const isCancelado = isStatusCanceladoTasy(realStatus, extraStatus);
+            const isConfirmed = Boolean(localConfirmedMap[rawId]?.confirmadoPeloPaciente);
             const manualStatus = localSavedMap[rawId] || currentMemMap.get(rawId);
-            const targetColumn: KanbanStatus = isCancelado ? 'Canceladas' : (manualStatus || 'Agendamentos');
+
+            // REGRA: se o paciente já confirmou pelo link (isConfirmed), entra direto na coluna CONFIRMAÇÃO
+            const targetColumn: KanbanStatus = (isCancelado || manualStatus === 'Canceladas')
+              ? 'Canceladas'
+              : (manualStatus === 'Remarcar' ? 'Remarcar' : (isConfirmed ? 'Confirmadas' : (manualStatus || 'Agendamentos')));
 
             return {
               id: String(rawId),
@@ -973,9 +1149,62 @@ export default function CentroMedico() {
               convenio,
               telefone,
               status: targetColumn,
-              statusReal: realStatus
+              statusReal: realStatus,
+              confirmadoPeloPaciente: isConfirmed,
+              confirmadoEm: localConfirmedMap[rawId]?.confirmadoEm
             };
           });
+
+          const returnedIds = new Set(mappedConsultas.map(c => c.id));
+          const disappearedCards = previousRealCardsForDate
+            .filter(oldCard => !returnedIds.has(oldCard.id))
+            .map(oldCard => ({
+              ...oldCard,
+              status: 'Canceladas' as KanbanStatus,
+              statusReal: 'C'
+            }));
+
+          return [...mappedConsultas, ...disappearedCards];
+        });
+
+        // Preserva como "Canceladas" agendamentos reais do mesmo dia que já estavam no Kanban/Supabase
+        // e deixaram de vir na query do n8n após serem cancelados no Tasy
+        setConsultas(prev => {
+          const incomingIds = new Set(prev.map(c => String(c.id)));
+          const extraCancelled: ConsultaAgendada[] = [];
+
+          remoteSavedRows.forEach((row: any) => {
+            const cId = String(row.card_id || '');
+            if (!cId || incomingIds.has(cId) || cId.startsWith('cons-')) return;
+
+            let rowDate = String(row.data_consulta || '').trim();
+            if (/^\d{2}\/\d{2}\/\d{4}$/.test(rowDate)) {
+              const [d, m, y] = rowDate.split('/');
+              rowDate = `${y}-${m}-${d}`;
+            }
+
+            if (rowDate === targetDate && row.paciente) {
+              incomingIds.add(cId);
+              extraCancelled.push({
+                id: cId,
+                paciente: row.paciente,
+                prontuario: `SEQ-${cId}`,
+                idade: 0,
+                medico: row.medico || 'Médico Responsável',
+                crm: row.crm || '',
+                especialidade: row.especialidade || 'Clínica Geral',
+                horario: row.horario || '08:00',
+                data: targetDate,
+                consultorio: row.consultorio || 'Centro Médico (Setor 109)',
+                convenio: row.convenio || 'Consulta',
+                telefone: '',
+                status: 'Canceladas',
+                statusReal: 'C'
+              });
+            }
+          });
+
+          return extraCancelled.length > 0 ? [...prev, ...extraCancelled] : prev;
         });
 
         setUsingMock(false);
@@ -1039,6 +1268,17 @@ export default function CentroMedico() {
     handleSyncWebhookForDate(todayStr);
   }, []);
 
+  // Sincronização automática do Tasy (n8n) e confirmações de consulta a cada 3 minutos
+  useEffect(() => {
+    const tasySyncInterval = setInterval(() => {
+      if (!isSyncing && !isSendingAll && !isResendingAllEnviadas && selectedDate) {
+        handleSyncWebhookForDate(selectedDate);
+      }
+    }, 3 * 60 * 1000);
+
+    return () => clearInterval(tasySyncInterval);
+  }, [selectedDate, isSyncing, isSendingAll, isResendingAllEnviadas]);
+
   // Mover Card de Consulta entre Colunas do Kanban
   const moveCardToStatus = async (cardId: string, newStatus: KanbanStatus) => {
     const targetCard = consultas.find(c => c.id === cardId);
@@ -1077,10 +1317,23 @@ export default function CentroMedico() {
   };
 
   // Disparo / Reenvio de notificação de WhatsApp (utilizado no drag-and-drop e no botão de reenvio exclusivo do Kanban)
-  const sendWhatsAppNotification = async (targetCard: ConsultaAgendada, statusRef: KanbanStatus, isResend = false) => {
+  const sendWhatsAppNotification = async (
+    targetCard: ConsultaAgendada,
+    statusRef: KanbanStatus,
+    isResend = false,
+    instanceChoice?: 'CM01' | 'CM02'
+  ) => {
     const isConfirmacao = statusRef === 'Confirmadas';
     const actionLabel = isConfirmacao ? 'confirmação' : 'agendamento';
     const verb = isResend ? 'Reenviando' : 'Disparando';
+    const selectedInstance: 'CM01' | 'CM02' = instanceChoice || (Math.random() > 0.5 ? 'CM01' : 'CM02');
+
+    // Validação preventiva de telefone
+    const cleanPhoneDigits = String(targetCard.telefone || '').replace(/\D/g, '');
+    if (!cleanPhoneDigits || cleanPhoneDigits.length < 10) {
+      showToast('error', `O paciente ${targetCard.paciente} não possui telefone válido cadastrado no Tasy (${targetCard.telefone || 'vazio'}).`);
+      return;
+    }
 
     try {
       showToast('info', `${verb} mensagem de ${actionLabel} por WhatsApp para ${targetCard.paciente}...`);
@@ -1091,8 +1344,8 @@ export default function CentroMedico() {
 
       const dataFormatada = formatDateToBR(targetCard.data);
       const customText = isConfirmacao
-        ? `🏥 *Centro Médico - Hospital Santa Casa*\nOlá, *${targetCard.paciente}*!\n\nConfirmamos os dados da sua consulta no Centro Médico:\n📅 *Data:* ${dataFormatada}\n⏰ *Horário:* O atendimento é realizado por ordem de chegada.\n👨‍⚕️ *Médico(a):* ${targetCard.medico}${targetCard.crm ? ` (CRM: ${targetCard.crm})` : ''} - ${targetCard.especialidade}\n📍 *Local:* Centro Médico da Santa Casa\n\n🔗 *Confirmação de Consulta:*\n\n${linkConfirmacao}\n\n_Hospital Santa Casa de Misericórdia_`
-        : `🏥 *Centro Médico - Hospital Santa Casa*\nOlá, *${targetCard.paciente}*!\n\nVocê tem uma consulta agendada no Centro Médico:\n👨‍⚕️ *Médico(a):* ${targetCard.medico}${targetCard.crm ? ` (CRM: ${targetCard.crm})` : ''} - ${targetCard.especialidade}\n📅 *Data:* ${dataFormatada}\n⏰ *Horário:* O atendimento é realizado por ordem de chegada.\n📍 *Local:* Centro Médico da Santa Casa\n\n_Hospital Santa Casa de Misericórdia_`;
+        ? `🏥 *Centro Médico - Hospital Santa Casa*\nOlá, *${targetCard.paciente}*!\n\nSua consulta no Centro Médico está *CONFIRMADA*:\n📅 *Data:* ${dataFormatada}\n⏰ *Horário:* O atendimento é realizado por ordem de chegada.\n👨‍⚕️ *Médico(a):* ${targetCard.medico}${targetCard.crm ? ` (CRM: ${targetCard.crm})` : ''} - ${targetCard.especialidade}\n📍 *Local:* Centro Médico da Santa Casa\n\nAgradecemos a sua confirmação e aguardamos sua presença!\n\n_Hospital Santa Casa de Misericórdia_`
+        : `🏥 *Centro Médico - Hospital Santa Casa*\nOlá, *${targetCard.paciente}*!\n\nVocê tem uma consulta agendada no Centro Médico:\n👨‍⚕️ *Médico(a):* ${targetCard.medico}${targetCard.crm ? ` (CRM: ${targetCard.crm})` : ''} - ${targetCard.especialidade}\n📅 *Data:* ${dataFormatada}\n⏰ *Horário:* O atendimento é realizado por ordem de chegada.\n📍 *Local:* Centro Médico da Santa Casa\n\nPor favor, *confirme sua presença* clicando no link abaixo:\n🔗 ${linkConfirmacao}\n\n_Hospital Santa Casa de Misericórdia_`;
 
       const appOrigin = typeof window !== 'undefined' ? window.location.origin : '';
 
@@ -1108,19 +1361,21 @@ export default function CentroMedico() {
           horario: targetCard.horario,
           data: dataFormatada,
           convenio: targetCard.convenio,
-          telefone: targetCard.telefone || '34988511343',
-          recipient: '5584998444889',
+          telefone: targetCard.telefone || '',
+          recipient: targetCard.telefone || '',
           status: statusRef,
           tipo: isConfirmacao ? 'confirmacao' : 'envio',
           linkConfirmacao: linkConfirmacao,
           origin: appOrigin,
           text: customText,
+          instance: selectedInstance,
           isResend: isResend
         }
       });
 
       if (res.error) {
         console.warn('[WhatsApp Agendamento] Tentando fallback para whatsapp-centro-medico:', res.error);
+        const fallbackPhone = selectedInstance === 'CM02' ? '553499223124' : '553498434630';
         res = await supabase.functions.invoke('whatsapp-centro-medico', {
           body: {
             cardId: targetCard.id,
@@ -1133,8 +1388,10 @@ export default function CentroMedico() {
             horario: targetCard.horario,
             data: dataFormatada,
             convenio: targetCard.convenio,
-            sender: '34988511343',
-            recipient: '5584998444889',
+            instance: selectedInstance,
+            sender: fallbackPhone,
+            recipient: targetCard.telefone || '',
+            telefone: targetCard.telefone || '',
             text: customText || 'Você tem uma consulta no Centro Médico da Santa Casa'
           }
         });
@@ -1143,10 +1400,19 @@ export default function CentroMedico() {
       const { data, error } = res;
 
       if (error) {
-        console.warn('[WhatsApp Agendamento] Erro ao invocar Edge Function:', error);
-        showToast('error', `Falha no envio do WhatsApp: ${error.message || 'Erro de comunicação'}`);
+        let errorDetail = error.message || 'Erro de comunicação';
+        try {
+          if ('context' in error && (error as any).context) {
+            const errBody = await (error as any).context.json();
+            errorDetail = errBody?.error || errBody?.message || errorDetail;
+          }
+        } catch {}
+        console.warn('[WhatsApp Agendamento] Erro retornado pela Edge Function:', errorDetail, error);
+        showToast('error', `Falha no envio do WhatsApp: ${errorDetail}`);
       } else if (data?.success) {
         showToast('success', `WhatsApp de ${actionLabel} ${isResend ? 'reenviado' : 'enviado'} com sucesso para ${targetCard.paciente}!`);
+      } else if (data?.error) {
+        showToast('error', `WhatsApp: ${data.error}`);
       } else {
         showToast('info', data?.message || 'Notificação processada.');
       }
@@ -1250,23 +1516,33 @@ export default function CentroMedico() {
       return c;
     }));
 
-    // Dispara WhatsApp e persiste cada paciente
+    // Dispara WhatsApp intercalando entre CM01 e CM02 com intervalos humanizados anti-bloqueio
     let successCount = 0;
     for (let i = 0; i < agendamentosCards.length; i++) {
       const card = agendamentosCards[i];
-      setSendingProgress({ current: i + 1, total: agendamentosCards.length });
+      // Intercalação 1 a 1: par usa CM01, ímpar usa CM02
+      const targetInstance = CM_INSTANCES[i % 2];
+      setSendingProgress({ current: i + 1, total: agendamentosCards.length, instanceName: targetInstance.name });
+
       const updatedCard: ConsultaAgendada = { ...card, status: 'Enviadas', statusReal: 'Enviadas', addedAt: now };
       persistCardManualStatus(card.id, 'Enviadas', updatedCard);
 
       try {
-        await sendWhatsAppNotification(updatedCard, 'Enviadas', false);
+        await sendWhatsAppNotification(updatedCard, 'Enviadas', false, targetInstance.name);
         successCount++;
       } catch (err) {
-        console.error(`Erro ao disparar WhatsApp para ${card.paciente}:`, err);
+        console.error(`Erro ao disparar WhatsApp via ${targetInstance.name} para ${card.paciente}:`, err);
       }
 
+      // Intervalo de segurança humanizado entre mensagens para proteção do chip
       if (i < agendamentosCards.length - 1) {
-        await new Promise(resolve => setTimeout(resolve, 600));
+        if ((i + 1) % 10 === 0) {
+          showToast('info', 'Pausa de segurança anti-bloqueio (15s) entre lotes...');
+          await new Promise(resolve => setTimeout(resolve, 15000));
+        } else {
+          const delay = getRandomDelay(3000, 5500);
+          await new Promise(resolve => setTimeout(resolve, delay));
+        }
       }
     }
 
@@ -1275,39 +1551,48 @@ export default function CentroMedico() {
     showToast('success', `${successCount} paciente(s) movidos para "Enviadas" com sucesso!`);
   };
 
-  // Reenviar WhatsApp para todos os pacientes da coluna "Confirmação de agendamento" (Enviadas)
+  // Reenviar WhatsApp para todos os pacientes da coluna "ENVIADO" (Enviadas)
   const handleResendAllEnviadas = async () => {
     if (isResendingAllEnviadas || isSendingAll) return;
     const enviadasCards = filteredConsultas.filter(c => c.status === 'Enviadas');
     if (enviadasCards.length === 0) {
-      showToast('info', 'Não há pacientes na coluna Confirmação de agendamento para enviar.');
+      showToast('info', 'Não há pacientes na coluna ENVIADO para enviar.');
       return;
     }
 
     setIsResendingAllEnviadas(true);
     setResendingAllProgress({ current: 0, total: enviadasCards.length });
-    showToast('info', `Iniciando reenvio de WhatsApp para ${enviadasCards.length} paciente(s) da Confirmação de agendamento...`);
+    showToast('info', `Iniciando reenvio de WhatsApp para ${enviadasCards.length} paciente(s) da ENVIADO...`);
 
     let successCount = 0;
     for (let i = 0; i < enviadasCards.length; i++) {
       const card = enviadasCards[i];
-      setResendingAllProgress({ current: i + 1, total: enviadasCards.length });
+      // Intercalação 1 a 1: par usa CM01, ímpar usa CM02
+      const targetInstance = CM_INSTANCES[i % 2];
+      setResendingAllProgress({ current: i + 1, total: enviadasCards.length, instanceName: targetInstance.name });
 
       try {
-        await sendWhatsAppNotification(card, 'Enviadas', true);
+        await sendWhatsAppNotification(card, 'Enviadas', true, targetInstance.name);
         successCount++;
       } catch (err) {
-        console.error(`Erro ao reenviar WhatsApp para ${card.paciente}:`, err);
+        console.error(`Erro ao reenviar WhatsApp via ${targetInstance.name} para ${card.paciente}:`, err);
       }
 
+      // Intervalo de segurança humanizado entre mensagens para proteção do chip
       if (i < enviadasCards.length - 1) {
-        await new Promise(resolve => setTimeout(resolve, 600));
+        if ((i + 1) % 10 === 0) {
+          showToast('info', 'Pausa de segurança anti-bloqueio (15s) entre lotes...');
+          await new Promise(resolve => setTimeout(resolve, 15000));
+        } else {
+          const delay = getRandomDelay(3000, 5500);
+          await new Promise(resolve => setTimeout(resolve, delay));
+        }
       }
     }
 
     setIsResendingAllEnviadas(false);
     setResendingAllProgress(null);
-    showToast('success', `WhatsApp reenviado com sucesso para ${successCount} paciente(s) da Confirmação de agendamento!`);
+    showToast('success', `WhatsApp reenviado com sucesso para ${successCount} paciente(s) da ENVIADO!`);
   };
 
   // Ação de Confirmação de Consulta do Paciente
@@ -1428,31 +1713,116 @@ export default function CentroMedico() {
   }, [escalas, consultas]);
 
   return (
-    <div className="flex-1 space-y-4 min-h-[85vh] pb-6 w-full mx-auto px-1 sm:px-2 pt-2 text-foreground transition-all">
-      {/* Header do Módulo Responsivo */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-card border border-border/80 p-4 sm:p-5 rounded-2xl shadow-sm w-full min-w-0">
-        <div className="space-y-1 min-w-0 w-full">
-          <div className="flex items-start sm:items-center gap-3 w-full min-w-0">
-            <div className="h-10 w-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center border border-primary/20 shadow-inner shrink-0 mt-0.5 sm:mt-0">
-              <Stethoscope className="h-6 w-6" />
-            </div>
-            <div className="min-w-0 flex-1">
-              <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-foreground flex flex-wrap items-center gap-2">
-                <span>Centro Médico</span>
-                <span className="text-[11px] px-2 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20 font-medium shrink-0">
-                  DEV LOCALHOST
-                </span>
-              </h1>
-              <p className="text-xs text-muted-foreground break-words mt-0.5">
-                Gestão integrada de escalas médicas, plantonistas e acompanhamento em modo Kanban.
-              </p>
-            </div>
+    <div className="flex-1 space-y-3.5 pb-6 w-full text-foreground transition-all">
+      {/* Header do Módulo Responsivo com Filtros no Canto Direito */}
+      <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4 bg-card border border-border/80 p-3.5 sm:p-4 rounded-2xl shadow-sm w-full min-w-0">
+        <div className="flex items-start sm:items-center gap-3 min-w-0">
+          <div className="h-10 w-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center border border-primary/20 shadow-inner shrink-0 mt-0.5 sm:mt-0">
+            <Stethoscope className="h-6 w-6" />
           </div>
+          <div className="min-w-0">
+            <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-foreground flex items-center gap-2">
+              <span>Centro Médico</span>
+            </h1>
+            <p className="text-xs text-muted-foreground break-words mt-0.5">
+              Gestão integrada de escalas médicas, plantonistas e acompanhamento em modo Kanban.
+            </p>
+          </div>
+        </div>
+
+        {/* Filtros no canto direito do cabeçalho */}
+        <div className="flex flex-wrap items-center gap-2 sm:gap-2.5 justify-start xl:justify-end min-w-0 max-w-full">
+
+          {/* Seletor de Data em Pill Box sem barra de rolagem */}
+          <div className="flex items-center justify-between sm:justify-start gap-1 bg-background border border-border/80 px-1.5 h-9 rounded-xl text-xs shadow-xs hover:border-primary/40 transition-all shrink-0">
+            <button
+              type="button"
+              onClick={() => handleStepDay(-1)}
+              title="Dia Anterior"
+              className="px-2 h-7 rounded-lg hover:bg-muted text-foreground transition-all flex items-center gap-1 font-medium text-xs active:scale-95 shrink-0"
+            >
+              <ChevronLeft className="h-3.5 w-3.5 text-muted-foreground" />
+              <span className="hidden sm:inline">Anterior</span>
+            </button>
+
+            <div className="flex items-center gap-1.5 px-2 h-7 bg-muted/40 rounded-lg border border-border/40 hover:bg-muted/70 transition-colors shrink-0">
+              <Calendar className="h-3 w-3 text-primary shrink-0" />
+              <input
+                type="date"
+                value={selectedDate}
+                onChange={e => handleDateChange(e.target.value)}
+                className="bg-transparent text-foreground font-semibold focus:outline-none cursor-pointer text-xs w-[105px] sm:w-[115px]"
+              />
+            </div>
+
+            <button
+              type="button"
+              onClick={() => handleDateChange(getDateOffset(0))}
+              title="Ir para Hoje"
+              className={`px-2.5 h-7 rounded-lg text-xs font-bold transition-all shadow-xs active:scale-95 shrink-0 ${
+                selectedDate === getDateOffset(0)
+                  ? 'bg-primary text-primary-foreground shadow-sm ring-1 ring-primary/30'
+                  : 'hover:bg-muted text-muted-foreground'
+              }`}
+            >
+              Hoje
+            </button>
+
+            <button
+              type="button"
+              onClick={() => handleStepDay(1)}
+              title="Próximo Dia"
+              className="px-2 h-7 rounded-lg hover:bg-muted text-foreground transition-all flex items-center gap-1 font-medium text-xs active:scale-95 shrink-0"
+            >
+              <span className="hidden sm:inline">Próximo</span>
+              <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
+            </button>
+          </div>
+
+          {/* Filtro de Especialidade com Largura Flexível */}
+          <div className="flex items-center gap-2 bg-background border border-border/80 px-3 h-9 rounded-xl text-xs shadow-xs hover:border-primary/40 focus-within:ring-2 focus-within:ring-primary/20 transition-all sm:min-w-[170px] shrink-0">
+            <Filter className="h-3.5 w-3.5 text-primary shrink-0" />
+            <select
+              value={selectedEspecialidade}
+              onChange={e => setSelectedEspecialidade(e.target.value)}
+              className="bg-transparent text-foreground focus:outline-none font-semibold cursor-pointer w-full text-xs min-w-0"
+            >
+              {especialidades.map(esp => (
+                <option key={esp} value={esp} className="bg-card text-foreground">
+                  {esp === 'TODAS' ? 'Todas Especialidades' : esp}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Campo de Busca Rápida Compacto */}
+          <div className="relative w-44 sm:w-52 lg:w-60 h-9 shrink-0">
+            <Search className="h-3.5 w-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+            <input
+              type="text"
+              placeholder="Buscar paciente, médico..."
+              value={searchTerm}
+              onChange={e => setSearchTerm(e.target.value)}
+              className="w-full h-full pl-8 pr-3 bg-background border border-border/80 rounded-xl text-xs placeholder:text-muted-foreground/70 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/50 transition-all shadow-xs"
+            />
+          </div>
+
+          {/* Botão de Atualização de Agenda (Gatilho para n8n) */}
+          <button
+            type="button"
+            onClick={handleSyncWebhook}
+            disabled={isSyncing}
+            title="Consultar o n8n para atualizar os agendamentos do Tasy agora"
+            className="flex items-center justify-center gap-2 px-3.5 h-9 rounded-xl text-xs font-semibold bg-primary text-primary-foreground hover:bg-primary/90 transition-all shadow-sm active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer shrink-0 whitespace-nowrap"
+          >
+            <RefreshCw className={`h-3.5 w-3.5 shrink-0 ${isSyncing ? 'animate-spin' : ''}`} />
+            <span>{isSyncing ? 'Atualizando...' : 'Atualizar Agenda'}</span>
+          </button>
         </div>
       </div>
 
       {/* Cards de Métricas / Estatísticas Responsivos */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 w-full min-w-0">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 w-full min-w-0">
         <div className="bg-card border border-border/80 p-3.5 sm:p-4 rounded-xl shadow-sm flex items-center justify-between gap-3 min-w-0">
           <div className="min-w-0 flex-1">
             <p className="text-xs text-muted-foreground font-medium truncate">Plantonistas Ativos</p>
@@ -1494,118 +1864,16 @@ export default function CentroMedico() {
         </div>
       </div>
 
-      {/* Navegação entre Abas, Controle de Datas e Filtros (Totalmente Responsivo) */}
-      <div className="bg-card border border-border/80 p-3.5 sm:p-5 rounded-2xl shadow-sm space-y-4 relative w-full min-w-0">
+      {/* Conteúdo Principal das Abas (Kanban / Escalas) */}
+      <div className="bg-card border border-border/80 p-3.5 sm:p-4 rounded-2xl shadow-sm relative w-full min-w-0 overflow-hidden">
         {/* Glow sutil de fundo */}
         <div className="absolute top-0 right-0 -mt-8 -mr-8 w-40 h-40 bg-primary/5 rounded-full blur-3xl pointer-events-none" />
-
-        <div className="flex flex-wrap items-center gap-3 relative z-10 w-full min-w-0">
-          {/* Identificação da Agenda */}
-          <div className="flex items-center gap-2 px-3.5 h-10 rounded-xl bg-muted/60 border border-border/50 text-foreground font-bold text-xs sm:text-sm shrink-0 shadow-xs">
-            <Kanban className="h-4 w-4 shrink-0 text-primary" />
-            <span>Agenda</span>
-            <span className="ml-0.5 px-2 py-0.5 rounded-full text-[10px] bg-primary/10 text-primary font-bold border border-primary/20">
-              {filteredConsultas.length}
-            </span>
-          </div>
-
-          {/* Seletor de Data em Pill Box sem barra de rolagem */}
-          <div className="flex items-center justify-between sm:justify-start gap-1.5 bg-background border border-border/80 px-1.5 h-10 rounded-xl text-xs shadow-xs hover:border-primary/40 transition-all shrink-0">
-            <button
-              type="button"
-              onClick={() => handleStepDay(-1)}
-              title="Dia Anterior"
-              className="px-2.5 h-7 rounded-lg hover:bg-muted text-foreground transition-all flex items-center gap-1 font-medium text-xs active:scale-95 shrink-0"
-            >
-              <ChevronLeft className="h-4 w-4 text-muted-foreground" />
-              <span className="hidden sm:inline">Anterior</span>
-            </button>
-
-            <div className="flex items-center gap-1.5 px-2 h-7 bg-muted/40 rounded-lg border border-border/40 hover:bg-muted/70 transition-colors shrink-0">
-              <Calendar className="h-3.5 w-3.5 text-primary shrink-0" />
-              <input
-                type="date"
-                value={selectedDate}
-                onChange={e => handleDateChange(e.target.value)}
-                className="bg-transparent text-foreground font-semibold focus:outline-none cursor-pointer text-xs w-[105px] sm:w-[115px]"
-              />
-            </div>
-
-            <button
-              type="button"
-              onClick={() => handleDateChange(getDateOffset(0))}
-              title="Ir para Hoje"
-              className={`px-3 h-7 rounded-lg text-xs font-bold transition-all shadow-xs active:scale-95 shrink-0 ${
-                selectedDate === getDateOffset(0)
-                  ? 'bg-primary text-primary-foreground shadow-sm ring-1 ring-primary/30'
-                  : 'hover:bg-muted text-muted-foreground'
-              }`}
-            >
-              Hoje
-            </button>
-
-            <button
-              type="button"
-              onClick={() => handleStepDay(1)}
-              title="Próximo Dia"
-              className="px-2.5 h-7 rounded-lg hover:bg-muted text-foreground transition-all flex items-center gap-1 font-medium text-xs active:scale-95 shrink-0"
-            >
-              <span className="hidden sm:inline">Próximo</span>
-              <ChevronRight className="h-4 w-4 text-muted-foreground" />
-            </button>
-          </div>
-
-          {/* Filtro de Especialidade com Largura Flexível */}
-          <div className="flex items-center gap-2 bg-background border border-border/80 px-3.5 h-10 rounded-xl text-xs shadow-xs hover:border-primary/40 focus-within:ring-2 focus-within:ring-primary/20 transition-all sm:min-w-[210px] shrink-0">
-            <Filter className="h-3.5 w-3.5 text-primary shrink-0" />
-            <select
-              value={selectedEspecialidade}
-              onChange={e => setSelectedEspecialidade(e.target.value)}
-              className="bg-transparent text-foreground focus:outline-none font-semibold cursor-pointer w-full text-xs min-w-0"
-            >
-              {especialidades.map(esp => (
-                <option key={esp} value={esp} className="bg-card text-foreground">
-                  {esp === 'TODAS' ? 'Todas Especialidades' : esp}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Botão de Atualização de Agenda (Gatilho para n8n) */}
-          <button
-            type="button"
-            onClick={handleSyncWebhook}
-            disabled={isSyncing}
-            title="Consultar o n8n para atualizar os agendamentos do Tasy agora"
-            className="flex items-center justify-center gap-2 px-4 h-10 rounded-xl text-xs font-semibold bg-primary text-primary-foreground hover:bg-primary/90 transition-all shadow-sm active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer shrink-0 whitespace-nowrap"
-          >
-            <RefreshCw className={`h-3.5 w-3.5 shrink-0 ${isSyncing ? 'animate-spin' : ''}`} />
-            <span>{isSyncing ? 'Atualizando Agenda...' : 'Atualizar Agenda'}</span>
-          </button>
-        </div>
-
-        {/* Input de Busca com Largura Total e Padding Confortável */}
-        <div className="relative group z-10 w-full min-w-0">
-          <Search className="h-4 w-4 absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground group-focus-within:text-primary transition-colors shrink-0" />
-          <input
-            type="text"
-            placeholder={
-              activeTab === 'escalas'
-                ? 'Buscar por médico, CRM, especialidade ou setor...'
-                : 'Buscar por paciente, médico ou classificação...'
-            }
-            value={searchTerm}
-            onChange={e => setSearchTerm(e.target.value)}
-            className="w-full pl-11 pr-4 py-2.5 bg-background border border-border/80 rounded-2xl text-xs sm:text-sm placeholder:text-muted-foreground/70 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/50 transition-all shadow-xs"
-          />
-        </div>
-
         {/* Conteúdo Principal das Abas */}
         {/* ── ABA KANBAN ── */}
         {activeTab === 'kanban' && (
           <div key="tab-kanban" className="space-y-3 w-full min-w-0">
               {/* Grid das Colunas Kanban (4 colunas principais com distribuição perfeita e fluida sem barra de rolagem desnecessária) */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 items-stretch w-full min-w-0 pb-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 items-stretch w-full min-w-0 pb-4">
                 {KANBAN_COLUMNS.map(col => {
                   let colCards = filteredConsultas.filter(c => c.status === col.id);
 
@@ -1636,7 +1904,7 @@ export default function CentroMedico() {
                       onDragOver={e => handleDragOver(e, col.id)}
                       onDragLeave={handleDragLeave}
                       onDrop={e => handleDrop(e, col.id)}
-                      className={`bg-background border rounded-2xl p-3 sm:p-3.5 space-y-3 min-h-[500px] sm:min-h-[540px] flex flex-col justify-between transition-all duration-200 w-full min-w-0 ${
+                      className={`bg-background border rounded-2xl p-3 sm:p-3.5 space-y-3 min-h-[520px] lg:h-[calc(100vh-340px)] lg:min-h-[580px] flex flex-col justify-between transition-all duration-200 w-full min-w-0 ${
                         col.border
                       } ${
                         isOver
@@ -1701,7 +1969,7 @@ export default function CentroMedico() {
                             title={
                               colCards.length === 0
                                 ? 'Nenhum agendamento para enviar'
-                                : `Mover todos os ${colCards.length} pacientes para Confirmação de agendamento e disparar WhatsApp`
+                                : `Mover todos os ${colCards.length} pacientes para ENVIADO e disparar WhatsApp`
                             }
                             className={`w-full flex items-center justify-center gap-2 py-2 px-3 rounded-xl text-xs font-semibold transition-all active:scale-[0.98] cursor-pointer shadow-xs disabled:opacity-50 disabled:cursor-not-allowed text-center break-words mt-1 ${
                               isSendingAll
@@ -1714,7 +1982,7 @@ export default function CentroMedico() {
                                 <RefreshCw className="h-3.5 w-3.5 animate-spin shrink-0" />
                                 <span>
                                   {sendingProgress
-                                    ? `Enviando (${sendingProgress.current}/${sendingProgress.total})...`
+                                    ? `Enviando (${sendingProgress.current}/${sendingProgress.total}${sendingProgress.instanceName ? ` • ${sendingProgress.instanceName}` : ''})...`
                                     : 'Enviando todos...'}
                                 </span>
                               </>
@@ -1727,7 +1995,7 @@ export default function CentroMedico() {
                           </button>
                         )}
 
-                        {/* Botão de Enviar Todos na coluna "Confirmação de agendamento" (Enviadas) */}
+                        {/* Botão de Enviar Todos na coluna "ENVIADO" (Enviadas) */}
                         {col.id === 'Enviadas' && (
                           <button
                             type="button"
@@ -1736,7 +2004,7 @@ export default function CentroMedico() {
                             title={
                               colCards.length === 0
                                 ? 'Nenhum paciente para enviar'
-                                : `Reenviar notificação de WhatsApp para todos os ${colCards.length} pacientes da Confirmação de agendamento`
+                                : `Reenviar notificação de WhatsApp para todos os ${colCards.length} pacientes da ENVIADO`
                             }
                             className={`w-full flex items-center justify-center gap-2 py-2 px-3 rounded-xl text-xs font-semibold transition-all active:scale-[0.98] cursor-pointer shadow-xs disabled:opacity-50 disabled:cursor-not-allowed text-center break-words mt-1 ${
                               isResendingAllEnviadas
@@ -1749,7 +2017,7 @@ export default function CentroMedico() {
                                 <RefreshCw className="h-3.5 w-3.5 animate-spin shrink-0" />
                                 <span>
                                   {resendingAllProgress
-                                    ? `Enviando (${resendingAllProgress.current}/${resendingAllProgress.total})...`
+                                    ? `Enviando (${resendingAllProgress.current}/${resendingAllProgress.total}${resendingAllProgress.instanceName ? ` • ${resendingAllProgress.instanceName}` : ''})...`
                                     : 'Enviando todos...'}
                                 </span>
                               </>
@@ -1789,6 +2057,14 @@ export default function CentroMedico() {
                                   <div className="w-full min-w-0 flex items-center gap-1.5 bg-emerald-800/90 text-white px-2.5 py-1 rounded-xl border border-emerald-300/40 text-[9.5px] sm:text-[10px] font-bold shadow-xs">
                                     <CheckCircle2 className="h-3.5 w-3.5 text-emerald-300 animate-pulse shrink-0" />
                                     <span className="leading-tight break-words">PACIENTE CONFIRMOU PRESENÇA</span>
+                                  </div>
+                                )}
+
+                                {/* Selo de Solicitação de Remarcação */}
+                                {!isConfirmed && card.status === 'Remarcar' && (
+                                  <div className="w-full min-w-0 flex items-center gap-1.5 bg-amber-500/15 text-amber-600 dark:text-amber-400 px-2.5 py-1 rounded-xl border border-amber-500/30 text-[9.5px] sm:text-[10px] font-bold shadow-xs">
+                                    <RefreshCw className="h-3.5 w-3.5 text-amber-500 shrink-0" />
+                                    <span className="leading-tight break-words">SOLICITOU REMARCAÇÃO</span>
                                   </div>
                                 )}
 
@@ -1888,6 +2164,33 @@ export default function CentroMedico() {
                                       <MessageCircle className="h-3.5 w-3.5 shrink-0" />
                                       <span className="break-words">
                                         {card.telefone ? 'Abrir no WhatsApp' : 'Sem Telefone'}
+                                      </span>
+                                    </button>
+                                  )}
+
+                                  {/* Botão na coluna "Remarcar": Abrir conversa no WhatsApp para tratar remarcação */}
+                                  {card.status === 'Remarcar' && (
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleOpenWhatsAppChat(card);
+                                      }}
+                                      disabled={!card.telefone}
+                                      title={
+                                        card.telefone
+                                          ? `Abrir conversa no WhatsApp para remarcar consulta de ${card.paciente} (${card.telefone})`
+                                          : `Telefone não cadastrado no Tasy para ${card.paciente}`
+                                      }
+                                      className={`w-full min-w-0 flex items-center justify-center gap-2 py-2 px-3 rounded-xl text-xs font-semibold transition-all active:scale-[0.98] shadow-xs text-center break-words ${
+                                        card.telefone
+                                          ? 'bg-amber-500/15 hover:bg-amber-500/25 text-amber-600 dark:text-amber-400 border border-amber-500/30 cursor-pointer'
+                                          : 'bg-muted/60 text-muted-foreground border border-border/40 opacity-70 cursor-not-allowed'
+                                      }`}
+                                    >
+                                      <MessageCircle className="h-3.5 w-3.5 shrink-0 text-amber-500" />
+                                      <span className="break-words">
+                                        {card.telefone ? 'Tratar no WhatsApp' : 'Sem Telefone'}
                                       </span>
                                     </button>
                                   )}
@@ -2030,66 +2333,54 @@ export default function CentroMedico() {
           )}
         </div>
 
-        {/* Notificações Flutuantes (Toast) com feedback detalhado de sincronização */}
-        <AnimatePresence>
-          {toast && (
-            <motion.div
-              initial={{ opacity: 0, y: -20, scale: 0.95 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: -20, scale: 0.95 }}
-              transition={{ duration: 0.2 }}
-              className="fixed top-5 right-5 z-50 max-w-md w-[calc(100vw-2.5rem)] sm:w-full shadow-2xl rounded-2xl overflow-hidden pointer-events-auto border backdrop-blur-md"
+        {/* Notificações Flutuantes (Toast) com transição CSS nativa e estável (previne erro PopChildMeasure) */}
+        {toast && (
+          <div
+            key={`toast-${toast.type}-${toast.message.slice(0, 15)}`}
+            className="fixed top-5 right-5 z-50 max-w-md w-[calc(100vw-2.5rem)] sm:w-full shadow-2xl rounded-2xl overflow-hidden pointer-events-auto border backdrop-blur-md transition-all duration-300 animate-in fade-in slide-in-from-top-4"
+          >
+            <div
+              className={`p-4 flex items-start gap-3.5 ${
+                toast.type === 'success'
+                  ? 'bg-emerald-950/95 text-emerald-100 border-emerald-500/50 shadow-emerald-500/10'
+                  : toast.type === 'error'
+                  ? 'bg-rose-950/95 text-rose-100 border-rose-500/50 shadow-rose-500/10'
+                  : 'bg-slate-900/95 text-slate-100 border-blue-500/50 shadow-blue-500/10'
+              }`}
             >
-              <div
-                className={`p-4 flex items-start gap-3.5 ${
-                  toast.type === 'success'
-                    ? 'bg-emerald-950/95 text-emerald-100 border-emerald-500/50 shadow-emerald-500/10'
-                    : toast.type === 'error'
-                    ? 'bg-rose-950/95 text-rose-100 border-rose-500/50 shadow-rose-500/10'
-                    : 'bg-slate-900/95 text-slate-100 border-blue-500/50 shadow-blue-500/10'
-                }`}
-              >
-                <div className="shrink-0 mt-0.5">
-                  {toast.type === 'success' && <CheckCircle2 className="h-5 w-5 text-emerald-400" />}
-                  {toast.type === 'error' && <AlertCircle className="h-5 w-5 text-rose-400" />}
-                  {toast.type === 'info' && <RefreshCw className="h-5 w-5 text-blue-400 animate-spin" />}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs font-semibold uppercase tracking-wider opacity-80">
-                    {toast.type === 'success' ? 'Sincronização Concluída' : toast.type === 'error' ? 'Atenção na Sincronização' : 'Atualizando Agenda'}
-                  </p>
-                  <p className="text-sm mt-0.5 leading-relaxed break-words">{toast.message}</p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setToast(null)}
-                  className="text-white/60 hover:text-white p-1 rounded-lg hover:bg-white/10 transition-colors shrink-0"
-                  title="Fechar notificação"
-                >
-                  <XCircle className="h-4 w-4" />
-                </button>
+              <div className="shrink-0 mt-0.5">
+                {toast.type === 'success' && <CheckCircle2 className="h-5 w-5 text-emerald-400" />}
+                {toast.type === 'error' && <AlertCircle className="h-5 w-5 text-rose-400" />}
+                {toast.type === 'info' && <RefreshCw className="h-5 w-5 text-blue-400 animate-spin" />}
               </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-semibold uppercase tracking-wider opacity-80">
+                  {toast.type === 'success' ? 'Sincronização Concluída' : toast.type === 'error' ? 'Atenção na Sincronização' : 'Atualizando Agenda'}
+                </p>
+                <p className="text-sm mt-0.5 leading-relaxed break-words">{toast.message}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setToast(null)}
+                className="text-white/60 hover:text-white p-1 rounded-lg hover:bg-white/10 transition-colors shrink-0 cursor-pointer"
+                title="Fechar notificação"
+              >
+                <XCircle className="h-4 w-4" />
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Modal de Diagnóstico da Resposta do n8n */}
-        <AnimatePresence>
-          {debugModalOpen && (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-sm"
-              onClick={() => setDebugModalOpen(false)}
+        {debugModalOpen && (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-sm transition-opacity duration-200"
+            onClick={() => setDebugModalOpen(false)}
+          >
+            <div
+              onClick={(e) => e.stopPropagation()}
+              className="bg-card border border-border rounded-2xl shadow-2xl max-w-2xl w-full max-h-[85vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200"
             >
-              <motion.div
-                initial={{ scale: 0.95, opacity: 0, y: 10 }}
-                animate={{ scale: 1, opacity: 1, y: 0 }}
-                exit={{ scale: 0.95, opacity: 0, y: 10 }}
-                onClick={(e) => e.stopPropagation()}
-                className="bg-card border border-border rounded-2xl shadow-2xl max-w-2xl w-full max-h-[85vh] flex flex-col overflow-hidden"
-              >
                 <div className="flex items-center justify-between p-4 border-b border-border bg-muted/20">
                   <div className="flex items-center gap-2">
                     <Activity className="h-5 w-5 text-primary" />
@@ -2181,10 +2472,9 @@ export default function CentroMedico() {
                     </button>
                   </div>
                 </div>
-              </motion.div>
-            </motion.div>
-          )}
-        </AnimatePresence>
+            </div>
+          </div>
+        )}
       </div>
   );
 }

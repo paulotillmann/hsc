@@ -10,6 +10,7 @@ const Layout: React.FC = () => {
     location.pathname.startsWith('/taxa-ocupacao') ||
     location.pathname.startsWith('/gestao-pendencias') ||
     location.pathname.startsWith('/centro-cirurgico') ||
+    location.pathname.startsWith('/centro-medico') ||
     location.pathname.startsWith('/plantao-ti') ||
     location.pathname.startsWith('/ordem-servico') ||
     location.pathname.startsWith('/equipamentos') ||
@@ -28,8 +29,8 @@ const Layout: React.FC = () => {
   return (
     <div className="flex h-screen w-full bg-background text-foreground transition-colors overflow-hidden">
       <Sidebar />
-      <main className="flex-1 overflow-y-auto w-full">
-        <div className={`${isWidePage ? 'w-full max-w-none px-[20px] py-8' : 'max-w-6xl mx-auto p-8'} transition-all duration-300 w-full`}>
+      <main className="flex-1 overflow-y-auto overflow-x-hidden w-full min-w-0">
+        <div className={`${isWidePage ? 'w-full max-w-none px-3 sm:px-5 lg:px-6 py-4 sm:py-6' : 'max-w-6xl mx-auto p-8'} transition-all duration-300 w-full min-w-0 overflow-x-hidden`}>
           <Outlet />
         </div>
       </main>

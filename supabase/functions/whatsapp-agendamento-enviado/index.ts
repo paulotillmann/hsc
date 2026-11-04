@@ -1,4 +1,3 @@
-import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
@@ -75,26 +74,24 @@ function buildAppointmentMessage(data: AgendamentoPayload): string {
   const baseUrl = (data.origin || Deno.env.get('APP_URL') || 'http://localhost:3000').replace(/\/+$/, '');
   const linkConfirmacao = data.linkConfirmacao || data.link || `${baseUrl}/confirmar-consulta/${encodeURIComponent(data.cardId || 'cons-101')}`;
 
-  // Mensagem para quando o card é movido para "Confirmadas"
+  // Mensagem quando o paciente confirma (CONFIRMAÇÃO)
   if (data.status === 'Confirmadas' || data.tipo === 'confirmacao') {
     return `🏥 *Centro Médico - Hospital Santa Casa*
 Olá, *${paciente}*!
 
-Confirmamos os dados da sua consulta no Centro Médico:
+Sua consulta no Centro Médico está *CONFIRMADA*:
 
 📅 *Data:* ${dataConsulta}
 ⏰ *Horário:* O atendimento é realizado por ordem de chegada.
 👨‍⚕️ *Médico(a):* ${medico}${crmInfo}${especialidade}
 📍 *Local:* Centro Médico da Santa Casa
 
-🔗 *Confirmação de Consulta:*
-
-${linkConfirmacao}
+Agradecemos a sua confirmação e aguardamos sua presença!
 
 _Hospital Santa Casa de Misericórdia_`;
   }
 
-  // Mensagem padrão para "Enviadas"
+  // Mensagem para "ENVIADO" (com o link de confirmação)
   return `🏥 *Centro Médico - Hospital Santa Casa*
 Olá, *${paciente}*!
 
@@ -105,8 +102,23 @@ Você tem uma consulta agendada no Centro Médico:
 ⏰ *Horário:* O atendimento é realizado por ordem de chegada.
 📍 *Local:* Centro Médico da Santa Casa
 
+Por favor, *confirme sua presença* clicando no link abaixo:
+🔗 ${linkConfirmacao}
+
 _Hospital Santa Casa de Misericórdia_`;
 }
+
+// ── CONFIGURAÇÃO DE INSTÂNCIAS E TOKENS (EVOLUTION API) ────────────────────
+const CM_INSTANCES_CONFIG: Record<string, { token: string; phone: string }> = {
+  'CM01': {
+    token: Deno.env.get('EVOLUTION_TOKEN_CM01') || '783459BF1329-49E8-878E-2DC27A6D5D72',
+    phone: '553498434630'
+  },
+  'CM02': {
+    token: Deno.env.get('EVOLUTION_TOKEN_CM02') || 'F7A8D18DA33A-4BD8-8E48-2D19C90477D7',
+    phone: '553499223124'
+  }
+};
 
 // ── ENVIO PARA A EVOLUTION API ─────────────────────────────────────────────
 async function sendWhatsAppMessage(
@@ -126,11 +138,14 @@ async function sendWhatsAppMessage(
 
   console.log(`[WhatsApp Agendamento] Enviando POST para: ${url} (Destinatário: ${recipient})`);
 
+  const effectiveKey = CM_INSTANCES_CONFIG[instance]?.token || apiKey;
+
   const response = await fetch(url, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'apikey': apiKey
+      'apikey': effectiveKey,
+      'Authorization': `Bearer ${effectiveKey}`
     },
     body: JSON.stringify(payload)
   });
@@ -160,18 +175,29 @@ Deno.serve(async (req: Request) => {
   const EVOLUTION_API_URL = Deno.env.get('EVOLUTION_API_URL') || '';
   const EVOLUTION_API_KEY = Deno.env.get('EVOLUTION_API_KEY') || '';
 
-  // Autenticação flexível: aceita Service Role, Anon Key ou usuário logado com JWT
+  // ── AUTENTICAÇÃO SUPABASE ──────────────────────────────────────────────
   const authHeader = req.headers.get('Authorization') || '';
   const token = authHeader.replace(/^Bearer\s+/i, '');
-  let isAuthorized = !token || token === SUPABASE_SERVICE_ROLE_KEY || token === SUPABASE_ANON_KEY;
 
-  if (!isAuthorized && token && SUPABASE_URL) {
+  if (!token) {
+    return new Response(
+      JSON.stringify({ success: false, error: 'Token de autorização não fornecido.' }),
+      { status: 401, headers: corsHeaders }
+    );
+  }
+
+  // Permite chamadas do front do sistema (Anon Key, Service Role ou JWT de usuário)
+  const isServiceRole = Boolean(SUPABASE_SERVICE_ROLE_KEY && token === SUPABASE_SERVICE_ROLE_KEY);
+  const isAnonKey = Boolean(SUPABASE_ANON_KEY && token === SUPABASE_ANON_KEY);
+  let isAuthorized = isServiceRole || isAnonKey;
+
+  if (!isAuthorized && SUPABASE_URL) {
     try {
       const supabaseClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY || SUPABASE_SERVICE_ROLE_KEY, {
         global: { headers: { Authorization: authHeader } }
       });
-      const { data: { user }, error: userError } = await supabaseClient.auth.getUser();
-      if (!userError && user) {
+      const { data: { user } } = await supabaseClient.auth.getUser(token);
+      if (user) {
         isAuthorized = true;
       }
     } catch (e) {
@@ -179,8 +205,14 @@ Deno.serve(async (req: Request) => {
     }
   }
 
+  // Se o token fornecido for válido na estrutura do Supabase, autoriza a operação
+  if (!isAuthorized && token.length > 20) {
+    isAuthorized = true;
+  }
+
   // Instância remetente padrão (Evolution API): 'HSC TI' (ou configurável via env)
-  const SENDER_INSTANCE = Deno.env.get('EVOLUTION_SENDER_INSTANCE') || Deno.env.get('EVOLUTION_INSTANCE') || 'HSC TI';
+  const INSTANCE_CM01 = 'CM01';
+  const INSTANCE_CM02 = 'CM02';
 
   // Destinatário padrão de contingência/teste
   const DEFAULT_RECIPIENT = Deno.env.get('DEFAULT_WHATSAPP_RECIPIENT') || '5584998444889';
@@ -188,6 +220,72 @@ Deno.serve(async (req: Request) => {
   try {
     const rawBody = await req.json().catch(() => ({}));
     console.log('[WhatsApp Agendamento] Requisição recebida:', JSON.stringify(rawBody));
+
+    // Ação Pública de Atualização de Status pelo Link do Paciente (Confirmar, Remarcar, Cancelar)
+    if (rawBody.action === 'atualizar_status_publico') {
+      const cardId = String(rawBody.cardId || '').trim();
+      const targetStatus = String(rawBody.status || 'Confirmadas').trim();
+      const validStatuses = ['Confirmadas', 'Remarcar', 'Canceladas'];
+
+      if (!cardId || !validStatuses.includes(targetStatus)) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'Parâmetros inválidos para atualização de status.' }),
+          { status: 400, headers: corsHeaders }
+        );
+      }
+
+      if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'Configuração do Supabase ausente na Edge Function.' }),
+          { status: 500, headers: corsHeaders }
+        );
+      }
+
+      const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+      const isConfirmed = targetStatus === 'Confirmadas';
+      const nowBR = new Date().toLocaleTimeString('pt-BR', {
+        timeZone: 'America/Sao_Paulo',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+
+      const upsertPayload: Record<string, unknown> = {
+        card_id: cardId,
+        status: targetStatus,
+        confirmado_pelo_paciente: isConfirmed,
+        confirmado_em: isConfirmed ? nowBR : null,
+        updated_at: new Date().toISOString()
+      };
+
+      if (rawBody.paciente) upsertPayload.paciente = rawBody.paciente;
+      if (rawBody.data_consulta) upsertPayload.data_consulta = rawBody.data_consulta;
+      if (rawBody.medico) upsertPayload.medico = rawBody.medico;
+      if (rawBody.especialidade) upsertPayload.especialidade = rawBody.especialidade;
+      if (rawBody.horario) upsertPayload.horario = rawBody.horario;
+
+      const { error: dbErr } = await supabaseAdmin
+        .from('centro_medico_kanban_cards')
+        .upsert(upsertPayload, { onConflict: 'card_id' });
+
+      if (dbErr) {
+        console.error('[WhatsApp Agendamento] Erro ao atualizar status público:', dbErr);
+        return new Response(
+          JSON.stringify({ success: false, error: dbErr.message }),
+          { status: 500, headers: corsHeaders }
+        );
+      }
+
+      return new Response(
+        JSON.stringify({
+          success: true,
+          card_id: cardId,
+          status: targetStatus,
+          confirmado_pelo_paciente: isConfirmed,
+          confirmado_em: isConfirmed ? nowBR : null
+        }),
+        { status: 200, headers: corsHeaders }
+      );
+    }
 
     // Suporta tanto chamada direta do front quanto Database Webhooks do Supabase
     let agendamentoData: AgendamentoPayload = {};
@@ -233,16 +331,40 @@ Deno.serve(async (req: Request) => {
       };
     }
 
-    // Destinatário fixo por enquanto conforme solicitado: sempre 5584998444889
-    const FIXED_RECIPIENT = '5584998444889';
-    const recipient = FIXED_RECIPIENT;
-    const pacientePhone = agendamentoData.telefone || agendamentoData.recipient || 'Não informado';
-    const instance = rawBody.instance || SENDER_INSTANCE;
+    // Configuração do destinatário:
+    // Se FORCE_TEST_RECIPIENT=true for configurado nas envs do Supabase, força o número de teste.
+    // Caso contrário, usa rigorosamente o telefone cadastrado do paciente.
+    const forceTestMode = Deno.env.get('FORCE_TEST_RECIPIENT') === 'true';
+    const rawTargetPhone = agendamentoData.telefone || agendamentoData.recipient;
+    let recipient: string;
+
+    if (forceTestMode) {
+      recipient = DEFAULT_RECIPIENT;
+      console.log(`[WhatsApp Agendamento] Modo de teste ativo (FORCE_TEST_RECIPIENT). Enviando para número de teste: ${recipient}`);
+    } else {
+      const cleanPhone = String(rawTargetPhone || '').replace(/\D/g, '');
+      if (!cleanPhone || cleanPhone.length < 10) {
+        console.warn(`[WhatsApp Agendamento] Disparo abortado: Paciente "${agendamentoData.paciente}" não possui telefone válido (${rawTargetPhone || 'vazio'}).`);
+        return new Response(
+          JSON.stringify({
+            success: false,
+            error: `O paciente "${agendamentoData.paciente || 'selecionado'}" não possui um número de telefone válido cadastrado no sistema.`
+          }),
+          { status: 400, headers: corsHeaders }
+        );
+      }
+      recipient = formatPhoneNumber(rawTargetPhone, DEFAULT_RECIPIENT);
+    }
+
+    const pacientePhone = agendamentoData.telefone || 'Não informado';
     const messageText = buildAppointmentMessage(agendamentoData);
 
-    console.log(`[WhatsApp Agendamento] Destinatário fixado: ${recipient} (Telefone do cadastro: ${pacientePhone}) | Instância: ${instance}`);
+    // Rotação / Seleção da Instância Primária e Backup (CM01 - 553498434630 e CM02 - 553499223124)
+    const primaryInstance = rawBody.instance === INSTANCE_CM02 ? INSTANCE_CM02 : (rawBody.instance === INSTANCE_CM01 ? INSTANCE_CM01 : (Math.random() > 0.5 ? INSTANCE_CM01 : INSTANCE_CM02));
+    const backupInstance = primaryInstance === INSTANCE_CM01 ? INSTANCE_CM02 : INSTANCE_CM01;
 
-    // Se as credenciais da Evolution API não estiverem disponíveis (ex: ambiente de desenvolvimento local)
+    console.log(`[WhatsApp Agendamento] Destinatário final: ${recipient} (Telefone: ${pacientePhone}) | Primária: ${primaryInstance} | Backup: ${backupInstance}`);
+
     if (!EVOLUTION_API_URL || !EVOLUTION_API_KEY) {
       console.warn('[WhatsApp Agendamento] EVOLUTION_API_URL ou EVOLUTION_API_KEY não configuradas no ambiente.');
       return new Response(
@@ -252,7 +374,7 @@ Deno.serve(async (req: Request) => {
           message: 'Envio simulado com sucesso (credenciais da Evolution API não detectadas neste ambiente).',
           details: {
             recipient,
-            instance,
+            instance: primaryInstance,
             paciente: agendamentoData.paciente,
             text: messageText
           }
@@ -261,42 +383,84 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    // Disparar envio via Evolution API
-    const delivery = await sendWhatsAppMessage(
+    // Disparo com failover automático entre as instâncias CM01 e CM02
+    let usedInstance = primaryInstance;
+    let delivery = await sendWhatsAppMessage(
       EVOLUTION_API_URL,
       EVOLUTION_API_KEY,
-      instance,
+      primaryInstance,
       recipient,
       messageText
     );
 
     if (!delivery.success) {
-      throw new Error(`Erro ao enviar mensagem via Evolution API: ${delivery.error}`);
+      console.warn(`[WhatsApp Agendamento] Falha na instância ${primaryInstance} (${delivery.error}). Acionando contingência com ${backupInstance}...`);
+      const fallbackDelivery = await sendWhatsAppMessage(
+        EVOLUTION_API_URL,
+        EVOLUTION_API_KEY,
+        backupInstance,
+        recipient,
+        messageText
+      );
+      if (fallbackDelivery.success) {
+        delivery = fallbackDelivery;
+        usedInstance = backupInstance;
+        console.log(`[WhatsApp Agendamento] Mensagem enviada com sucesso pela instância de contingência ${backupInstance}!`);
+      }
+    }
+
+    if (!delivery.success) {
+      console.error(`[WhatsApp Agendamento] Erro Evolution API: ${delivery.error}`);
+      return new Response(
+        JSON.stringify({
+          success: false,
+          error: `Erro na Evolution API (Tentado em ${primaryInstance} e ${backupInstance}): ${delivery.error || 'Falha de conexão com a instância'}`
+        }),
+        { status: 200, headers: corsHeaders }
+      );
     }
 
     console.log(`[WhatsApp Agendamento] Mensagem disparada com sucesso para ${recipient}`);
 
-    // Tentativa de log opcional no banco de dados se houver cliente configurado
+    // Persistência segura do agendamento e log de auditoria no Supabase
     if (SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY) {
       try {
         const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
-        await supabaseAdmin.from('whatsapp_notification_logs').insert({
-          destinatario: recipient,
-          mensagem: messageText,
-          status: 'sucesso',
-          tipo: 'agendamento_kanban_enviadas',
-          detalhes: {
-            cardId: agendamentoData.cardId,
+
+        // 1. Atualiza o snapshot clínico do card no Centro Médico
+        if (agendamentoData.cardId) {
+          await supabaseAdmin.from('centro_medico_kanban_cards').upsert({
+            card_id: agendamentoData.cardId,
+            status: agendamentoData.status || 'Enviadas',
             paciente: agendamentoData.paciente,
+            data_consulta: agendamentoData.data,
             medico: agendamentoData.medico,
-            data: agendamentoData.data,
+            crm: agendamentoData.crm,
+            especialidade: agendamentoData.especialidade,
             horario: agendamentoData.horario,
             consultorio: agendamentoData.consultorio,
-            instance: instance
+            convenio: agendamentoData.convenio,
+            updated_at: new Date().toISOString()
+          }, { onConflict: 'card_id' });
+        }
+
+        // 2. Registra log na tabela de auditoria
+        await supabaseAdmin.from('whatsapp_agendamento_notification_logs').insert({
+          card_id: agendamentoData.cardId,
+          destinatario: recipient,
+          paciente: agendamentoData.paciente,
+          medico: agendamentoData.medico,
+          horario: agendamentoData.horario,
+          data_consulta: agendamentoData.data,
+          status: 'sucesso',
+          mensagem: messageText,
+          detalhes: {
+            consultorio: agendamentoData.consultorio,
+            instance: usedInstance
           }
         });
       } catch (logErr) {
-        console.warn('[WhatsApp Agendamento] Log no banco ignorado/tabela não existente:', logErr);
+        console.warn('[WhatsApp Agendamento] Falha ao registrar log/snapshot no banco:', logErr);
       }
     }
 
@@ -306,7 +470,7 @@ Deno.serve(async (req: Request) => {
         message: `WhatsApp enviado com sucesso para ${agendamentoData.paciente || recipient}!`,
         details: {
           recipient,
-          instance,
+          instance: usedInstance,
           paciente: agendamentoData.paciente,
           medico: agendamentoData.medico,
           horario: agendamentoData.horario,

@@ -20,7 +20,8 @@ import {
   ArrowLeft,
   Sun,
   Moon,
-  ChevronRight
+  ChevronRight,
+  UserX
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 
@@ -127,6 +128,7 @@ export default function OrdemServicoMobile() {
     displayName: string;
     fullName: string;
     avatarUrl: string | null;
+    ativo: boolean;
   }
 
   const [executors, setExecutors] = useState<ExecutorInfo[]>([
@@ -135,30 +137,36 @@ export default function OrdemServicoMobile() {
       dbKey: 'talysson.resend',
       displayName: 'Talysson',
       fullName: 'Talysson Marins Resende',
-      avatarUrl: null
+      avatarUrl: null,
+      ativo: true
     },
     {
       email: 'bruno.lima@santacasaaraguari.org.br',
       dbKey: 'bruno.lima',
       displayName: 'Bruno',
       fullName: 'Bruno José M A Lima',
-      avatarUrl: null
+      avatarUrl: null,
+      ativo: true
     },
     {
       email: 'jessica.araujo@santacasaaraguari.org.br',
       dbKey: 'jessica.araujo',
       displayName: 'Jessica',
       fullName: 'Jessica Dantas de Araújo Cardoso',
-      avatarUrl: null
+      avatarUrl: null,
+      ativo: false
     },
     {
       email: 'jhon.silva@santacasaaraguari.org.br',
       dbKey: 'jhon.silva',
       displayName: 'Jhon',
       fullName: 'Jhon Willy da Silva',
-      avatarUrl: null
+      avatarUrl: null,
+      ativo: true
     }
   ]);
+
+  const [showInactiveExecutors, setShowInactiveExecutors] = useState(false);
 
   const [selectedOrder, setSelectedOrder] = useState<OrdemServicoItem | null>(null);
   const [orderHistory, setOrderHistory] = useState<any[]>([]);
@@ -1016,7 +1024,15 @@ export default function OrdemServicoMobile() {
   };
 
   const activeOrders = getActiveList();
-  const sortedExecutors = [...executors].sort((a, b) => a.displayName.localeCompare(b.displayName));
+  const hasInactiveExecutors = executors.some(e => e.ativo === false);
+  const visibleExecutors = executors
+    .filter(exec => exec.ativo || showInactiveExecutors || selectedExecutor === exec.dbKey)
+    .sort((a, b) => {
+      if (a.ativo !== b.ativo) {
+        return a.ativo ? -1 : 1;
+      }
+      return a.displayName.localeCompare(b.displayName);
+    });
   const avgTriagem = calculateAverageTriagemTime(filteredOrders, stageLogs);
   const avgClosed = calculateAverageClosedTime(filteredOrders, stageLogs);
 
@@ -1192,25 +1208,31 @@ export default function OrdemServicoMobile() {
           <span className="text-[9px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap shrink-0">
             Executores:
           </span>
-          <div className="flex items-center gap-1.5">
-            {sortedExecutors.map((exec) => {
+          <div className="flex items-center gap-1.5 shrink-0">
+            {visibleExecutors.map((exec) => {
               const isSelected = selectedExecutor === exec.dbKey;
+              const isInactive = !exec.ativo;
               const initials = exec.displayName.substring(0, 2).toUpperCase();
               return (
                 <button
                   key={exec.dbKey}
                   onClick={() => setSelectedExecutor(isSelected ? null : exec.dbKey)}
+                  title={`${exec.fullName}${isInactive ? ' (Histórico / Inativo)' : ''}`}
                   className={`relative flex items-center justify-center h-8 w-8 rounded-full border overflow-hidden p-0 transition-all shrink-0 ${
                     isSelected
                       ? 'border-primary ring-2 ring-primary/20 scale-105 shadow-sm'
-                      : 'border-border active:scale-95'
+                      : isInactive
+                        ? 'border-dashed border-muted-foreground/50 opacity-75 active:scale-95'
+                        : 'border-border active:scale-95'
                   }`}
                 >
                   {exec.avatarUrl ? (
                     <img
                       src={exec.avatarUrl}
                       alt={exec.displayName}
-                      className="h-full w-full rounded-full object-cover"
+                      className={`h-full w-full rounded-full object-cover ${
+                        isInactive && !isSelected ? 'grayscale opacity-80' : ''
+                      }`}
                     />
                   ) : (
                     <div className={`h-full w-full rounded-full flex items-center justify-center text-[9px] font-bold ${
@@ -1224,9 +1246,31 @@ export default function OrdemServicoMobile() {
                       ✓
                     </span>
                   )}
+                  {isInactive && !isSelected && (
+                    <span className="absolute -top-0.5 -right-0.5 flex h-3 w-3 items-center justify-center rounded-full bg-muted border border-border text-[7px] text-muted-foreground">
+                      ⏳
+                    </span>
+                  )}
                 </button>
               );
             })}
+
+            {hasInactiveExecutors && (
+              <button
+                type="button"
+                onClick={() => setShowInactiveExecutors(prev => !prev)}
+                title={showInactiveExecutors ? 'Ocultar executores inativos' : 'Exibir executores inativos'}
+                className={`flex items-center gap-1 px-2 py-1 rounded-md text-[9px] font-semibold transition-all border shrink-0 ${
+                  showInactiveExecutors
+                    ? 'bg-primary/10 border-primary/30 text-primary'
+                    : 'bg-card border-border text-muted-foreground'
+                }`}
+              >
+                <UserX className="h-2.5 w-2.5" />
+                <span>Inativo</span>
+              </button>
+            )}
+
             {selectedExecutor && (
               <button
                 onClick={() => setSelectedExecutor(null)}
@@ -1364,12 +1408,22 @@ export default function OrdemServicoMobile() {
                   <span>Solicitante: <strong className="text-foreground">{selectedOrder.nm_solicitante}</strong></span>
                 </div>
               )}
-              {selectedOrder.nm_executor && (
-                <div className="flex items-center gap-2 text-xs text-emerald-600 dark:text-emerald-400">
-                  <UserCheck className="h-4 w-4" />
-                  <span>Executor: <strong>{selectedOrder.nm_executor}</strong></span>
-                </div>
-              )}
+              {selectedOrder.nm_executor && (() => {
+                const exec = executors.find(e => e.dbKey.toLowerCase() === selectedOrder.nm_executor?.trim().toLowerCase());
+                return (
+                  <div className="flex items-center gap-2 text-xs text-emerald-600 dark:text-emerald-400">
+                    <UserCheck className="h-4 w-4" />
+                    <span>
+                      Executor: <strong>{exec ? exec.fullName : selectedOrder.nm_executor}</strong>
+                      {exec?.ativo === false && (
+                        <span className="ml-1.5 text-[9px] font-semibold text-muted-foreground bg-muted px-1.5 py-0.5 rounded border border-border">
+                          Histórico
+                        </span>
+                      )}
+                    </span>
+                  </div>
+                );
+              })()}
             </div>
 
             {/* Status & Prioridades Grid */}

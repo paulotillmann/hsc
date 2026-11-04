@@ -270,22 +270,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setProfile(data as Profile);
 
         const role = data.roles as Role | null;
-        const isSuperEmail = Boolean(
-          data.email &&
-          [
-            'jessica.araujo@santacasaaraguari.org.br',
-            'talysson.resende@santacasaaraguari.org.br',
-            'bruno.lima@santacasaaraguari.org.br',
-            'jhon.silva@santacasaaraguari.org.br'
-          ].includes(data.email.toLowerCase())
-        );
         const isAdmin = Boolean(
           data.role === 'admin' ||
           data.role === 'Administrador' ||
           role?.slug === 'admin' ||
           role?.name?.toLowerCase().includes('administrador') ||
-          role?.can_config === true ||
-          isSuperEmail
+          role?.can_config === true
         );
         const hasRoleId = !!data.role_id;
 
@@ -327,17 +317,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               });
               setUserModules(merged);
             } else if (modules.length === 0) {
-              // Se a tabela modules estiver totalmente vazia no banco, usamos o fallback para admin.
-              // Caso contrário, se há módulos cadastrados mas nenhuma permissão vinculada, mantemos vazia.
-              const { count, error: countError } = await supabase
-                .from('modules')
-                .select('*', { count: 'exact', head: true });
-
-              if (!countError && count === 0) {
-                setUserModules(isAdmin ? getDefaultModules(true) : []);
-              } else {
-                setUserModules(isAdmin ? getDefaultModules(true) : []);
-              }
+              // Se não há permissões vinculadas ao perfil: se for admin, usa os módulos padrão; senão lista vazia
+              setUserModules(isAdmin ? getDefaultModules(true) : []);
             } else {
               setUserModules(modules);
             }
