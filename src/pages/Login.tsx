@@ -178,7 +178,7 @@ const Login: React.FC = () => {
         } else {
           console.error("Erro no upload do avatar:", uploadError);
         }
-      } catch(err) {
+      } catch (err) {
         console.error("Erro interno no upload do avatar:", err);
       }
     }
@@ -359,8 +359,8 @@ const Login: React.FC = () => {
                   <div className="space-y-1 relative group">
                     <div className="flex justify-between items-center">
                       <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Senha</label>
-                      <button 
-                        type="button" 
+                      <button
+                        type="button"
                         onClick={() => setIsRecovering(true)}
                         className="text-xs text-primary hover:underline font-medium"
                       >
@@ -401,7 +401,7 @@ const Login: React.FC = () => {
                     >
                       {isSubmitting ? <><Loader2 className="w-4 h-4 animate-spin" /> Entrando...</> : 'Entrar'}
                     </button>
-                    
+
                     <p className="text-center text-sm font-medium text-muted-foreground mt-4">
                       Não tem uma conta?{' '}
                       <button type="button" onClick={() => setIsRegistering(true)} className="text-primary hover:underline font-semibold transition-colors">
@@ -434,9 +434,9 @@ const Login: React.FC = () => {
                       <div className="absolute inset-0 bg-black/40 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
                         <Upload className="h-5 w-5 text-white" />
                       </div>
-                      <input 
-                        type="file" 
-                        accept="image/*" 
+                      <input
+                        type="file"
+                        accept="image/*"
                         className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                         onChange={handleAvatarChange}
                         disabled={isSubmitting}
@@ -626,10 +626,10 @@ const Login: React.FC = () => {
                     >
                       {isSubmitting ? <><Loader2 className="w-4 h-4 animate-spin" /> Enviando...</> : 'Enviar link de recuperação'}
                     </button>
-                    
-                    <button 
-                      type="button" 
-                      onClick={() => setIsRecovering(false)} 
+
+                    <button
+                      type="button"
+                      onClick={() => setIsRecovering(false)}
                       className="text-center text-sm font-medium text-muted-foreground hover:text-foreground mt-4 transition-colors"
                       disabled={isSubmitting}
                     >

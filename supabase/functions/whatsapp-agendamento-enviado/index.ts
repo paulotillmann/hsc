@@ -221,6 +221,72 @@ Deno.serve(async (req: Request) => {
     const rawBody = await req.json().catch(() => ({}));
     console.log('[WhatsApp Agendamento] Requisição recebida:', JSON.stringify(rawBody));
 
+    // Ação Pública de Atualização de Status pelo Link do Paciente (Confirmar, Remarcar, Cancelar)
+    if (rawBody.action === 'atualizar_status_publico') {
+      const cardId = String(rawBody.cardId || '').trim();
+      const targetStatus = String(rawBody.status || 'Confirmadas').trim();
+      const validStatuses = ['Confirmadas', 'Remarcar', 'Canceladas'];
+
+      if (!cardId || !validStatuses.includes(targetStatus)) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'Parâmetros inválidos para atualização de status.' }),
+          { status: 400, headers: corsHeaders }
+        );
+      }
+
+      if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'Configuração do Supabase ausente na Edge Function.' }),
+          { status: 500, headers: corsHeaders }
+        );
+      }
+
+      const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+      const isConfirmed = targetStatus === 'Confirmadas';
+      const nowBR = new Date().toLocaleTimeString('pt-BR', {
+        timeZone: 'America/Sao_Paulo',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+
+      const upsertPayload: Record<string, unknown> = {
+        card_id: cardId,
+        status: targetStatus,
+        confirmado_pelo_paciente: isConfirmed,
+        confirmado_em: isConfirmed ? nowBR : null,
+        updated_at: new Date().toISOString()
+      };
+
+      if (rawBody.paciente) upsertPayload.paciente = rawBody.paciente;
+      if (rawBody.data_consulta) upsertPayload.data_consulta = rawBody.data_consulta;
+      if (rawBody.medico) upsertPayload.medico = rawBody.medico;
+      if (rawBody.especialidade) upsertPayload.especialidade = rawBody.especialidade;
+      if (rawBody.horario) upsertPayload.horario = rawBody.horario;
+
+      const { error: dbErr } = await supabaseAdmin
+        .from('centro_medico_kanban_cards')
+        .upsert(upsertPayload, { onConflict: 'card_id' });
+
+      if (dbErr) {
+        console.error('[WhatsApp Agendamento] Erro ao atualizar status público:', dbErr);
+        return new Response(
+          JSON.stringify({ success: false, error: dbErr.message }),
+          { status: 500, headers: corsHeaders }
+        );
+      }
+
+      return new Response(
+        JSON.stringify({
+          success: true,
+          card_id: cardId,
+          status: targetStatus,
+          confirmado_pelo_paciente: isConfirmed,
+          confirmado_em: isConfirmed ? nowBR : null
+        }),
+        { status: 200, headers: corsHeaders }
+      );
+    }
+
     // Suporta tanto chamada direta do front quanto Database Webhooks do Supabase
     let agendamentoData: AgendamentoPayload = {};
 

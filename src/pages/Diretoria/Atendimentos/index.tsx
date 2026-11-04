@@ -148,13 +148,12 @@ function MultiSelectDropdown({
       <button
         type="button"
         onClick={() => setAberto(prev => !prev)}
-        className={`w-full flex items-center justify-between gap-2 px-3.5 py-2.5 text-sm rounded-xl bg-background border text-left transition-all cursor-pointer ${
-          aberto
+        className={`w-full flex items-center justify-between gap-2 px-3.5 py-2.5 text-sm rounded-xl bg-background border text-left transition-all cursor-pointer ${aberto
             ? 'border-primary ring-2 ring-primary/20 shadow-xs font-medium'
             : selected.length > 0
-            ? 'border-primary/60 text-foreground font-semibold bg-primary/5'
-            : 'border-border text-foreground hover:border-border/80'
-        }`}
+              ? 'border-primary/60 text-foreground font-semibold bg-primary/5'
+              : 'border-border text-foreground hover:border-border/80'
+          }`}
       >
         <span className="truncate">{textoBotao}</span>
         <div className="flex items-center gap-1.5 flex-shrink-0">
@@ -215,18 +214,16 @@ function MultiSelectDropdown({
                   <label
                     key={opt.cd}
                     onClick={() => toggleItem(opt.cd)}
-                    className={`flex items-center gap-3 px-3 py-2 rounded-xl cursor-pointer transition-colors ${
-                      isSelected
+                    className={`flex items-center gap-3 px-3 py-2 rounded-xl cursor-pointer transition-colors ${isSelected
                         ? 'bg-primary/10 text-primary font-semibold'
                         : 'hover:bg-muted text-foreground'
-                    }`}
+                      }`}
                   >
                     <div
-                      className={`h-4.5 w-4.5 rounded-md flex items-center justify-center border transition-all flex-shrink-0 ${
-                        isSelected
+                      className={`h-4.5 w-4.5 rounded-md flex items-center justify-center border transition-all flex-shrink-0 ${isSelected
                           ? 'bg-primary border-primary text-primary-foreground shadow-2xs'
                           : 'border-border bg-background'
-                      }`}
+                        }`}
                     >
                       {isSelected && <Check className="h-3.5 w-3.5 stroke-[3]" />}
                     </div>
@@ -506,8 +503,8 @@ export default function AtendimentosDiretoria() {
       nomes.length === 1
         ? nomes[0]
         : nomes.length === 2
-        ? `${nomes[0]} / ${nomes[1]}`
-        : `${nomes[0]} (+${nomes.length - 1})`;
+          ? `${nomes[0]} / ${nomes[1]}`
+          : `${nomes[0]} (+${nomes.length - 1})`;
 
     return {
       temSelecao: true,
@@ -950,11 +947,10 @@ export default function AtendimentosDiretoria() {
             </h1>
             <div
               title={dados?.isMock ? 'Modo Demonstração' : `Conectado ao Oracle Tasy • Atualizado às ${dados?.dataAtualizacao || ''}`}
-              className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold border shadow-2xs ${
-                dados?.isMock
+              className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold border shadow-2xs ${dados?.isMock
                   ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20'
                   : 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20'
-              }`}
+                }`}
             >
               <div className={`h-1.5 w-1.5 rounded-full ${dados?.isMock ? 'bg-amber-500 animate-pulse' : 'bg-emerald-500 animate-pulse'}`} />
               <span className="uppercase tracking-wider text-[10px]">SYNC</span>
@@ -1008,41 +1004,37 @@ export default function AtendimentosDiretoria() {
             <span className="text-[11px] font-semibold text-muted-foreground mr-1">Atalhos:</span>
             <button
               onClick={() => aplicarPeriodoRapido('2026-10-01', '2026-10-07')}
-              className={`px-2.5 py-1 text-xs rounded-lg transition-colors cursor-pointer ${
-                dataInicio === '2026-10-01' && dataFim === '2026-10-07'
+              className={`px-2.5 py-1 text-xs rounded-lg transition-colors cursor-pointer ${dataInicio === '2026-10-01' && dataFim === '2026-10-07'
                   ? 'bg-primary text-primary-foreground font-bold shadow-xs'
                   : 'bg-muted text-muted-foreground hover:bg-muted/80'
-              }`}
+                }`}
             >
               01 a 07/Out/26
             </button>
             <button
               onClick={() => aplicarPeriodoRapido('2026-09-01', '2026-09-30')}
-              className={`px-2.5 py-1 text-xs rounded-lg transition-colors cursor-pointer ${
-                dataInicio === '2026-09-01' && dataFim === '2026-09-30'
+              className={`px-2.5 py-1 text-xs rounded-lg transition-colors cursor-pointer ${dataInicio === '2026-09-01' && dataFim === '2026-09-30'
                   ? 'bg-primary text-primary-foreground font-bold shadow-xs'
                   : 'bg-muted text-muted-foreground hover:bg-muted/80'
-              }`}
+                }`}
             >
               Setembro/26
             </button>
             <button
               onClick={() => aplicarPeriodoRapido('2026-08-01', '2026-08-31')}
-              className={`px-2.5 py-1 text-xs rounded-lg transition-colors cursor-pointer ${
-                dataInicio === '2026-08-01' && dataFim === '2026-08-31'
+              className={`px-2.5 py-1 text-xs rounded-lg transition-colors cursor-pointer ${dataInicio === '2026-08-01' && dataFim === '2026-08-31'
                   ? 'bg-primary text-primary-foreground font-bold shadow-xs'
                   : 'bg-muted text-muted-foreground hover:bg-muted/80'
-              }`}
+                }`}
             >
               Agosto/26
             </button>
             <button
               onClick={() => aplicarPeriodoRapido('2026-01-01', '2026-10-07')}
-              className={`px-2.5 py-1 text-xs rounded-lg transition-colors cursor-pointer ${
-                dataInicio === '2026-01-01' && dataFim === '2026-10-07'
+              className={`px-2.5 py-1 text-xs rounded-lg transition-colors cursor-pointer ${dataInicio === '2026-01-01' && dataFim === '2026-10-07'
                   ? 'bg-primary text-primary-foreground font-bold shadow-xs'
                   : 'bg-muted text-muted-foreground hover:bg-muted/80'
-              }`}
+                }`}
             >
               Ano 2026
             </button>
@@ -1156,11 +1148,10 @@ export default function AtendimentosDiretoria() {
         <div className="flex items-center gap-2">
           <button
             onClick={() => setAbaAtiva('convenios')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-              abaAtiva === 'convenios'
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${abaAtiva === 'convenios'
                 ? 'bg-primary text-primary-foreground shadow-xs'
                 : 'bg-card text-muted-foreground hover:bg-muted hover:text-foreground border border-border/60'
-            }`}
+              }`}
           >
             <Layers className="h-4 w-4" />
             <span>Total por Convênio (Relatório)</span>
@@ -1168,11 +1159,10 @@ export default function AtendimentosDiretoria() {
 
           <button
             onClick={() => setAbaAtiva('evolucao_mensal')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-              abaAtiva === 'evolucao_mensal'
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${abaAtiva === 'evolucao_mensal'
                 ? 'bg-primary text-primary-foreground shadow-xs'
                 : 'bg-card text-muted-foreground hover:bg-muted hover:text-foreground border border-border/60'
-            }`}
+              }`}
           >
             <TableIcon className="h-4 w-4" />
             <span>Acompanhamento Mensal & Produtividade</span>
@@ -1520,7 +1510,7 @@ export default function AtendimentosDiretoria() {
                 <span className="text-3xl font-extrabold text-foreground">
                   {Math.round(
                     (dados?.evolucaoMensal || []).reduce((acc, m) => acc + m.mediaDiaria, 0) /
-                      (dados?.evolucaoMensal?.length || 1)
+                    (dados?.evolucaoMensal?.length || 1)
                   )}
                 </span>
                 <span className="text-xs text-muted-foreground ml-2">pacientes / dia</span>
@@ -1538,7 +1528,7 @@ export default function AtendimentosDiretoria() {
                 <span className="text-3xl font-extrabold text-emerald-600 dark:text-emerald-400">
                   {Math.round(
                     (dados?.evolucaoMensal || []).reduce((acc, m) => acc + m.porTurno6h, 0) /
-                      (dados?.evolucaoMensal?.length || 1)
+                    (dados?.evolucaoMensal?.length || 1)
                   )}
                 </span>
                 <span className="text-xs text-muted-foreground ml-2">pacientes / plantão</span>
@@ -1643,11 +1633,10 @@ export default function AtendimentosDiretoria() {
                     <th className="py-3 px-4 text-violet-600 dark:text-violet-400">Não SUS</th>
                     <th className="py-3 px-4">Clínica</th>
                     <th
-                      className={`py-3 px-4 ${
-                        infoConvenioPlanilha.temSelecao
+                      className={`py-3 px-4 ${infoConvenioPlanilha.temSelecao
                           ? 'text-primary font-extrabold bg-primary/5'
                           : 'text-muted-foreground'
-                      }`}
+                        }`}
                       title={infoConvenioPlanilha.tituloCompleto}
                     >
                       {infoConvenioPlanilha.tituloColuna}
@@ -1677,11 +1666,10 @@ export default function AtendimentosDiretoria() {
                         {row.clinica.toLocaleString('pt-BR')}
                       </td>
                       <td
-                        className={`py-3 px-4 ${
-                          row.valorConvenioSelecionado !== null
+                        className={`py-3 px-4 ${row.valorConvenioSelecionado !== null
                             ? 'font-bold text-primary bg-primary/5'
                             : 'text-muted-foreground/50'
-                        }`}
+                          }`}
                       >
                         {row.valorConvenioSelecionado !== null
                           ? row.valorConvenioSelecionado.toLocaleString('pt-BR')

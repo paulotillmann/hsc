@@ -32,7 +32,7 @@ import { webhookService } from '../../services/webhookService';
 import { supabase } from '../../lib/supabase';
 
 // Tipos de Status do Kanban
-export type KanbanStatus = 'Agendamentos' | 'Enviadas' | 'Confirmadas' | 'Concluídas' | 'Canceladas';
+export type KanbanStatus = 'Agendamentos' | 'Enviadas' | 'Remarcar' | 'Confirmadas' | 'Concluídas' | 'Canceladas';
 
 // Interfaces de Dados
 export interface EscalaMedica {
@@ -97,6 +97,14 @@ const KANBAN_COLUMNS: {
     dotColor: 'bg-purple-500'
   },
   {
+    id: 'Remarcar',
+    label: 'REMARCAR',
+    color: 'text-amber-600 dark:text-amber-400',
+    badgeBg: 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30',
+    border: 'border-amber-500/30',
+    dotColor: 'bg-amber-500'
+  },
+  {
     id: 'Confirmadas',
     label: 'CONFIRMAÇÃO',
     color: 'text-emerald-600 dark:text-emerald-400',
@@ -115,11 +123,16 @@ const KANBAN_COLUMNS: {
   }
 ];
 
-// Helper para verificar se a consulta veio com status cancelado do Tasy
+// Helper para verificar se a consulta veio com status cancelado do Tasy (retorna 'C' ou 'Cancelado'/'Cancelada')
 const isStatusCanceladoTasy = (statusReal?: string, statusOriginal?: string): boolean => {
   const s1 = (statusReal || '').trim().toLowerCase();
   const s2 = (statusOriginal || '').trim().toLowerCase();
-  return s1.includes('cancelad') || s2.includes('cancelad');
+  return (
+    s1 === 'c' ||
+    s2 === 'c' ||
+    s1.includes('cancelad') ||
+    s2.includes('cancelad')
+  );
 };
 
 // Funções auxiliares para datas
@@ -658,6 +671,7 @@ export default function CentroMedico() {
     const handleRemoteConfirmEvent = (e?: any) => {
       const updatedConf = getStoredConfirmedPatientsMap();
       const updatedOrder = getStoredAddedOrderMap();
+      const updatedManual = getStoredManualStatusMap();
 
       if (e?.detail?.cardId && e?.detail?.addedAt) {
         updatedOrder[e.detail.cardId] = e.detail.addedAt;
@@ -666,13 +680,23 @@ export default function CentroMedico() {
       setConfirmedPatientsMap(updatedConf);
       setAddedOrderMap(updatedOrder);
 
-      setConsultas(prev => prev.map(c => ({
-        ...c,
-        confirmadoPeloPaciente: Boolean(updatedConf[c.id]?.confirmadoPeloPaciente),
-        confirmadoEm: updatedConf[c.id]?.confirmadoEm,
-        status: updatedConf[c.id]?.confirmadoPeloPaciente ? 'Confirmadas' : c.status,
-        addedAt: updatedOrder[c.id] ?? c.addedAt
-      })));
+      setConsultas(prev => prev.map(c => {
+        const manualSt = updatedManual[c.id];
+        const isConf = Boolean(updatedConf[c.id]?.confirmadoPeloPaciente);
+        const nextStatus: KanbanStatus = manualSt === 'Remarcar'
+          ? 'Remarcar'
+          : manualSt === 'Canceladas'
+            ? 'Canceladas'
+            : (isConf ? 'Confirmadas' : (manualSt || c.status));
+
+        return {
+          ...c,
+          confirmadoPeloPaciente: isConf,
+          confirmadoEm: updatedConf[c.id]?.confirmadoEm,
+          status: nextStatus,
+          addedAt: updatedOrder[c.id] ?? c.addedAt
+        };
+      }));
     };
 
     window.addEventListener('consulta_confirmada_evento', handleRemoteConfirmEvent);
@@ -705,6 +729,8 @@ export default function CentroMedico() {
                 confirmadoPeloPaciente: true,
                 confirmadoEm: row.confirmado_em || undefined
               };
+            } else if (row.card_id && (row.status === 'Remarcar' || row.status === 'Canceladas')) {
+              delete currentConfMap[row.card_id];
             }
             if (row.card_id && row.updated_at && !currentOrderMap[row.card_id]) {
               currentOrderMap[row.card_id] = new Date(row.updated_at).getTime();
@@ -726,7 +752,7 @@ export default function CentroMedico() {
             const addedTimestamp = currentOrderMap[c.id];
 
             // REGRA AUTOMÁTICA: se o paciente já confirmou pelo link (isConf), vai OBRIGATORIAMENTE para 'Confirmadas' (CONFIRMAÇÃO)
-            const targetStatus: KanbanStatus = isConf ? 'Confirmadas' : (manualStatus || c.status);
+            const targetStatus: KanbanStatus = manualStatus === 'Remarcar' ? 'Remarcar' : manualStatus === 'Canceladas' ? 'Canceladas' : (isConf ? 'Confirmadas' : (manualStatus || c.status));
 
             return {
               ...c,
@@ -772,16 +798,15 @@ export default function CentroMedico() {
               confirmadoEm: timeStr
             };
             currentOrderMap[cardId] = Date.now();
+          } else {
+            delete currentConfMap[cardId];
           }
 
           localStorage.setItem(KANBAN_STORAGE_KEY, JSON.stringify(currentMap));
           localStorage.setItem(KANBAN_ADDED_ORDER_KEY, JSON.stringify(currentOrderMap));
           localStorage.setItem(KANBAN_CONFIRMED_KEY, JSON.stringify(currentConfMap));
 
-          setConfirmedPatientsMap(prev => ({
-            ...prev,
-            ...(isConfirmed ? { [cardId]: { confirmadoPeloPaciente: true, confirmadoEm: timeStr } } : {})
-          }));
+          setConfirmedPatientsMap({ ...currentConfMap });
 
           setAddedOrderMap(prev => ({
             ...prev,
@@ -791,22 +816,30 @@ export default function CentroMedico() {
           // Move o card automaticamente na interface em tempo real
           setConsultas(prev => prev.map(c => {
             if (c.id === cardId) {
-              const nextStatus: KanbanStatus = isConfirmed ? 'Confirmadas' : (rowStatus || c.status);
+              const nextStatus: KanbanStatus = rowStatus === 'Remarcar'
+                ? 'Remarcar'
+                : rowStatus === 'Canceladas'
+                  ? 'Canceladas'
+                  : (isConfirmed ? 'Confirmadas' : (rowStatus || c.status));
               return {
                 ...c,
                 status: nextStatus,
                 confirmadoPeloPaciente: isConfirmed,
-                confirmadoEm: isConfirmed ? timeStr : c.confirmadoEm,
+                confirmadoEm: isConfirmed ? timeStr : undefined,
                 addedAt: isConfirmed ? Date.now() : c.addedAt
               };
             }
             return c;
           }));
 
-          // Notificação de confirmação em tempo real na tela do atendente
-          if (isConfirmed && payload.eventType === 'UPDATE') {
-            const pacienteNome = row.paciente || 'O paciente';
+          // Notificação de confirmação, remarcação ou cancelamento em tempo real na tela do atendente
+          const pacienteNome = row.paciente || 'O paciente';
+          if (isConfirmed) {
             showToast('success', `🎉 ${pacienteNome} confirmou presença pelo link! Movido para CONFIRMAÇÃO.`);
+          } else if (rowStatus === 'Remarcar') {
+            showToast('info', `🔄 ${pacienteNome} solicitou REMARCAR a consulta pelo link! Movido para REMARCAR.`);
+          } else if (rowStatus === 'Canceladas') {
+            showToast('error', `❌ ${pacienteNome} CANCELOU a consulta pelo link! Movido para CANCELADAS.`);
           }
         }
       )
@@ -999,10 +1032,12 @@ export default function CentroMedico() {
       });
 
       // Sincroniza confirmações e status do Supabase junto com os dados do Tasy
+      let remoteSavedRows: any[] = [];
       try {
         const { data: kanbanRows } = await supabase
           .from('centro_medico_kanban_cards')
-          .select('card_id, status, confirmado_pelo_paciente, confirmado_em, updated_at');
+          .select('card_id, status, paciente, data_consulta, medico, crm, especialidade, horario, consultorio, convenio, confirmado_pelo_paciente, confirmado_em, updated_at');
+        if (kanbanRows) remoteSavedRows = kanbanRows;
         if (kanbanRows && kanbanRows.length > 0) {
           const cMap = getStoredManualStatusMap();
           const oMap = getStoredAddedOrderMap();
@@ -1026,11 +1061,14 @@ export default function CentroMedico() {
 
       if (rawConsultasList.length > 0) {
         setConsultas(prev => {
+          const previousRealCardsForDate = !usingMock
+            ? prev.filter(c => c.data === targetDate && !c.id.startsWith('cons-'))
+            : [];
           const currentMemMap = new Map(prev.map(c => [c.id, c.status]));
           const localSavedMap = getStoredManualStatusMap();
           const localConfirmedMap = getStoredConfirmedPatientsMap();
 
-          return rawConsultasList.map((incoming: any, idx: number) => {
+          const mappedConsultas: ConsultaAgendada[] = rawConsultasList.map((incoming: any, idx: number) => {
             const target = incoming?.json && typeof incoming.json === 'object' 
               ? { ...incoming.json, ...incoming } 
               : incoming;
@@ -1084,17 +1122,18 @@ export default function CentroMedico() {
             // Telefone da coluna NR_TELEFONE
             const telefone = String(getVal(['NR_TELEFONE', 'telefone', 'nr_telefone_celular', 'nr_celular', 'phone', 'celular'], ''));
             
-            // Status real da coluna DS_STATUS_AGENDA
-            const realStatus = String(getVal(['DS_STATUS_AGENDA', 'statusReal', 'status_real', 'ds_status', 'ie_status'], 'Normal'));
+            // Status real da coluna DS_STATUS_AGENDA / IE_STATUS_AGENDA (no Tasy cancelado retorna 'C')
+            const realStatus = String(getVal(['IE_STATUS_AGENDA', 'DS_STATUS_AGENDA', 'STATUS', 'IE_STATUS', 'statusReal', 'status_real', 'ds_status', 'ie_status'], 'Normal'));
+            const extraStatus = String(getVal(['DS_STATUS_AGENDA', 'IE_STATUS_AGENDA', 'STATUS', 'status'], ''));
 
-            const isCancelado = isStatusCanceladoTasy(realStatus, target?.ds_status_agenda || target?.status);
+            const isCancelado = isStatusCanceladoTasy(realStatus, extraStatus);
             const isConfirmed = Boolean(localConfirmedMap[rawId]?.confirmadoPeloPaciente);
             const manualStatus = localSavedMap[rawId] || currentMemMap.get(rawId);
 
             // REGRA: se o paciente já confirmou pelo link (isConfirmed), entra direto na coluna CONFIRMAÇÃO
-            const targetColumn: KanbanStatus = isCancelado
+            const targetColumn: KanbanStatus = (isCancelado || manualStatus === 'Canceladas')
               ? 'Canceladas'
-              : (isConfirmed ? 'Confirmadas' : (manualStatus || 'Agendamentos'));
+              : (manualStatus === 'Remarcar' ? 'Remarcar' : (isConfirmed ? 'Confirmadas' : (manualStatus || 'Agendamentos')));
 
             return {
               id: String(rawId),
@@ -1115,6 +1154,57 @@ export default function CentroMedico() {
               confirmadoEm: localConfirmedMap[rawId]?.confirmadoEm
             };
           });
+
+          const returnedIds = new Set(mappedConsultas.map(c => c.id));
+          const disappearedCards = previousRealCardsForDate
+            .filter(oldCard => !returnedIds.has(oldCard.id))
+            .map(oldCard => ({
+              ...oldCard,
+              status: 'Canceladas' as KanbanStatus,
+              statusReal: 'C'
+            }));
+
+          return [...mappedConsultas, ...disappearedCards];
+        });
+
+        // Preserva como "Canceladas" agendamentos reais do mesmo dia que já estavam no Kanban/Supabase
+        // e deixaram de vir na query do n8n após serem cancelados no Tasy
+        setConsultas(prev => {
+          const incomingIds = new Set(prev.map(c => String(c.id)));
+          const extraCancelled: ConsultaAgendada[] = [];
+
+          remoteSavedRows.forEach((row: any) => {
+            const cId = String(row.card_id || '');
+            if (!cId || incomingIds.has(cId) || cId.startsWith('cons-')) return;
+
+            let rowDate = String(row.data_consulta || '').trim();
+            if (/^\d{2}\/\d{2}\/\d{4}$/.test(rowDate)) {
+              const [d, m, y] = rowDate.split('/');
+              rowDate = `${y}-${m}-${d}`;
+            }
+
+            if (rowDate === targetDate && row.paciente) {
+              incomingIds.add(cId);
+              extraCancelled.push({
+                id: cId,
+                paciente: row.paciente,
+                prontuario: `SEQ-${cId}`,
+                idade: 0,
+                medico: row.medico || 'Médico Responsável',
+                crm: row.crm || '',
+                especialidade: row.especialidade || 'Clínica Geral',
+                horario: row.horario || '08:00',
+                data: targetDate,
+                consultorio: row.consultorio || 'Centro Médico (Setor 109)',
+                convenio: row.convenio || 'Consulta',
+                telefone: '',
+                status: 'Canceladas',
+                statusReal: 'C'
+              });
+            }
+          });
+
+          return extraCancelled.length > 0 ? [...prev, ...extraCancelled] : prev;
         });
 
         setUsingMock(false);
@@ -1783,7 +1873,7 @@ export default function CentroMedico() {
         {activeTab === 'kanban' && (
           <div key="tab-kanban" className="space-y-3 w-full min-w-0">
               {/* Grid das Colunas Kanban (4 colunas principais com distribuição perfeita e fluida sem barra de rolagem desnecessária) */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 items-stretch w-full min-w-0 pb-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 items-stretch w-full min-w-0 pb-4">
                 {KANBAN_COLUMNS.map(col => {
                   let colCards = filteredConsultas.filter(c => c.status === col.id);
 
@@ -1970,6 +2060,14 @@ export default function CentroMedico() {
                                   </div>
                                 )}
 
+                                {/* Selo de Solicitação de Remarcação */}
+                                {!isConfirmed && card.status === 'Remarcar' && (
+                                  <div className="w-full min-w-0 flex items-center gap-1.5 bg-amber-500/15 text-amber-600 dark:text-amber-400 px-2.5 py-1 rounded-xl border border-amber-500/30 text-[9.5px] sm:text-[10px] font-bold shadow-xs">
+                                    <RefreshCw className="h-3.5 w-3.5 text-amber-500 shrink-0" />
+                                    <span className="leading-tight break-words">SOLICITOU REMARCAÇÃO</span>
+                                  </div>
+                                )}
+
                                 {/* Topo: Classificação */}
                                 <div className="flex items-center w-full min-w-0">
                                   <span className={`px-2 py-0.5 rounded-md font-semibold text-[10.5px] uppercase tracking-wide border break-words ${
@@ -2066,6 +2164,33 @@ export default function CentroMedico() {
                                       <MessageCircle className="h-3.5 w-3.5 shrink-0" />
                                       <span className="break-words">
                                         {card.telefone ? 'Abrir no WhatsApp' : 'Sem Telefone'}
+                                      </span>
+                                    </button>
+                                  )}
+
+                                  {/* Botão na coluna "Remarcar": Abrir conversa no WhatsApp para tratar remarcação */}
+                                  {card.status === 'Remarcar' && (
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleOpenWhatsAppChat(card);
+                                      }}
+                                      disabled={!card.telefone}
+                                      title={
+                                        card.telefone
+                                          ? `Abrir conversa no WhatsApp para remarcar consulta de ${card.paciente} (${card.telefone})`
+                                          : `Telefone não cadastrado no Tasy para ${card.paciente}`
+                                      }
+                                      className={`w-full min-w-0 flex items-center justify-center gap-2 py-2 px-3 rounded-xl text-xs font-semibold transition-all active:scale-[0.98] shadow-xs text-center break-words ${
+                                        card.telefone
+                                          ? 'bg-amber-500/15 hover:bg-amber-500/25 text-amber-600 dark:text-amber-400 border border-amber-500/30 cursor-pointer'
+                                          : 'bg-muted/60 text-muted-foreground border border-border/40 opacity-70 cursor-not-allowed'
+                                      }`}
+                                    >
+                                      <MessageCircle className="h-3.5 w-3.5 shrink-0 text-amber-500" />
+                                      <span className="break-words">
+                                        {card.telefone ? 'Tratar no WhatsApp' : 'Sem Telefone'}
                                       </span>
                                     </button>
                                   )}
