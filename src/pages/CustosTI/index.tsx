@@ -20,7 +20,7 @@ export interface TituloPagar {
   VL_BAIXA?: number;
   Adiantamento?: number;
   NR_DOCUMENTO: string | null;
-  DT_EMISSAO: string;
+  DT_VENCIMENTO_ORIGINAL: string;
   DT_LIQUIDACAO: string | null;
   ds_centro_custo: string;
   Empresa: string;
@@ -148,7 +148,7 @@ const CustosTI: React.FC = () => {
   }, []);
 
   // Sorting
-  const [sortField, setSortField] = useState<keyof TituloPagar>('DT_EMISSAO');
+  const [sortField, setSortField] = useState<keyof TituloPagar>('DT_VENCIMENTO_ORIGINAL');
   const [sortAsc, setSortAsc] = useState<boolean>(false);
 
   // Pagination
@@ -185,7 +185,13 @@ const CustosTI: React.FC = () => {
             VL_BAIXA: vlBaixa,
             Adiantamento: adiantamento,
             NR_DOCUMENTO: cleanString(item.NR_DOCUMENTO !== undefined ? item.NR_DOCUMENTO : item.nr_documento, null),
-            DT_EMISSAO: String(item.DT_EMISSAO !== undefined ? item.DT_EMISSAO : (item.dt_emissao || '')),
+            DT_VENCIMENTO_ORIGINAL: String(
+              item.DT_VENCIMENTO_ORIGINAL !== undefined
+                ? item.DT_VENCIMENTO_ORIGINAL
+                : item.dt_vencimento_original !== undefined
+                  ? item.dt_vencimento_original
+                  : (item.DT_EMISSAO !== undefined ? item.DT_EMISSAO : (item.dt_emissao || ''))
+            ),
             DT_LIQUIDACAO: item.DT_LIQUIDACAO ? String(item.DT_LIQUIDACAO) : (item.dt_liquidacao ? String(item.dt_liquidacao) : null),
             ds_centro_custo: cleanString(item.DS_CENTRO_COSTO !== undefined ? item.DS_CENTRO_COSTO : (item.ds_centro_custo || 'TI - Tecnologia da Informação')),
             Empresa: cleanString(item.EMPRESA !== undefined ? item.EMPRESA : (item.empresa || item.Empresa || 'Sem Empresa')),
@@ -341,8 +347,8 @@ const CustosTI: React.FC = () => {
 
     // Group titles by month
     titulosFiltrados.forEach(t => {
-      if (!t.DT_EMISSAO) return;
-      const date = parseTasyDate(t.DT_EMISSAO);
+      if (!t.DT_VENCIMENTO_ORIGINAL) return;
+      const date = parseTasyDate(t.DT_VENCIMENTO_ORIGINAL);
       if (!date || isNaN(date.getTime())) return;
 
       const year = date.getFullYear();
@@ -502,7 +508,7 @@ const CustosTI: React.FC = () => {
         ? (t.Nome ? `${t.Empresa.toUpperCase()} / ${t.Nome.toUpperCase()}` : t.Empresa.toUpperCase())
         : (t.Nome ? t.Nome.toUpperCase() : 'SEM EMPRESA'),
       t.ds_centro_custo,
-      formatDate(t.DT_EMISSAO),
+      formatDate(t.DT_VENCIMENTO_ORIGINAL),
       formatDate(t.DT_LIQUIDACAO),
       formatCurrency(t.VL_TITULO),
       t.VL_BAIXA && t.VL_BAIXA > 0
@@ -513,7 +519,7 @@ const CustosTI: React.FC = () => {
 
     autoTable(doc, {
       startY: nextY + 4,
-      head: [['Título', 'Doc.', 'Fornecedor / Favorecido', 'Centro de Custo', 'Emissão', 'Liquidação', 'Valor Título', 'Valor Baixa', 'Status']],
+      head: [['Título', 'Doc.', 'Fornecedor / Favorecido', 'Centro de Custo', 'Venc. Original', 'Liquidação', 'Valor Título', 'Valor Baixa', 'Status']],
       body: tableBody,
       theme: 'striped',
       headStyles: { fillColor: [90, 16, 16] },
@@ -533,14 +539,14 @@ const CustosTI: React.FC = () => {
 
   // Export CSV/Excel
   const handleExportCSV = () => {
-    const headers = ['Titulo', 'Documento', 'Fornecedor_PJ', 'Nome_PF', 'Centro_Custo', 'Dt_Emissao', 'Dt_Liquidacao', 'Valor_Exibido', 'Valor_Titulo', 'Valor_Baixa', 'Adiantamento', 'Situacao', 'Observacao'];
+    const headers = ['Titulo', 'Documento', 'Fornecedor_PJ', 'Nome_PF', 'Centro_Custo', 'Dt_Vencimento_Original', 'Dt_Liquidacao', 'Valor_Exibido', 'Valor_Titulo', 'Valor_Baixa', 'Adiantamento', 'Situacao', 'Observacao'];
     const rows = titulosFiltrados.map(t => [
       t.nr_titulo,
       t.NR_DOCUMENTO || '',
       t.Empresa,
       t.Nome || '',
       t.ds_centro_custo,
-      t.DT_EMISSAO.split('T')[0],
+      t.DT_VENCIMENTO_ORIGINAL ? t.DT_VENCIMENTO_ORIGINAL.split('T')[0] : '',
       t.DT_LIQUIDACAO ? t.DT_LIQUIDACAO.split('T')[0] : '',
       getValorExibido(t),
       t.VL_TITULO,
@@ -635,7 +641,7 @@ const CustosTI: React.FC = () => {
           <div className="flex flex-col gap-1.5">
             <label className="text-xs font-semibold text-muted-foreground flex items-center gap-1 font-sans">
               <Calendar className="h-3.5 w-3.5" />
-              Data Emissão (Início)
+              Data Vencimento (Início)
             </label>
             <input
               type="date"
@@ -649,7 +655,7 @@ const CustosTI: React.FC = () => {
           <div className="flex flex-col gap-1.5">
             <label className="text-xs font-semibold text-muted-foreground flex items-center gap-1 font-sans">
               <Calendar className="h-3.5 w-3.5" />
-              Data Emissão (Fim)
+              Data Vencimento (Fim)
             </label>
             <input
               type="date"
@@ -1028,8 +1034,8 @@ const CustosTI: React.FC = () => {
                   <th className="p-4 cursor-pointer select-none font-sans hover:text-foreground" onClick={() => handleSort('ds_centro_custo')}>
                     Centro de Custo {sortField === 'ds_centro_custo' && (sortAsc ? '↑' : '↓')}
                   </th>
-                  <th className="p-4 text-center cursor-pointer select-none font-sans hover:text-foreground" onClick={() => handleSort('DT_EMISSAO')}>
-                    Emissão {sortField === 'DT_EMISSAO' && (sortAsc ? '↑' : '↓')}
+                  <th className="p-4 text-center cursor-pointer select-none font-sans hover:text-foreground" onClick={() => handleSort('DT_VENCIMENTO_ORIGINAL')}>
+                    Vencimento {sortField === 'DT_VENCIMENTO_ORIGINAL' && (sortAsc ? '↑' : '↓')}
                   </th>
                   <th className="p-4 text-center cursor-pointer select-none font-sans hover:text-foreground" onClick={() => handleSort('DT_LIQUIDACAO')}>
                     Liquidação {sortField === 'DT_LIQUIDACAO' && (sortAsc ? '↑' : '↓')}
@@ -1073,7 +1079,7 @@ const CustosTI: React.FC = () => {
                       </div>
                     </td>
                     <td className="p-4 font-sans text-xs text-muted-foreground max-w-[200px] truncate" title={t.ds_centro_custo}>{t.ds_centro_custo}</td>
-                    <td className="p-4 text-center font-sans text-xs">{formatDate(t.DT_EMISSAO)}</td>
+                    <td className="p-4 text-center font-sans text-xs">{formatDate(t.DT_VENCIMENTO_ORIGINAL)}</td>
                     <td className="p-4 text-center font-sans text-xs text-muted-foreground">{formatDate(t.DT_LIQUIDACAO)}</td>
                     <td className="p-4 text-right font-sans font-bold text-foreground">
                       <span>{formatCurrency(t.VL_TITULO || 0)}</span>
@@ -1237,8 +1243,8 @@ const CustosTI: React.FC = () => {
 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <span className="text-xs font-semibold text-muted-foreground block font-sans">Data de Emissão</span>
-                    <span className="font-sans text-foreground text-sm block mt-0.5">{formatDate(selectedTitulo.DT_EMISSAO)}</span>
+                    <span className="text-xs font-semibold text-muted-foreground block font-sans">Vencimento Original</span>
+                    <span className="font-sans text-foreground text-sm block mt-0.5">{formatDate(selectedTitulo.DT_VENCIMENTO_ORIGINAL)}</span>
                   </div>
                   <div>
                     <span className="text-xs font-semibold text-muted-foreground block font-sans">Data de Liquidação</span>
