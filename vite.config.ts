@@ -22,8 +22,12 @@ export default defineConfig(({ mode }) => {
           }
         }
       },
-      plugins: [react(), rhEmailPlugin(),
-      tailwindcss(), cloudflare()],
+      plugins: [
+        react(),
+        rhEmailPlugin(),
+        tailwindcss(),
+        ...(process.env.CF_PAGES ? [] : [cloudflare()]),
+      ],
       resolve: {
         alias: {
           '@': path.resolve(__dirname, './src'),
