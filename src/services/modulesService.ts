@@ -55,10 +55,59 @@ export async function ensureCentroMedicoModule(): Promise<Module | null> {
   return null;
 }
 
+// ── Garante que o módulo de Triagem de Currículos (RH) está registrado na tabela modules ────
+export async function ensureRecrutamentoModule(): Promise<Module | null> {
+  try {
+    const { data: existing, error: selectError } = await supabase
+      .from('modules')
+      .select('*')
+      .eq('slug', 'recrutamento-selecao')
+      .maybeSingle();
+
+    if (!selectError && existing) {
+      return existing as Module;
+    }
+
+    const { data: inserted, error: insertError } = await supabase
+      .from('modules')
+      .insert({
+        name: 'Triagem de Currículos',
+        slug: 'recrutamento-selecao',
+        icon: 'UserCheck',
+        description: 'Módulo de RH para triagem de currículos recebidos por e-mail e disparo automatizado de feedback de seleção',
+        is_active: true,
+        sort_order: 35,
+        is_system: false,
+      })
+      .select('*')
+      .maybeSingle();
+
+    if (!insertError && inserted) {
+      const { data: allowedRoles } = await supabase
+        .from('roles')
+        .select('id')
+        .or('slug.eq.admin,slug.eq.rh,name.ilike.%Administrador%,name.ilike.%Recursos Humanos%');
+
+      if (allowedRoles && allowedRoles.length > 0) {
+        const perms = allowedRoles.map(r => ({ role_id: r.id, module_id: inserted.id }));
+        await supabase.from('role_module_permissions').upsert(perms, { onConflict: 'role_id,module_id' });
+      }
+
+      return inserted as Module;
+    }
+  } catch (err) {
+    console.warn('[modulesService] Auto-registro do módulo Triagem de Currículos:', err);
+  }
+  return null;
+}
+
 // ── Busca todos os módulos com os role_ids que têm acesso ─────────────────────
 export async function fetchModulesWithRoles(): Promise<ModuleWithRoles[]> {
-  // Garante a existência do módulo Centro Médico no banco para gestão
-  await ensureCentroMedicoModule();
+  // Garante a existência dos módulos dinâmicos no banco para gestão
+  await Promise.all([
+    ensureCentroMedicoModule(),
+    ensureRecrutamentoModule(),
+  ]);
 
   const [modulesRes, permissionsRes] = await Promise.all([
     supabase.from('modules').select('*').order('sort_order'),
@@ -79,6 +128,21 @@ export async function fetchModulesWithRoles(): Promise<ModuleWithRoles[]> {
       icon: 'Stethoscope',
       description: 'Módulo de escalas médicas, consultas e agendamentos do Centro Médico',
       sort_order: 75,
+      is_active: true,
+      is_system: false,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    });
+  }
+
+  if (!allModules.some(m => m.slug === 'recrutamento-selecao')) {
+    allModules.push({
+      id: 'm-recrutamento-selecao',
+      name: 'Triagem de Currículos',
+      slug: 'recrutamento-selecao',
+      icon: 'UserCheck',
+      description: 'Módulo de RH para triagem de currículos recebidos por e-mail e disparo automatizado de feedback de seleção',
+      sort_order: 35,
       is_active: true,
       is_system: false,
       created_at: new Date().toISOString(),
@@ -128,6 +192,9 @@ export async function setRoleModuleAccess(
   let targetModuleId = moduleId;
   if (targetModuleId === 'm-centro-medico') {
     const ensured = await ensureCentroMedicoModule();
+    if (ensured) targetModuleId = ensured.id;
+  } else if (targetModuleId === 'm-recrutamento-selecao') {
+    const ensured = await ensureRecrutamentoModule();
     if (ensured) targetModuleId = ensured.id;
   }
 
