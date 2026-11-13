@@ -26,7 +26,7 @@ const Sidebar: React.FC = () => {
     if (window.location.pathname.startsWith('/gestao-prontuarios')) return 'gestao-prontuarios';
     if (window.location.pathname.startsWith('/centro-medico')) return 'centro-medico';
     if (window.location.pathname.startsWith('/plantao-ti') || window.location.pathname.startsWith('/ordem-servico') || window.location.pathname.startsWith('/ordem-servico-mobile') || window.location.pathname.startsWith('/equipamentos') || window.location.pathname.startsWith('/custos-ti') || window.location.pathname.startsWith('/usuarios-tasy')) return 'tecnologia-informacao';
-    if (window.location.pathname.startsWith('/dashboard') || window.location.pathname.startsWith('/holerites') || window.location.pathname.startsWith('/informes')) return 'recursos-humanos';
+    if (window.location.pathname.startsWith('/dashboard') || window.location.pathname.startsWith('/holerites') || window.location.pathname.startsWith('/informes') || window.location.pathname.startsWith('/recrutamento-selecao')) return 'recursos-humanos';
     if (window.location.pathname.startsWith('/internato-secretaria') || window.location.pathname.startsWith('/internato-notas') || window.location.pathname.startsWith('/internato-agenda')) return 'internato';
     if (window.location.pathname.startsWith('/atendimentos') || window.location.pathname.startsWith('/diretoria-atendimentos')) return 'diretoria';
     return null;
@@ -68,7 +68,7 @@ const Sidebar: React.FC = () => {
       setExpandedMenu('centro-medico');
     } else if (location.pathname.startsWith('/plantao-ti') || location.pathname.startsWith('/ordem-servico') || location.pathname.startsWith('/ordem-servico-mobile') || location.pathname.startsWith('/equipamentos') || location.pathname.startsWith('/custos-ti') || location.pathname.startsWith('/usuarios-tasy')) {
       setExpandedMenu('tecnologia-informacao');
-    } else if (location.pathname.startsWith('/dashboard') || location.pathname.startsWith('/holerites') || location.pathname.startsWith('/informes')) {
+    } else if (location.pathname.startsWith('/dashboard') || location.pathname.startsWith('/holerites') || location.pathname.startsWith('/informes') || location.pathname.startsWith('/recrutamento-selecao')) {
       setExpandedMenu('recursos-humanos');
     } else if (location.pathname.startsWith('/internato-secretaria') || location.pathname.startsWith('/internato-notas') || location.pathname.startsWith('/internato-agenda')) {
       setExpandedMenu('internato');
@@ -935,8 +935,13 @@ const Sidebar: React.FC = () => {
           const hasDashboardAccess = userModules.some(m => m.slug === 'dashboard');
           const hasHoleriteAccess = userModules.some(m => m.slug === 'holerites');
           const hasInformeAccess = userModules.some(m => m.slug === 'informes');
-          const showRH = hasDashboardAccess || hasHoleriteAccess || hasInformeAccess;
-          const isRHActive = location.pathname.startsWith('/dashboard') || location.pathname.startsWith('/holerites') || location.pathname.startsWith('/informes');
+          const hasRecrutamentoAccess = isAdmin || userModules.some(m => m.slug === 'recrutamento-selecao');
+          const showRH = hasDashboardAccess || hasHoleriteAccess || hasInformeAccess || hasRecrutamentoAccess;
+          const isRHActive =
+            location.pathname.startsWith('/dashboard') ||
+            location.pathname.startsWith('/holerites') ||
+            location.pathname.startsWith('/informes') ||
+            location.pathname.startsWith('/recrutamento-selecao');
 
           if (!showRH) return null;
 
@@ -944,6 +949,7 @@ const Sidebar: React.FC = () => {
           if (hasDashboardAccess) firstRHRoute = '/dashboard';
           else if (hasHoleriteAccess) firstRHRoute = '/holerites';
           else if (hasInformeAccess) firstRHRoute = '/informes';
+          else if (hasRecrutamentoAccess) firstRHRoute = '/recrutamento-selecao';
 
           return (
             <div className="flex flex-col">
@@ -1012,6 +1018,19 @@ const Sidebar: React.FC = () => {
                       }
                     >
                       Informe
+                    </NavLink>
+                  )}
+                  {hasRecrutamentoAccess && (
+                    <NavLink
+                      to="/recrutamento-selecao"
+                      className={({ isActive }) =>
+                        `text-sm px-3 py-2 rounded-md transition-colors ${isActive
+                          ? 'bg-primary/10 text-primary font-medium'
+                          : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                        }`
+                      }
+                    >
+                      Triagem de Currículos
                     </NavLink>
                   )}
                 </div>
@@ -1233,6 +1252,7 @@ const Sidebar: React.FC = () => {
             m.slug !== 'dashboard' &&
             m.slug !== 'holerites' &&
             m.slug !== 'informes' &&
+            m.slug !== 'recrutamento-selecao' &&
             m.slug !== 'plantao-ti' &&
             m.slug !== 'ordem-servico' &&
             m.slug !== 'ordem-servico-mobile' &&

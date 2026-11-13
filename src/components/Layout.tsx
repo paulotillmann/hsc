@@ -24,6 +24,7 @@ const Layout: React.FC = () => {
     location.pathname.startsWith('/usuarios-tasy') ||
     location.pathname.startsWith('/atendimentos') ||
     location.pathname.startsWith('/diretoria-atendimentos') ||
+    location.pathname.startsWith('/recrutamento-selecao') ||
     location.pathname.startsWith('/nps-dashboard');
 
   return (

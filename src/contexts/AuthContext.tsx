@@ -206,6 +206,17 @@ const getDefaultModules = (isAdmin: boolean): Module[] => {
         updated_at: new Date().toISOString(),
       },
       {
+        id: 'm-recrutamento-selecao',
+        name: 'Triagem de Currículos',
+        slug: 'recrutamento-selecao',
+        icon: 'UserCheck',
+        is_active: true,
+        sort_order: 35,
+        is_system: false,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      },
+      {
         id: 'm-configuracoes',
         name: 'Configurações',
         slug: 'configuracoes',
