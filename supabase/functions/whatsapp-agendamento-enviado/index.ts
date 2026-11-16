@@ -108,17 +108,9 @@ Por favor, *confirme sua presença* clicando no link abaixo:
 _Hospital Santa Casa de Misericórdia_`;
 }
 
-// ── CONFIGURAÇÃO DE INSTÂNCIAS E TOKENS (EVOLUTION API) ────────────────────
-const CM_INSTANCES_CONFIG: Record<string, { token: string; phone: string }> = {
-  'CM01': {
-    token: Deno.env.get('EVOLUTION_TOKEN_CM01') || '783459BF1329-49E8-878E-2DC27A6D5D72',
-    phone: '553498434630'
-  },
-  'CM02': {
-    token: Deno.env.get('EVOLUTION_TOKEN_CM02') || 'F7A8D18DA33A-4BD8-8E48-2D19C90477D7',
-    phone: '553499223124'
-  }
-};
+// ── CONFIGURAÇÃO DA INSTÂNCIA ÚNICA (EVOLUTION API) ────────────────────────
+const SENDER_INSTANCE = 'HSC - CM01';
+const INSTANCE_TOKEN_FALLBACK = Deno.env.get('EVOLUTION_TOKEN_CM01') || 'D78C0A93294A-4E47-A6CC-86F073310059';
 
 // ── ENVIO PARA A EVOLUTION API ─────────────────────────────────────────────
 async function sendWhatsAppMessage(
@@ -138,28 +130,37 @@ async function sendWhatsAppMessage(
 
   console.log(`[WhatsApp Agendamento] Enviando POST para: ${url} (Destinatário: ${recipient})`);
 
-  const effectiveKey = CM_INSTANCES_CONFIG[instance]?.token || apiKey;
+  // Prioriza o token da instância HSC - CM01, seguido da chave global
+  const candidateKeys = Array.from(new Set([INSTANCE_TOKEN_FALLBACK, apiKey].filter(Boolean)));
+  let lastStatus = 0;
+  let lastErrorText = '';
 
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'apikey': effectiveKey,
-      'Authorization': `Bearer ${effectiveKey}`
-    },
-    body: JSON.stringify(payload)
-  });
+  for (const keyToTry of candidateKeys) {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': keyToTry
+      },
+      body: JSON.stringify(payload)
+    });
 
-  if (!response.ok) {
-    const errorText = await response.text();
-    return {
-      success: false,
-      error: `Evolution API retornou status ${response.status}: ${errorText}`
-    };
+    if (response.ok) {
+      const responseData = await response.json().catch(() => ({}));
+      return { success: true, data: responseData };
+    }
+
+    lastStatus = response.status;
+    lastErrorText = await response.text();
+    if (response.status !== 401 && response.status !== 403) {
+      break;
+    }
   }
 
-  const responseData = await response.json().catch(() => ({}));
-  return { success: true, data: responseData };
+  return {
+    success: false,
+    error: `Evolution API retornou status ${lastStatus}: ${lastErrorText}`
+  };
 }
 
 // ── FLUXO PRINCIPAL DA EDGE FUNCTION ────────────────────────────────────────
@@ -209,10 +210,6 @@ Deno.serve(async (req: Request) => {
   if (!isAuthorized && token.length > 20) {
     isAuthorized = true;
   }
-
-  // Instância remetente padrão (Evolution API): 'HSC TI' (ou configurável via env)
-  const INSTANCE_CM01 = 'CM01';
-  const INSTANCE_CM02 = 'CM02';
 
   // Destinatário padrão de contingência/teste
   const DEFAULT_RECIPIENT = Deno.env.get('DEFAULT_WHATSAPP_RECIPIENT') || '5584998444889';
@@ -359,11 +356,10 @@ Deno.serve(async (req: Request) => {
     const pacientePhone = agendamentoData.telefone || 'Não informado';
     const messageText = buildAppointmentMessage(agendamentoData);
 
-    // Rotação / Seleção da Instância Primária e Backup (CM01 - 553498434630 e CM02 - 553499223124)
-    const primaryInstance = rawBody.instance === INSTANCE_CM02 ? INSTANCE_CM02 : (rawBody.instance === INSTANCE_CM01 ? INSTANCE_CM01 : (Math.random() > 0.5 ? INSTANCE_CM01 : INSTANCE_CM02));
-    const backupInstance = primaryInstance === INSTANCE_CM01 ? INSTANCE_CM02 : INSTANCE_CM01;
+    // Instância única da Evolution API para o Centro Médico: 'HSC - CM01'
+    const usedInstance = SENDER_INSTANCE;
 
-    console.log(`[WhatsApp Agendamento] Destinatário final: ${recipient} (Telefone: ${pacientePhone}) | Primária: ${primaryInstance} | Backup: ${backupInstance}`);
+    console.log(`[WhatsApp Agendamento] Destinatário final: ${recipient} (Telefone: ${pacientePhone}) | Instância: ${usedInstance}`);
 
     if (!EVOLUTION_API_URL || !EVOLUTION_API_KEY) {
       console.warn('[WhatsApp Agendamento] EVOLUTION_API_URL ou EVOLUTION_API_KEY não configuradas no ambiente.');
@@ -374,7 +370,7 @@ Deno.serve(async (req: Request) => {
           message: 'Envio simulado com sucesso (credenciais da Evolution API não detectadas neste ambiente).',
           details: {
             recipient,
-            instance: primaryInstance,
+            instance: usedInstance,
             paciente: agendamentoData.paciente,
             text: messageText
           }
@@ -383,38 +379,21 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    // Disparo com failover automático entre as instâncias CM01 e CM02
-    let usedInstance = primaryInstance;
-    let delivery = await sendWhatsAppMessage(
+    // Disparo exclusivo pela instância HSC - CM01
+    const delivery = await sendWhatsAppMessage(
       EVOLUTION_API_URL,
       EVOLUTION_API_KEY,
-      primaryInstance,
+      usedInstance,
       recipient,
       messageText
     );
 
     if (!delivery.success) {
-      console.warn(`[WhatsApp Agendamento] Falha na instância ${primaryInstance} (${delivery.error}). Acionando contingência com ${backupInstance}...`);
-      const fallbackDelivery = await sendWhatsAppMessage(
-        EVOLUTION_API_URL,
-        EVOLUTION_API_KEY,
-        backupInstance,
-        recipient,
-        messageText
-      );
-      if (fallbackDelivery.success) {
-        delivery = fallbackDelivery;
-        usedInstance = backupInstance;
-        console.log(`[WhatsApp Agendamento] Mensagem enviada com sucesso pela instância de contingência ${backupInstance}!`);
-      }
-    }
-
-    if (!delivery.success) {
-      console.error(`[WhatsApp Agendamento] Erro Evolution API: ${delivery.error}`);
+      console.error(`[WhatsApp Agendamento] Erro Evolution API (${usedInstance}): ${delivery.error}`);
       return new Response(
         JSON.stringify({
           success: false,
-          error: `Erro na Evolution API (Tentado em ${primaryInstance} e ${backupInstance}): ${delivery.error || 'Falha de conexão com a instância'}`
+          error: `Erro na Evolution API (${usedInstance}): ${delivery.error || 'Falha de conexão com a instância'}`
         }),
         { status: 200, headers: corsHeaders }
       );

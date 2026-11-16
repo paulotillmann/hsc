@@ -21,6 +21,8 @@ import {
   CalendarDays,
   Activity,
   Check,
+  CheckSquare,
+  Square,
   Send,
   MoveRight,
   GripVertical,
@@ -97,20 +99,29 @@ const KANBAN_COLUMNS: {
     dotColor: 'bg-purple-500'
   },
   {
-    id: 'Remarcar',
-    label: 'REMARCAR',
-    color: 'text-amber-600 dark:text-amber-400',
-    badgeBg: 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30',
-    border: 'border-amber-500/30',
-    dotColor: 'bg-amber-500'
-  },
-  {
     id: 'Confirmadas',
     label: 'CONFIRMAÇÃO',
     color: 'text-emerald-600 dark:text-emerald-400',
     badgeBg: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30',
     border: 'border-emerald-500/30',
     dotColor: 'bg-emerald-500'
+  },
+  {
+    id: 'Concluídas',
+    label: 'EXECUTADA',
+    color: 'text-teal-600 dark:text-teal-400',
+    badgeBg: 'bg-teal-500/10 text-teal-600 dark:text-teal-400 border-teal-500/30',
+    border: 'border-teal-500/30',
+    dotColor: 'bg-teal-500',
+    isSynced: true
+  },
+  {
+    id: 'Remarcar',
+    label: 'REMARCAR',
+    color: 'text-amber-600 dark:text-amber-400',
+    badgeBg: 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30',
+    border: 'border-amber-500/30',
+    dotColor: 'bg-amber-500'
   },
   {
     id: 'Canceladas',
@@ -123,16 +134,168 @@ const KANBAN_COLUMNS: {
   }
 ];
 
-// Helper para verificar se a consulta veio com status cancelado do Tasy (retorna 'C' ou 'Cancelado'/'Cancelada')
-const isStatusCanceladoTasy = (statusReal?: string, statusOriginal?: string): boolean => {
-  const s1 = (statusReal || '').trim().toLowerCase();
-  const s2 = (statusOriginal || '').trim().toLowerCase();
+// Helper e tipagem dos status do Tasy retornados em DS_STATUS_AGENDA:
+// - Aguardando: Já abriu o atendimento (recepção)
+// - Em atendimento: Está no consultório com o Médico
+// - Cancelada: Cancelou pelo Tasy
+// - Executada: Já finalizou
+// - Normal: Marcada
+export interface TasyStatusInfo {
+  isCancelado: boolean;
+  isExecutada: boolean;
+  isAguardando: boolean;
+  isEmAtendimento: boolean;
+  isNormal: boolean;
+  displayLabel: string;
+}
+
+export const parseTasyStatus = (statusReal?: any, statusOriginal?: any): TasyStatusInfo => {
+  const sReal = typeof statusReal === 'string'
+    ? statusReal.trim()
+    : (statusReal !== null && statusReal !== undefined ? String(statusReal).trim() : '');
+  const sOrig = typeof statusOriginal === 'string'
+    ? statusOriginal.trim()
+    : (statusOriginal !== null && statusOriginal !== undefined ? String(statusOriginal).trim() : '');
+  const combined = `${sReal} ${sOrig}`.toLowerCase();
+
+  // 1. Executada / Concluída / Atendida (Finalizou a consulta no Tasy)
+  if (
+    combined.includes('execut') ||
+    combined.includes('conclu') ||
+    combined.includes('finaliz') ||
+    combined.includes('atendid')
+  ) {
+    return {
+      isCancelado: false,
+      isExecutada: true,
+      isAguardando: false,
+      isEmAtendimento: false,
+      isNormal: false,
+      displayLabel: 'Executada'
+    };
+  }
+
+  // 2. Em atendimento (Está no consultório com o Médico)
+  if (
+    combined.includes('em atendimento') ||
+    combined.includes('atendendo') ||
+    combined.includes('consultorio') ||
+    combined.includes('consultório')
+  ) {
+    return {
+      isCancelado: false,
+      isExecutada: false,
+      isAguardando: false,
+      isEmAtendimento: true,
+      isNormal: false,
+      displayLabel: 'Em Atendimento'
+    };
+  }
+
+  // 3. Aguardando (Já abriu atendimento na recepção, aguardando ser chamado)
+  if (
+    combined.includes('aguard') ||
+    combined.includes('espera') ||
+    combined.includes('recepcao') ||
+    combined.includes('recepção') ||
+    combined.includes('abriu')
+  ) {
+    return {
+      isCancelado: false,
+      isExecutada: false,
+      isAguardando: true,
+      isEmAtendimento: false,
+      isNormal: false,
+      displayLabel: 'Aguardando'
+    };
+  }
+
+  // 4. Cancelada (Cancelou pelo Tasy)
+  // Observação: somente cancelado se NÃO for nenhum dos status clínicos ativos acima
+  const isC = sReal.toLowerCase() === 'c' || sOrig.toLowerCase() === 'c';
+  if (combined.includes('cancelad') || combined.includes('desmarcad') || isC) {
+    return {
+      isCancelado: true,
+      isExecutada: false,
+      isAguardando: false,
+      isEmAtendimento: false,
+      isNormal: false,
+      displayLabel: 'Cancelada'
+    };
+  }
+
+  // 5. Normal / Marcada
+  return {
+    isCancelado: false,
+    isExecutada: false,
+    isAguardando: false,
+    isEmAtendimento: false,
+    isNormal: true,
+    displayLabel: sReal && sReal.toLowerCase() !== 'normal' ? sReal : 'Normal'
+  };
+};
+
+export const isStatusCanceladoTasy = (statusReal?: any, statusOriginal?: any): boolean => {
+  return parseTasyStatus(statusReal, statusOriginal).isCancelado;
+};
+
+// Helper para identificar e ocultar horários bloqueados da agenda do Tasy
+export const isHorarioBloqueado = (item: any): boolean => {
+  if (!item) return false;
+  const paciente = String(item.paciente || item.NM_PACIENTE || item.nm_paciente || item.nome_paciente || item.nome || '').trim().toLowerCase();
+  const statusReal = String(item.statusReal || item.DS_STATUS_AGENDA || item.ds_status_agenda || item.STATUS || item.status || '').trim().toLowerCase();
+  const ieStatus = String(item.IE_STATUS_AGENDA || item.ie_status_agenda || item.ie_status || '').trim().toLowerCase();
+  const classificacao = String(item.convenio || item.DS_CLASSIFICACAO || item.ds_classificacao || '').trim().toLowerCase();
+
   return (
-    s1 === 'c' ||
-    s2 === 'c' ||
-    s1.includes('cancelad') ||
-    s2.includes('cancelad')
+    paciente.includes('bloquead') ||
+    paciente.includes('bloqueio') ||
+    statusReal.includes('bloquead') ||
+    statusReal.includes('bloqueio') ||
+    classificacao.includes('bloquead') ||
+    classificacao.includes('bloqueio') ||
+    ieStatus === 'b'
   );
+};
+
+// Estilo visual da tag de status do Tasy no card
+const getTasyStatusBadge = (statusReal?: any) => {
+  try {
+    const t = parseTasyStatus(statusReal);
+    if (t.isCancelado) {
+      return {
+        label: 'Cancelada',
+        badgeClass: 'bg-rose-500/15 text-rose-600 dark:text-rose-400 border-rose-500/30'
+      };
+    }
+    if (t.isExecutada) {
+      return {
+        label: 'Executada',
+        badgeClass: 'bg-teal-500/15 text-teal-700 dark:text-teal-300 border-teal-500/40 font-semibold'
+      };
+    }
+    if (t.isEmAtendimento) {
+      return {
+        label: 'Em Atendimento',
+        badgeClass: 'bg-indigo-500/15 text-indigo-700 dark:text-indigo-300 border-indigo-500/40 font-semibold'
+      };
+    }
+    if (t.isAguardando) {
+      return {
+        label: 'Aguardando',
+        badgeClass: 'bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/40 font-semibold'
+      };
+    }
+    return {
+      label: t.displayLabel || 'Normal',
+      badgeClass: 'bg-slate-500/10 text-slate-600 dark:text-slate-400 border-slate-500/20'
+    };
+  } catch {
+    return {
+      label: 'Normal',
+      badgeClass: 'bg-slate-500/10 text-slate-600 dark:text-slate-400 border-slate-500/20'
+    };
+  }
 };
 
 // Funções auxiliares para datas
@@ -625,6 +788,11 @@ const persistCardManualStatus = async (
 // Referência persistente para reaproveitar a mesma aba do WhatsApp Web sem abrir múltiplas abas
 let whatsAppWindowRef: Window | null = null;
 
+// Instância única da Evolution API para o Centro Médico e gerador de tempo aleatório entre envios
+const CM_INSTANCE_NAME = 'HSC - CM01';
+const getRandomDelay = (minMs: number, maxMs: number): number =>
+  Math.floor(Math.random() * (maxMs - minMs + 1)) + minMs;
+
 export default function CentroMedico() {
   // Estados Principais: Kanban e Escalas Médicas
   const [activeTab, setActiveTab] = useState<'escalas' | 'kanban'>('kanban');
@@ -744,8 +912,25 @@ export default function CentroMedico() {
           setConfirmedPatientsMap(currentConfMap);
           setAddedOrderMap(currentOrderMap);
           setConsultas(prev => prev.map(c => {
-            if (isStatusCanceladoTasy(c.statusReal, c.status)) {
-              return { ...c, status: 'Canceladas' };
+            const tasyInfo = parseTasyStatus(c.statusReal, c.status);
+            if (tasyInfo.isCancelado) {
+              return { ...c, status: 'Canceladas', statusReal: 'Cancelada' };
+            }
+            if (tasyInfo.isExecutada) {
+              return {
+                ...c,
+                status: 'Concluídas',
+                statusReal: 'Executada',
+                confirmadoPeloPaciente: true
+              };
+            }
+            if (tasyInfo.isAguardando || tasyInfo.isEmAtendimento) {
+              return {
+                ...c,
+                status: 'Confirmadas',
+                statusReal: tasyInfo.displayLabel,
+                confirmadoPeloPaciente: true
+              };
             }
             const isConf = Boolean(currentConfMap[c.id]?.confirmadoPeloPaciente);
             const manualStatus = currentMap[c.id];
@@ -854,6 +1039,41 @@ export default function CentroMedico() {
     };
   }, []);
   
+  // Seleção múltipla de cards para disparo
+  const [selectedCardIds, setSelectedCardIds] = useState<Set<string>>(new Set());
+  const [isSendingSelected, setIsSendingSelected] = useState(false);
+  const [selectedProgress, setSelectedProgress] = useState<{ current: number; total: number; instanceName?: string } | null>(null);
+
+  const toggleCardSelection = (cardId: string) => {
+    setSelectedCardIds(prev => {
+      const next = new Set(prev);
+      if (next.has(cardId)) {
+        next.delete(cardId);
+      } else {
+        next.add(cardId);
+      }
+      return next;
+    });
+  };
+
+  const selectAllCardsInStatus = (status: KanbanStatus, cards: ConsultaAgendada[]) => {
+    const cardIds = cards.filter(c => c.status === status).map(c => c.id);
+    setSelectedCardIds(prev => {
+      const next = new Set(prev);
+      const allSelected = cardIds.length > 0 && cardIds.every(id => next.has(id));
+      if (allSelected) {
+        cardIds.forEach(id => next.delete(id));
+      } else {
+        cardIds.forEach(id => next.add(id));
+      }
+      return next;
+    });
+  };
+
+  const clearSelection = () => {
+    setSelectedCardIds(new Set());
+  };
+
   // Estados de Drag and Drop
   const [draggedCardId, setDraggedCardId] = useState<string | null>(null);
   const [dragOverColumn, setDragOverColumn] = useState<KanbanStatus | null>(null);
@@ -1062,13 +1282,19 @@ export default function CentroMedico() {
       if (rawConsultasList.length > 0) {
         setConsultas(prev => {
           const previousRealCardsForDate = !usingMock
-            ? prev.filter(c => c.data === targetDate && !c.id.startsWith('cons-'))
+            ? prev.filter(c => c.data === targetDate && !c.id.startsWith('cons-') && !isHorarioBloqueado(c))
             : [];
           const currentMemMap = new Map(prev.map(c => [c.id, c.status]));
           const localSavedMap = getStoredManualStatusMap();
           const localConfirmedMap = getStoredConfirmedPatientsMap();
 
-          const mappedConsultas: ConsultaAgendada[] = rawConsultasList.map((incoming: any, idx: number) => {
+          // Filtra previamente horários bloqueados do Tasy para não entrar no Kanban
+          const validConsultasList = rawConsultasList.filter((incoming: any) => {
+            const target = incoming?.json && typeof incoming.json === 'object' ? { ...incoming.json, ...incoming } : incoming;
+            return !isHorarioBloqueado(target);
+          });
+
+          const mappedConsultas: ConsultaAgendada[] = validConsultasList.map((incoming: any, idx: number) => {
             const target = incoming?.json && typeof incoming.json === 'object' 
               ? { ...incoming.json, ...incoming } 
               : incoming;
@@ -1122,18 +1348,45 @@ export default function CentroMedico() {
             // Telefone da coluna NR_TELEFONE
             const telefone = String(getVal(['NR_TELEFONE', 'telefone', 'nr_telefone_celular', 'nr_celular', 'phone', 'celular'], ''));
             
-            // Status real da coluna DS_STATUS_AGENDA / IE_STATUS_AGENDA (no Tasy cancelado retorna 'C')
-            const realStatus = String(getVal(['IE_STATUS_AGENDA', 'DS_STATUS_AGENDA', 'STATUS', 'IE_STATUS', 'statusReal', 'status_real', 'ds_status', 'ie_status'], 'Normal'));
-            const extraStatus = String(getVal(['DS_STATUS_AGENDA', 'IE_STATUS_AGENDA', 'STATUS', 'status'], ''));
+            // Status real retornado pelo Tasy:
+            // DS_STATUS_AGENDA é a coluna oficial que identifica o status no Tasy:
+            // - Aguardando: Já abriu o atendimento (recepção)
+            // - Em atendimento: Está no consultório com o Médico
+            // - Cancelada: Cancelou pelo Tasy
+            // - Executada: Já finalizou
+            // - Normal: Marcada
+            const rawDsStatus = String(getVal(['DS_STATUS_AGENDA', 'STATUS_AGENDA', 'ds_status_agenda', 'status_agenda', 'STATUS', 'ds_status'], '')).trim();
+            const rawIeStatus = String(getVal(['IE_STATUS_AGENDA', 'ie_status_agenda', 'IE_STATUS', 'ie_status'], '')).trim();
+            const realStatus = rawDsStatus || (rawIeStatus ? `Status (${rawIeStatus})` : 'Normal');
 
-            const isCancelado = isStatusCanceladoTasy(realStatus, extraStatus);
-            const isConfirmed = Boolean(localConfirmedMap[rawId]?.confirmadoPeloPaciente);
+            const tasyInfo = parseTasyStatus(rawDsStatus || realStatus, rawIeStatus);
+            const isCancelado = tasyInfo.isCancelado;
+            const isConfirmed = Boolean(localConfirmedMap[rawId]?.confirmadoPeloPaciente) || tasyInfo.isExecutada || tasyInfo.isAguardando || tasyInfo.isEmAtendimento;
             const manualStatus = localSavedMap[rawId] || currentMemMap.get(rawId);
 
-            // REGRA: se o paciente já confirmou pelo link (isConfirmed), entra direto na coluna CONFIRMAÇÃO
-            const targetColumn: KanbanStatus = (isCancelado || manualStatus === 'Canceladas')
-              ? 'Canceladas'
-              : (manualStatus === 'Remarcar' ? 'Remarcar' : (isConfirmed ? 'Confirmadas' : (manualStatus || 'Agendamentos')));
+            // REGRA INTELIGENTE DO KANBAN:
+            // 1. Se Cancelada pelo Tasy -> Coluna CANCELADAS
+            // 2. Se Executada (finalizou no Tasy) -> Coluna EXECUTADA (Concluídas)
+            // 3. Se Aguardando (abriu atendimento), Em atendimento (no consultório) ou se confirmou -> Coluna CONFIRMAÇÃO
+            // 4. Se houver ação manual (Remarcar) -> Coluna REMARCAR
+            // 5. Se já foi enviado via WhatsApp -> respeita manualStatus (ENVIADO)
+            // 6. Caso inicial padrão -> AGENDA (Agendamentos)
+            let targetColumn: KanbanStatus = 'Agendamentos';
+            if (isCancelado || manualStatus === 'Canceladas') {
+              targetColumn = 'Canceladas';
+            } else if (tasyInfo.isExecutada) {
+              targetColumn = 'Concluídas';
+            } else if (tasyInfo.isAguardando || tasyInfo.isEmAtendimento) {
+              targetColumn = 'Confirmadas';
+            } else if (manualStatus === 'Remarcar') {
+              targetColumn = 'Remarcar';
+            } else if (isConfirmed || manualStatus === 'Confirmadas') {
+              targetColumn = 'Confirmadas';
+            } else if (manualStatus) {
+              targetColumn = manualStatus;
+            } else {
+              targetColumn = 'Agendamentos';
+            }
 
             return {
               id: String(rawId),
@@ -1149,33 +1402,29 @@ export default function CentroMedico() {
               convenio,
               telefone,
               status: targetColumn,
-              statusReal: realStatus,
+              statusReal: tasyInfo.displayLabel,
               confirmadoPeloPaciente: isConfirmed,
               confirmadoEm: localConfirmedMap[rawId]?.confirmadoEm
             };
           });
 
+          // Mantém cards anteriores da data que não vieram nessa query pontual mantendo seus status legítimos (e sem bloqueados)
           const returnedIds = new Set(mappedConsultas.map(c => c.id));
-          const disappearedCards = previousRealCardsForDate
-            .filter(oldCard => !returnedIds.has(oldCard.id))
-            .map(oldCard => ({
-              ...oldCard,
-              status: 'Canceladas' as KanbanStatus,
-              statusReal: 'C'
-            }));
+          const retainedCards = previousRealCardsForDate
+            .filter(oldCard => !returnedIds.has(oldCard.id) && !isHorarioBloqueado(oldCard));
 
-          return [...mappedConsultas, ...disappearedCards];
+          return [...mappedConsultas, ...retainedCards];
         });
 
-        // Preserva como "Canceladas" agendamentos reais do mesmo dia que já estavam no Kanban/Supabase
-        // e deixaram de vir na query do n8n após serem cancelados no Tasy
+        // Preserva agendamentos reais do mesmo dia que já estavam no Kanban/Supabase
+        // mantendo o status real que eles já tinham, sem forçá-los para Canceladas
         setConsultas(prev => {
           const incomingIds = new Set(prev.map(c => String(c.id)));
-          const extraCancelled: ConsultaAgendada[] = [];
+          const extraSaved: ConsultaAgendada[] = [];
 
           remoteSavedRows.forEach((row: any) => {
             const cId = String(row.card_id || '');
-            if (!cId || incomingIds.has(cId) || cId.startsWith('cons-')) return;
+            if (!cId || incomingIds.has(cId) || cId.startsWith('cons-') || isHorarioBloqueado(row)) return;
 
             let rowDate = String(row.data_consulta || '').trim();
             if (/^\d{2}\/\d{2}\/\d{4}$/.test(rowDate)) {
@@ -1183,9 +1432,10 @@ export default function CentroMedico() {
               rowDate = `${y}-${m}-${d}`;
             }
 
-            if (rowDate === targetDate && row.paciente) {
+            if (rowDate === targetDate && row.paciente && !isHorarioBloqueado(row)) {
               incomingIds.add(cId);
-              extraCancelled.push({
+              const tInfo = parseTasyStatus(row.statusReal || row.status);
+              extraSaved.push({
                 id: cId,
                 paciente: row.paciente,
                 prontuario: `SEQ-${cId}`,
@@ -1198,13 +1448,13 @@ export default function CentroMedico() {
                 consultorio: row.consultorio || 'Centro Médico (Setor 109)',
                 convenio: row.convenio || 'Consulta',
                 telefone: '',
-                status: 'Canceladas',
-                statusReal: 'C'
+                status: (row.status as KanbanStatus) || (tInfo.isCancelado ? 'Canceladas' : 'Agendamentos'),
+                statusReal: tInfo.displayLabel
               });
             }
           });
 
-          return extraCancelled.length > 0 ? [...prev, ...extraCancelled] : prev;
+          return extraSaved.length > 0 ? [...prev, ...extraSaved] : prev;
         });
 
         setUsingMock(false);
@@ -1320,13 +1570,12 @@ export default function CentroMedico() {
   const sendWhatsAppNotification = async (
     targetCard: ConsultaAgendada,
     statusRef: KanbanStatus,
-    isResend = false,
-    instanceChoice?: 'CM01' | 'CM02'
+    isResend = false
   ) => {
     const isConfirmacao = statusRef === 'Confirmadas';
     const actionLabel = isConfirmacao ? 'confirmação' : 'agendamento';
     const verb = isResend ? 'Reenviando' : 'Disparando';
-    const selectedInstance: 'CM01' | 'CM02' = instanceChoice || (Math.random() > 0.5 ? 'CM01' : 'CM02');
+    const selectedInstance = CM_INSTANCE_NAME;
 
     // Validação preventiva de telefone
     const cleanPhoneDigits = String(targetCard.telefone || '').replace(/\D/g, '');
@@ -1375,7 +1624,7 @@ export default function CentroMedico() {
 
       if (res.error) {
         console.warn('[WhatsApp Agendamento] Tentando fallback para whatsapp-centro-medico:', res.error);
-        const fallbackPhone = selectedInstance === 'CM02' ? '553499223124' : '553498434630';
+        const fallbackPhone = '553498434630';
         res = await supabase.functions.invoke('whatsapp-centro-medico', {
           body: {
             cardId: targetCard.id,
@@ -1516,22 +1765,20 @@ export default function CentroMedico() {
       return c;
     }));
 
-    // Dispara WhatsApp intercalando entre CM01 e CM02 com intervalos humanizados anti-bloqueio
+    // Dispara WhatsApp utilizando exclusivamente a instância HSC - CM01 com intervalos aleatórios anti-bloqueio
     let successCount = 0;
     for (let i = 0; i < agendamentosCards.length; i++) {
       const card = agendamentosCards[i];
-      // Intercalação 1 a 1: par usa CM01, ímpar usa CM02
-      const targetInstance = CM_INSTANCES[i % 2];
-      setSendingProgress({ current: i + 1, total: agendamentosCards.length, instanceName: targetInstance.name });
+      setSendingProgress({ current: i + 1, total: agendamentosCards.length, instanceName: CM_INSTANCE_NAME });
 
       const updatedCard: ConsultaAgendada = { ...card, status: 'Enviadas', statusReal: 'Enviadas', addedAt: now };
       persistCardManualStatus(card.id, 'Enviadas', updatedCard);
 
       try {
-        await sendWhatsAppNotification(updatedCard, 'Enviadas', false, targetInstance.name);
+        await sendWhatsAppNotification(updatedCard, 'Enviadas', false);
         successCount++;
       } catch (err) {
-        console.error(`Erro ao disparar WhatsApp via ${targetInstance.name} para ${card.paciente}:`, err);
+        console.error(`Erro ao disparar WhatsApp via ${CM_INSTANCE_NAME} para ${card.paciente}:`, err);
       }
 
       // Intervalo de segurança humanizado entre mensagens para proteção do chip
@@ -1567,15 +1814,13 @@ export default function CentroMedico() {
     let successCount = 0;
     for (let i = 0; i < enviadasCards.length; i++) {
       const card = enviadasCards[i];
-      // Intercalação 1 a 1: par usa CM01, ímpar usa CM02
-      const targetInstance = CM_INSTANCES[i % 2];
-      setResendingAllProgress({ current: i + 1, total: enviadasCards.length, instanceName: targetInstance.name });
+      setResendingAllProgress({ current: i + 1, total: enviadasCards.length, instanceName: CM_INSTANCE_NAME });
 
       try {
-        await sendWhatsAppNotification(card, 'Enviadas', true, targetInstance.name);
+        await sendWhatsAppNotification(card, 'Enviadas', true);
         successCount++;
       } catch (err) {
-        console.error(`Erro ao reenviar WhatsApp via ${targetInstance.name} para ${card.paciente}:`, err);
+        console.error(`Erro ao reenviar WhatsApp via ${CM_INSTANCE_NAME} para ${card.paciente}:`, err);
       }
 
       // Intervalo de segurança humanizado entre mensagens para proteção do chip
@@ -1593,6 +1838,123 @@ export default function CentroMedico() {
     setIsResendingAllEnviadas(false);
     setResendingAllProgress(null);
     showToast('success', `WhatsApp reenviado com sucesso para ${successCount} paciente(s) da ENVIADO!`);
+  };
+
+  // Enviar apenas os pacientes SELECIONADOS via checkbox da coluna "Agendamentos" para "Enviadas"
+  const handleSendSelectedAgendamentos = async () => {
+    if (isSendingSelected || isSendingAll) return;
+    const selectedCards = filteredConsultas.filter(c => c.status === 'Agendamentos' && selectedCardIds.has(c.id));
+    if (selectedCards.length === 0) {
+      showToast('info', 'Selecione pelo menos um paciente na coluna Agenda para enviar.');
+      return;
+    }
+
+    setIsSendingSelected(true);
+    setSelectedProgress({ current: 0, total: selectedCards.length });
+    showToast('info', `Iniciando envio de ${selectedCards.length} paciente(s) selecionado(s)...`);
+
+    const now = Date.now();
+    const updatedIds = new Set(selectedCards.map(c => c.id));
+
+    // Move os cards selecionados visualmente para "Enviadas"
+    setConsultas(prev => prev.map(c => {
+      if (updatedIds.has(c.id)) {
+        return {
+          ...c,
+          status: 'Enviadas' as KanbanStatus,
+          statusReal: 'Enviadas',
+          addedAt: now
+        };
+      }
+      return c;
+    }));
+
+    // Desmarca os enviados da seleção
+    setSelectedCardIds(prev => {
+      const next = new Set(prev);
+      updatedIds.forEach(id => next.delete(id));
+      return next;
+    });
+
+    let successCount = 0;
+    for (let i = 0; i < selectedCards.length; i++) {
+      const card = selectedCards[i];
+      setSelectedProgress({ current: i + 1, total: selectedCards.length, instanceName: CM_INSTANCE_NAME });
+
+      const updatedCard: ConsultaAgendada = { ...card, status: 'Enviadas', statusReal: 'Enviadas', addedAt: now };
+      persistCardManualStatus(card.id, 'Enviadas', updatedCard);
+
+      try {
+        await sendWhatsAppNotification(updatedCard, 'Enviadas', false);
+        successCount++;
+      } catch (err) {
+        console.error(`Erro ao disparar WhatsApp via ${CM_INSTANCE_NAME} para ${card.paciente}:`, err);
+      }
+
+      // Intervalo de segurança humanizado entre mensagens (3s a 5.5s)
+      if (i < selectedCards.length - 1) {
+        if ((i + 1) % 10 === 0) {
+          showToast('info', 'Pausa de segurança anti-bloqueio (15s) entre lotes...');
+          await new Promise(resolve => setTimeout(resolve, 15000));
+        } else {
+          const delay = getRandomDelay(3000, 5500);
+          await new Promise(resolve => setTimeout(resolve, delay));
+        }
+      }
+    }
+
+    setIsSendingSelected(false);
+    setSelectedProgress(null);
+    showToast('success', `${successCount} paciente(s) selecionado(s) enviados com sucesso!`);
+  };
+
+  // Reenviar apenas os pacientes SELECIONADOS da coluna "Enviadas"
+  const handleResendSelectedEnviadas = async () => {
+    if (isSendingSelected || isResendingAllEnviadas) return;
+    const selectedCards = filteredConsultas.filter(c => c.status === 'Enviadas' && selectedCardIds.has(c.id));
+    if (selectedCards.length === 0) {
+      showToast('info', 'Selecione pelo menos um paciente na coluna ENVIADO para reenviar.');
+      return;
+    }
+
+    setIsSendingSelected(true);
+    setSelectedProgress({ current: 0, total: selectedCards.length });
+    showToast('info', `Iniciando reenvio de ${selectedCards.length} paciente(s) selecionado(s)...`);
+
+    let successCount = 0;
+    for (let i = 0; i < selectedCards.length; i++) {
+      const card = selectedCards[i];
+      setSelectedProgress({ current: i + 1, total: selectedCards.length, instanceName: CM_INSTANCE_NAME });
+
+      try {
+        await sendWhatsAppNotification(card, 'Enviadas', true);
+        successCount++;
+      } catch (err) {
+        console.error(`Erro ao reenviar WhatsApp via ${CM_INSTANCE_NAME} para ${card.paciente}:`, err);
+      }
+
+      // Intervalo de segurança humanizado entre mensagens (3s a 5.5s)
+      if (i < selectedCards.length - 1) {
+        if ((i + 1) % 10 === 0) {
+          showToast('info', 'Pausa de segurança anti-bloqueio (15s) entre lotes...');
+          await new Promise(resolve => setTimeout(resolve, 15000));
+        } else {
+          const delay = getRandomDelay(3000, 5500);
+          await new Promise(resolve => setTimeout(resolve, delay));
+        }
+      }
+    }
+
+    // Desmarca os reenviados da seleção
+    setSelectedCardIds(prev => {
+      const next = new Set(prev);
+      selectedCards.forEach(c => next.delete(c.id));
+      return next;
+    });
+
+    setIsSendingSelected(false);
+    setSelectedProgress(null);
+    showToast('success', `${successCount} paciente(s) selecionado(s) reenviados com sucesso!`);
   };
 
   // Ação de Confirmação de Consulta do Paciente
@@ -1670,12 +2032,14 @@ export default function CentroMedico() {
 
   // Escalas Filtradas
   const filteredEscalas = useMemo(() => {
+    const term = (searchTerm || '').trim().toLowerCase();
     return escalas.filter(item => {
       const matchesSearch =
-        item.medico.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        item.crm.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        item.especialidade.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        item.setor.toLowerCase().includes(searchTerm.toLowerCase());
+        !term ||
+        String(item.medico || '').toLowerCase().includes(term) ||
+        String(item.crm || '').toLowerCase().includes(term) ||
+        String(item.especialidade || '').toLowerCase().includes(term) ||
+        String(item.setor || '').toLowerCase().includes(term);
 
       const matchesEsp = selectedEspecialidade === 'TODAS' || item.especialidade === selectedEspecialidade;
       const matchesStatus = selectedStatus === 'TODOS' || item.status === selectedStatus;
@@ -1686,14 +2050,19 @@ export default function CentroMedico() {
 
   // Consultas Filtradas (com filtro por data selecionada)
   const filteredConsultas = useMemo(() => {
+    const term = (searchTerm || '').trim().toLowerCase();
     return consultas.filter(item => {
+      // Oculta completamente horários bloqueados do Kanban
+      if (isHorarioBloqueado(item)) return false;
+
       const matchesDate = !selectedDate || item.data === selectedDate;
 
       const matchesSearch =
-        item.paciente.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        item.prontuario.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        item.medico.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        item.convenio.toLowerCase().includes(searchTerm.toLowerCase());
+        !term ||
+        String(item.paciente || '').toLowerCase().includes(term) ||
+        String(item.prontuario || '').toLowerCase().includes(term) ||
+        String(item.medico || '').toLowerCase().includes(term) ||
+        String(item.convenio || '').toLowerCase().includes(term);
 
       const matchesEsp = selectedEspecialidade === 'TODAS' || item.especialidade === selectedEspecialidade;
       const matchesStatus = selectedStatus === 'TODOS' || item.status === selectedStatus;
@@ -1704,12 +2073,14 @@ export default function CentroMedico() {
 
   // Cards de Métricas
   const stats = useMemo(() => {
+    const activeConsultas = consultas.filter(c => !isHorarioBloqueado(c));
     const totalPlantonistas = escalas.filter(e => e.status === 'Presencial' || e.status === 'Sobreaviso').length;
-    const totalConsultasHoje = consultas.length;
-    const canceladas = consultas.filter(c => c.status === 'Canceladas').length;
-    const confirmadas = consultas.filter(c => c.status === 'Confirmadas').length;
+    const totalConsultasHoje = activeConsultas.length;
+    const canceladas = activeConsultas.filter(c => c.status === 'Canceladas').length;
+    const confirmadas = activeConsultas.filter(c => c.status === 'Confirmadas').length;
+    const executadas = activeConsultas.filter(c => c.status === 'Concluídas').length;
 
-    return { totalPlantonistas, totalConsultasHoje, canceladas, confirmadas };
+    return { totalPlantonistas, totalConsultasHoje, canceladas, confirmadas, executadas };
   }, [escalas, consultas]);
 
   return (
@@ -1822,7 +2193,7 @@ export default function CentroMedico() {
       </div>
 
       {/* Cards de Métricas / Estatísticas Responsivos */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 w-full min-w-0">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 w-full min-w-0">
         <div className="bg-card border border-border/80 p-3.5 sm:p-4 rounded-xl shadow-sm flex items-center justify-between gap-3 min-w-0">
           <div className="min-w-0 flex-1">
             <p className="text-xs text-muted-foreground font-medium truncate">Plantonistas Ativos</p>
@@ -1845,7 +2216,7 @@ export default function CentroMedico() {
 
         <div className="bg-card border border-border/80 p-3.5 sm:p-4 rounded-xl shadow-sm flex items-center justify-between gap-3 min-w-0">
           <div className="min-w-0 flex-1">
-            <p className="text-xs text-muted-foreground font-medium truncate">Consultas Confirmadas</p>
+            <p className="text-xs text-muted-foreground font-medium truncate">Confirmadas</p>
             <p className="text-2xl font-bold text-foreground mt-1 truncate">{stats.confirmadas}</p>
           </div>
           <div className="h-10 w-10 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
@@ -1855,7 +2226,17 @@ export default function CentroMedico() {
 
         <div className="bg-card border border-border/80 p-3.5 sm:p-4 rounded-xl shadow-sm flex items-center justify-between gap-3 min-w-0">
           <div className="min-w-0 flex-1">
-            <p className="text-xs text-muted-foreground font-medium truncate">Agendas Canceladas</p>
+            <p className="text-xs text-muted-foreground font-medium truncate">Executadas</p>
+            <p className="text-2xl font-bold text-foreground mt-1 truncate">{stats.executadas}</p>
+          </div>
+          <div className="h-10 w-10 rounded-lg bg-teal-500/10 text-teal-600 dark:text-teal-400 flex items-center justify-center shrink-0">
+            <CheckCircle2 className="h-5 w-5 text-teal-600 dark:text-teal-400" />
+          </div>
+        </div>
+
+        <div className="bg-card border border-border/80 p-3.5 sm:p-4 rounded-xl shadow-sm flex items-center justify-between gap-3 min-w-0">
+          <div className="min-w-0 flex-1">
+            <p className="text-xs text-muted-foreground font-medium truncate">Canceladas</p>
             <p className="text-2xl font-bold text-foreground mt-1 truncate">{stats.canceladas}</p>
           </div>
           <div className="h-10 w-10 rounded-lg bg-rose-500/10 text-rose-600 dark:text-rose-400 flex items-center justify-center shrink-0">
@@ -1872,8 +2253,8 @@ export default function CentroMedico() {
         {/* ── ABA KANBAN ── */}
         {activeTab === 'kanban' && (
           <div key="tab-kanban" className="space-y-3 w-full min-w-0">
-              {/* Grid das Colunas Kanban (4 colunas principais com distribuição perfeita e fluida sem barra de rolagem desnecessária) */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 items-stretch w-full min-w-0 pb-4">
+              {/* Grid das Colunas Kanban */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3 items-stretch w-full min-w-0 pb-4">
                 {KANBAN_COLUMNS.map(col => {
                   let colCards = filteredConsultas.filter(c => c.status === col.id);
 
@@ -1881,18 +2262,18 @@ export default function CentroMedico() {
                   if (col.id === 'Confirmadas') {
                     // Na coluna "Confirmação", os pacientes confirmados recentemente ficam no topo, desempate por horário
                     colCards = [...colCards].sort((a, b) => {
-                      const orderA = addedOrderMap[a.id] ?? a.addedAt ?? 0;
-                      const orderB = addedOrderMap[b.id] ?? b.addedAt ?? 0;
+                      const orderA = addedOrderMap?.[a.id] ?? a.addedAt ?? 0;
+                      const orderB = addedOrderMap?.[b.id] ?? b.addedAt ?? 0;
                       if (orderA !== orderB) {
                         return orderB - orderA;
                       }
-                      return (a.horario || '').localeCompare(b.horario || '', undefined, { numeric: true });
+                      return String(a.horario || '').localeCompare(String(b.horario || ''), undefined, { numeric: true });
                     });
                   } else {
-                    // Em todas as outras colunas (Agendamentos, Enviadas, Canceladas):
+                    // Em todas as outras colunas (Agendamentos, Enviadas, Concluídas, Remarcar, Canceladas):
                     // Ordenação cronológica contínua por horário (ex: 07:00, 07:30, 08:00, 08:30...)
                     colCards = [...colCards].sort((a, b) => {
-                      return (a.horario || '').localeCompare(b.horario || '', undefined, { numeric: true });
+                      return String(a.horario || '').localeCompare(String(b.horario || ''), undefined, { numeric: true });
                     });
                   }
 
@@ -1960,75 +2341,206 @@ export default function CentroMedico() {
                           </div>
                         )}
 
-                        {/* Botão de Enviar Todos para o Kanban Enviadas */}
-                        {col.id === 'Agendamentos' && (
-                          <button
-                            type="button"
-                            onClick={handleSendAllAgendamentosToEnviadas}
-                            disabled={colCards.length === 0 || isSendingAll}
-                            title={
-                              colCards.length === 0
-                                ? 'Nenhum agendamento para enviar'
-                                : `Mover todos os ${colCards.length} pacientes para ENVIADO e disparar WhatsApp`
-                            }
-                            className={`w-full flex items-center justify-center gap-2 py-2 px-3 rounded-xl text-xs font-semibold transition-all active:scale-[0.98] cursor-pointer shadow-xs disabled:opacity-50 disabled:cursor-not-allowed text-center break-words mt-1 ${
-                              isSendingAll
-                                ? 'bg-purple-600/20 text-purple-700 dark:text-purple-300 border border-purple-500/40'
-                                : 'bg-blue-600 hover:bg-blue-700 text-white shadow-blue-500/20'
-                            }`}
-                          >
-                            {isSendingAll ? (
-                              <>
-                                <RefreshCw className="h-3.5 w-3.5 animate-spin shrink-0" />
-                                <span>
-                                  {sendingProgress
-                                    ? `Enviando (${sendingProgress.current}/${sendingProgress.total}${sendingProgress.instanceName ? ` • ${sendingProgress.instanceName}` : ''})...`
-                                    : 'Enviando todos...'}
-                                </span>
-                              </>
-                            ) : (
-                              <>
-                                <Send className="h-3.5 w-3.5 shrink-0" />
-                                <span>Enviar Todos</span>
-                              </>
-                            )}
-                          </button>
-                        )}
+                        {/* Botões de Ação na coluna "Agendamentos" (Agenda) */}
+                        {col.id === 'Agendamentos' && (() => {
+                          const selectedCount = colCards.filter(c => selectedCardIds.has(c.id)).length;
+                          const allColSelected = colCards.length > 0 && selectedCount === colCards.length;
 
-                        {/* Botão de Enviar Todos na coluna "ENVIADO" (Enviadas) */}
-                        {col.id === 'Enviadas' && (
-                          <button
-                            type="button"
-                            onClick={handleResendAllEnviadas}
-                            disabled={colCards.length === 0 || isResendingAllEnviadas}
-                            title={
-                              colCards.length === 0
-                                ? 'Nenhum paciente para enviar'
-                                : `Reenviar notificação de WhatsApp para todos os ${colCards.length} pacientes da ENVIADO`
-                            }
-                            className={`w-full flex items-center justify-center gap-2 py-2 px-3 rounded-xl text-xs font-semibold transition-all active:scale-[0.98] cursor-pointer shadow-xs disabled:opacity-50 disabled:cursor-not-allowed text-center break-words mt-1 ${
-                              isResendingAllEnviadas
-                                ? 'bg-purple-600/20 text-purple-700 dark:text-purple-300 border border-purple-500/40'
-                                : 'bg-purple-600 hover:bg-purple-700 text-white shadow-purple-500/20'
-                            }`}
-                          >
-                            {isResendingAllEnviadas ? (
-                              <>
-                                <RefreshCw className="h-3.5 w-3.5 animate-spin shrink-0" />
-                                <span>
-                                  {resendingAllProgress
-                                    ? `Enviando (${resendingAllProgress.current}/${resendingAllProgress.total}${resendingAllProgress.instanceName ? ` • ${resendingAllProgress.instanceName}` : ''})...`
-                                    : 'Enviando todos...'}
-                                </span>
-                              </>
-                            ) : (
-                              <>
-                                <Send className="h-3.5 w-3.5 shrink-0" />
-                                <span>Enviar Todos</span>
-                              </>
-                            )}
-                          </button>
-                        )}
+                          return (
+                            <div className="space-y-1.5 mt-1 w-full min-w-0">
+                              {/* Botão de Enviar Selecionados (ou Enviar Todos) */}
+                              {selectedCount > 0 ? (
+                                <button
+                                  type="button"
+                                  onClick={handleSendSelectedAgendamentos}
+                                  disabled={isSendingSelected || isSendingAll}
+                                  title={`Enviar WhatsApp apenas para os ${selectedCount} paciente(s) selecionado(s)`}
+                                  className={`w-full flex items-center justify-center gap-2 py-2 px-3 rounded-xl text-xs font-semibold transition-all active:scale-[0.98] cursor-pointer shadow-xs disabled:opacity-50 disabled:cursor-not-allowed text-center break-words ${
+                                    isSendingSelected
+                                      ? 'bg-purple-600/20 text-purple-700 dark:text-purple-300 border border-purple-500/40'
+                                      : 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-500/20'
+                                  }`}
+                                >
+                                  {isSendingSelected ? (
+                                    <>
+                                      <RefreshCw className="h-3.5 w-3.5 animate-spin shrink-0" />
+                                      <span>
+                                        {selectedProgress
+                                          ? `Enviando (${selectedProgress.current}/${selectedProgress.total})...`
+                                          : 'Enviando selecionados...'}
+                                      </span>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <Send className="h-3.5 w-3.5 shrink-0" />
+                                      <span>Enviar Selecionados ({selectedCount})</span>
+                                    </>
+                                  )}
+                                </button>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={handleSendAllAgendamentosToEnviadas}
+                                  disabled={colCards.length === 0 || isSendingAll || isSendingSelected}
+                                  title={
+                                    colCards.length === 0
+                                      ? 'Nenhum agendamento para enviar'
+                                      : `Mover todos os ${colCards.length} pacientes para ENVIADO e disparar WhatsApp`
+                                  }
+                                  className={`w-full flex items-center justify-center gap-2 py-2 px-3 rounded-xl text-xs font-semibold transition-all active:scale-[0.98] cursor-pointer shadow-xs disabled:opacity-50 disabled:cursor-not-allowed text-center break-words ${
+                                    isSendingAll
+                                      ? 'bg-purple-600/20 text-purple-700 dark:text-purple-300 border border-purple-500/40'
+                                      : 'bg-blue-600 hover:bg-blue-700 text-white shadow-blue-500/20'
+                                  }`}
+                                >
+                                  {isSendingAll ? (
+                                    <>
+                                      <RefreshCw className="h-3.5 w-3.5 animate-spin shrink-0" />
+                                      <span>
+                                        {sendingProgress
+                                          ? `Enviando (${sendingProgress.current}/${sendingProgress.total}${sendingProgress.instanceName ? ` • ${sendingProgress.instanceName}` : ''})...`
+                                          : 'Enviando todos...'}
+                                      </span>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <Send className="h-3.5 w-3.5 shrink-0" />
+                                      <span>Enviar Todos</span>
+                                    </>
+                                  )}
+                                </button>
+                              )}
+
+                              {/* Atalho Selecionar Todos / Desmarcar */}
+                              {colCards.length > 0 && (
+                                <div className="flex items-center justify-between px-1 text-[11px] text-muted-foreground">
+                                  <button
+                                    type="button"
+                                    onClick={() => selectAllCardsInStatus('Agendamentos', filteredConsultas)}
+                                    className="hover:text-primary transition-colors cursor-pointer flex items-center gap-1 font-medium"
+                                  >
+                                    {allColSelected ? (
+                                      <>
+                                        <CheckSquare className="h-3 w-3 text-primary" />
+                                        <span>Desmarcar todos</span>
+                                      </>
+                                    ) : (
+                                      <>
+                                        <Square className="h-3 w-3" />
+                                        <span>Selecionar todos</span>
+                                      </>
+                                    )}
+                                  </button>
+                                  {selectedCount > 0 && (
+                                    <span className="font-semibold text-primary">
+                                      {selectedCount} selecionado{selectedCount > 1 ? 's' : ''}
+                                    </span>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })()}
+
+                        {/* Botões de Ação na coluna "ENVIADO" (Enviadas) */}
+                        {col.id === 'Enviadas' && (() => {
+                          const selectedCount = colCards.filter(c => selectedCardIds.has(c.id)).length;
+                          const allColSelected = colCards.length > 0 && selectedCount === colCards.length;
+
+                          return (
+                            <div className="space-y-1.5 mt-1 w-full min-w-0">
+                              {selectedCount > 0 ? (
+                                <button
+                                  type="button"
+                                  onClick={handleResendSelectedEnviadas}
+                                  disabled={isSendingSelected || isResendingAllEnviadas}
+                                  title={`Reenviar WhatsApp apenas para os ${selectedCount} paciente(s) selecionado(s)`}
+                                  className={`w-full flex items-center justify-center gap-2 py-2 px-3 rounded-xl text-xs font-semibold transition-all active:scale-[0.98] cursor-pointer shadow-xs disabled:opacity-50 disabled:cursor-not-allowed text-center break-words ${
+                                    isSendingSelected
+                                      ? 'bg-purple-600/20 text-purple-700 dark:text-purple-300 border border-purple-500/40'
+                                      : 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-500/20'
+                                  }`}
+                                >
+                                  {isSendingSelected ? (
+                                    <>
+                                      <RefreshCw className="h-3.5 w-3.5 animate-spin shrink-0" />
+                                      <span>
+                                        {selectedProgress
+                                          ? `Reenviando (${selectedProgress.current}/${selectedProgress.total})...`
+                                          : 'Reenviando selecionados...'}
+                                      </span>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <Send className="h-3.5 w-3.5 shrink-0" />
+                                      <span>Reenviar Selecionados ({selectedCount})</span>
+                                    </>
+                                  )}
+                                </button>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={handleResendAllEnviadas}
+                                  disabled={colCards.length === 0 || isResendingAllEnviadas || isSendingSelected}
+                                  title={
+                                    colCards.length === 0
+                                      ? 'Nenhum paciente para enviar'
+                                      : `Reenviar notificação de WhatsApp para todos os ${colCards.length} pacientes da ENVIADO`
+                                  }
+                                  className={`w-full flex items-center justify-center gap-2 py-2 px-3 rounded-xl text-xs font-semibold transition-all active:scale-[0.98] cursor-pointer shadow-xs disabled:opacity-50 disabled:cursor-not-allowed text-center break-words ${
+                                    isResendingAllEnviadas
+                                      ? 'bg-purple-600/20 text-purple-700 dark:text-purple-300 border border-purple-500/40'
+                                      : 'bg-purple-600 hover:bg-purple-700 text-white shadow-purple-500/20'
+                                  }`}
+                                >
+                                  {isResendingAllEnviadas ? (
+                                    <>
+                                      <RefreshCw className="h-3.5 w-3.5 animate-spin shrink-0" />
+                                      <span>
+                                        {resendingAllProgress
+                                          ? `Enviando (${resendingAllProgress.current}/${resendingAllProgress.total}${resendingAllProgress.instanceName ? ` • ${resendingAllProgress.instanceName}` : ''})...`
+                                          : 'Enviando todos...'}
+                                      </span>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <Send className="h-3.5 w-3.5 shrink-0" />
+                                      <span>Enviar Todos</span>
+                                    </>
+                                  )}
+                                </button>
+                              )}
+
+                              {/* Atalho Selecionar Todos / Desmarcar */}
+                              {colCards.length > 0 && (
+                                <div className="flex items-center justify-between px-1 text-[11px] text-muted-foreground">
+                                  <button
+                                    type="button"
+                                    onClick={() => selectAllCardsInStatus('Enviadas', filteredConsultas)}
+                                    className="hover:text-primary transition-colors cursor-pointer flex items-center gap-1 font-medium"
+                                  >
+                                    {allColSelected ? (
+                                      <>
+                                        <CheckSquare className="h-3 w-3 text-primary" />
+                                        <span>Desmarcar todos</span>
+                                      </>
+                                    ) : (
+                                      <>
+                                        <Square className="h-3 w-3" />
+                                        <span>Selecionar todos</span>
+                                      </>
+                                    )}
+                                  </button>
+                                  {selectedCount > 0 && (
+                                    <span className="font-semibold text-primary">
+                                      {selectedCount} selecionado{selectedCount > 1 ? 's' : ''}
+                                    </span>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })()}
                       </div>
 
                       {/* Lista de Cards da Coluna com Organização Uniforme */}
@@ -2039,70 +2551,98 @@ export default function CentroMedico() {
                           </div>
                         ) : (
                           colCards.map(card => {
-                            const isConfirmed = Boolean(card.confirmadoPeloPaciente || confirmedPatientsMap[card.id]?.confirmadoPeloPaciente);
+                            const isConfirmed = Boolean(card.confirmadoPeloPaciente || confirmedPatientsMap?.[card.id]?.confirmadoPeloPaciente);
+
+                            // Borda lateral sutil e limpa de acordo com a etapa do card
+                            const accentBorder = 
+                              card.status === 'Confirmadas' ? 'border-l-4 border-l-emerald-500 dark:border-l-emerald-400' :
+                              card.status === 'Concluídas' ? 'border-l-4 border-l-teal-500 dark:border-l-teal-400' :
+                              card.status === 'Remarcar' ? 'border-l-4 border-l-amber-500 dark:border-l-amber-400' :
+                              card.status === 'Canceladas' ? 'border-l-4 border-l-rose-500 dark:border-l-rose-400' :
+                              card.status === 'Enviadas' ? 'border-l-4 border-l-purple-500 dark:border-l-purple-400' :
+                              'border-l-4 border-l-blue-500 dark:border-l-blue-400';
 
                             return (
                               <div
                                 key={card.id}
                                 draggable
                                 onDragStart={e => handleDragStart(e, card.id)}
-                                className={`w-full max-w-full min-w-0 box-border p-3 sm:p-3.5 rounded-2xl transition-all cursor-grab active:cursor-grabbing flex flex-col gap-2.5 relative group border shadow-xs hover:shadow-md ${
-                                  isConfirmed
-                                    ? 'bg-emerald-600 dark:bg-emerald-600 text-white border-emerald-400 shadow-emerald-950/20 ring-1 ring-emerald-300/40'
-                                    : 'bg-card border-border/80 hover:border-primary/40'
-                                }`}
+                                className={`w-full max-w-full min-w-0 box-border p-3 sm:p-3.5 rounded-2xl transition-all cursor-grab active:cursor-grabbing flex flex-col gap-2.5 relative group border bg-card border-border/80 hover:border-primary/40 shadow-xs hover:shadow-md text-foreground ${accentBorder}`}
                               >
                                 {/* Selo de Confirmação do Paciente */}
                                 {isConfirmed && (
-                                  <div className="w-full min-w-0 flex items-center gap-1.5 bg-emerald-800/90 text-white px-2.5 py-1 rounded-xl border border-emerald-300/40 text-[9.5px] sm:text-[10px] font-bold shadow-xs">
-                                    <CheckCircle2 className="h-3.5 w-3.5 text-emerald-300 animate-pulse shrink-0" />
-                                    <span className="leading-tight break-words">PACIENTE CONFIRMOU PRESENÇA</span>
+                                  <div className="w-full min-w-0 flex items-center gap-1.5 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 px-2.5 py-1 rounded-xl border border-emerald-500/20 text-[10px] font-semibold shadow-xs">
+                                    <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                                    <span className="leading-tight break-words">Paciente Confirmou Presença</span>
                                   </div>
                                 )}
 
                                 {/* Selo de Solicitação de Remarcação */}
                                 {!isConfirmed && card.status === 'Remarcar' && (
-                                  <div className="w-full min-w-0 flex items-center gap-1.5 bg-amber-500/15 text-amber-600 dark:text-amber-400 px-2.5 py-1 rounded-xl border border-amber-500/30 text-[9.5px] sm:text-[10px] font-bold shadow-xs">
+                                  <div className="w-full min-w-0 flex items-center gap-1.5 bg-amber-500/10 text-amber-700 dark:text-amber-300 px-2.5 py-1 rounded-xl border border-amber-500/20 text-[10px] font-semibold shadow-xs">
                                     <RefreshCw className="h-3.5 w-3.5 text-amber-500 shrink-0" />
-                                    <span className="leading-tight break-words">SOLICITOU REMARCAÇÃO</span>
+                                    <span className="leading-tight break-words">Solicitou Remarcação</span>
                                   </div>
                                 )}
 
-                                {/* Topo: Classificação */}
-                                <div className="flex items-center w-full min-w-0">
-                                  <span className={`px-2 py-0.5 rounded-md font-semibold text-[10.5px] uppercase tracking-wide border break-words ${
-                                    isConfirmed
-                                      ? 'bg-emerald-800/80 border-emerald-400/50 text-emerald-100'
-                                      : 'bg-muted/70 border-border/60 text-muted-foreground'
-                                  }`}>
-                                    {card.convenio || 'Consulta'}
-                                  </span>
+                                {/* Topo: Checkbox de Seleção + Classificação + Status Tasy + Horário */}
+                                <div className="flex items-center justify-between gap-2 w-full min-w-0">
+                                  <div className="flex items-center gap-1.5 min-w-0 flex-wrap">
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        toggleCardSelection(card.id);
+                                      }}
+                                      title={selectedCardIds.has(card.id) ? 'Desmarcar consulta' : 'Selecionar consulta para envio'}
+                                      className={`h-5 w-5 rounded-md flex items-center justify-center transition-all cursor-pointer shrink-0 border ${
+                                        selectedCardIds.has(card.id)
+                                          ? 'bg-primary border-primary text-primary-foreground shadow-xs'
+                                          : 'border-border/80 bg-background text-transparent hover:border-primary/60'
+                                      }`}
+                                    >
+                                      <Check className={`h-3.5 w-3.5 stroke-[3] ${selectedCardIds.has(card.id) ? 'opacity-100' : 'opacity-0'}`} />
+                                    </button>
+
+                                    <span className="px-2 py-0.5 rounded-md font-semibold text-[10.5px] uppercase tracking-wide border border-border/60 bg-muted/70 text-muted-foreground break-words">
+                                      {card.convenio || 'Consulta'}
+                                    </span>
+
+                                    {/* Badge oficial de status do Tasy (Aguardando, Em atendimento, Executada, Normal, Cancelada) */}
+                                    {(() => {
+                                      const tBadge = getTasyStatusBadge(card.statusReal);
+                                      return (
+                                        <span className={`px-2 py-0.5 rounded-md font-semibold text-[10px] border tracking-tight break-words ${tBadge?.badgeClass || 'bg-slate-500/10 text-slate-600 border-slate-500/20'}`}>
+                                          {tBadge?.label || 'Normal'}
+                                        </span>
+                                      );
+                                    })()}
+                                  </div>
+
+                                  {/* Horário no canto superior direito para fácil visualização */}
+                                  {card.horario && (
+                                    <span className="text-[11px] font-mono font-semibold px-1.5 py-0.5 rounded border border-border/60 bg-muted/40 text-foreground">
+                                      {card.horario}
+                                    </span>
+                                  )}
                                 </div>
 
                                 {/* Nome do Paciente */}
                                 <div className="w-full min-w-0">
-                                  <h4 className={`text-sm sm:text-[15px] font-bold tracking-tight leading-snug break-words transition-colors ${
-                                    isConfirmed ? 'text-white font-extrabold' : 'text-foreground group-hover:text-primary'
-                                  }`}>
+                                  <h4 className="text-sm sm:text-[15px] font-bold tracking-tight leading-snug break-words text-foreground group-hover:text-primary transition-colors">
                                     {card.paciente}
                                   </h4>
                                 </div>
 
                                 {/* Bloco Clínico: Médico e Especialidade */}
-                                <div className={`p-2.5 rounded-xl border space-y-1 text-xs w-full min-w-0 ${
-                                  isConfirmed
-                                    ? 'bg-emerald-700/50 border-emerald-400/30 text-emerald-50'
-                                    : 'bg-muted/30 border-border/60 text-muted-foreground'
-                                }`}>
+                                <div className="p-2.5 rounded-xl border border-border/60 bg-muted/30 space-y-1 text-xs w-full min-w-0">
                                   <div className="flex items-start gap-2 w-full min-w-0">
-                                    <Stethoscope className={`h-3.5 w-3.5 flex-shrink-0 mt-0.5 ${
-                                      isConfirmed ? 'text-emerald-200' : 'text-primary'
-                                    }`} />
+                                    <Stethoscope className="h-3.5 w-3.5 flex-shrink-0 mt-0.5 text-primary" />
                                     <div className="flex-1 min-w-0 space-y-0.5">
-                                      <p className={`font-semibold text-xs leading-snug break-words ${isConfirmed ? 'text-white' : 'text-foreground'}`}>
+                                      <p className="font-semibold text-xs leading-snug break-words text-foreground">
                                         {card.medico}
                                       </p>
-                                      <p className={`text-[11px] font-medium leading-tight break-words ${isConfirmed ? 'text-emerald-100' : 'text-muted-foreground'}`}>
+                                      <p className="text-[11px] font-medium leading-tight break-words text-muted-foreground">
                                         {card.especialidade}
                                       </p>
                                     </div>
@@ -2111,12 +2651,8 @@ export default function CentroMedico() {
 
                                 {/* Contato: Telefone do Paciente */}
                                 {card.telefone && (
-                                  <div className={`flex items-center gap-2 px-2.5 py-1.5 rounded-xl border text-xs w-full min-w-0 ${
-                                    isConfirmed
-                                      ? 'bg-emerald-700/40 border-emerald-400/30 text-emerald-100'
-                                      : 'bg-muted/20 border-border/50 text-foreground'
-                                  }`}>
-                                    <Phone className={`h-3.5 w-3.5 shrink-0 ${isConfirmed ? 'text-emerald-200' : 'text-muted-foreground'}`} />
+                                  <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-xl border border-border/50 bg-muted/20 text-xs w-full min-w-0 text-foreground">
+                                    <Phone className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
                                     <span className="font-medium text-[11.5px] tracking-wide break-words flex-1">
                                       {card.telefone}
                                     </span>
@@ -2126,14 +2662,8 @@ export default function CentroMedico() {
                                 {/* Observações (quando existirem) */}
                                 {card.observacoes && (
                                   <div className="w-full min-w-0">
-                                    <div className={`flex items-start gap-1.5 p-2 rounded-lg border leading-relaxed text-xs w-full min-w-0 break-words ${
-                                      isConfirmed
-                                        ? 'bg-emerald-700/60 border-emerald-400 text-white'
-                                        : 'bg-muted/40 border-border/50 text-foreground/90'
-                                    }`}>
-                                      <FileText className={`h-3.5 w-3.5 mt-0.5 flex-shrink-0 ${
-                                        isConfirmed ? 'text-emerald-200' : 'text-muted-foreground/80'
-                                      }`} />
+                                    <div className="flex items-start gap-1.5 p-2 rounded-lg border border-border/50 bg-muted/40 leading-relaxed text-xs w-full min-w-0 break-words text-foreground/90">
+                                      <FileText className="h-3.5 w-3.5 mt-0.5 flex-shrink-0 text-muted-foreground/80" />
                                       <span className="flex-1 min-w-0 break-words">{card.observacoes}</span>
                                     </div>
                                   </div>
@@ -2206,20 +2736,16 @@ export default function CentroMedico() {
                                         }}
                                         disabled={resendingCardId === card.id}
                                         title={`Reenviar notificação de WhatsApp para ${card.paciente}`}
-                                        className={`flex-1 min-w-0 flex items-center justify-center gap-2 py-2 px-3 rounded-xl text-xs font-semibold transition-all active:scale-[0.98] cursor-pointer shadow-xs disabled:opacity-50 disabled:cursor-not-allowed text-center break-words ${
-                                          isConfirmed
-                                            ? 'bg-emerald-800 hover:bg-emerald-900 text-white border border-emerald-300/50'
-                                            : 'bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30'
-                                        }`}
+                                        className="flex-1 min-w-0 flex items-center justify-center gap-2 py-2 px-3 rounded-xl text-xs font-semibold transition-all active:scale-[0.98] cursor-pointer shadow-xs disabled:opacity-50 disabled:cursor-not-allowed text-center break-words bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30"
                                       >
                                         {resendingCardId === card.id ? (
                                           <>
-                                            <RefreshCw className="h-3.5 w-3.5 animate-spin text-emerald-400 shrink-0" />
+                                            <RefreshCw className="h-3.5 w-3.5 animate-spin text-emerald-600 dark:text-emerald-400 shrink-0" />
                                             <span className="break-words">Reenviando...</span>
                                           </>
                                         ) : (
                                           <>
-                                            <MessageCircle className={`h-3.5 w-3.5 shrink-0 ${isConfirmed ? 'text-emerald-200' : 'text-emerald-600 dark:text-emerald-400'}`} />
+                                            <MessageCircle className="h-3.5 w-3.5 shrink-0 text-emerald-600 dark:text-emerald-400" />
                                             <span className="break-words">Reenviar WhatsApp</span>
                                           </>
                                         )}
@@ -2233,13 +2759,32 @@ export default function CentroMedico() {
                                             handleOpenWhatsAppChat(card);
                                           }}
                                           title={`Abrir conversa no WhatsApp com ${card.paciente}`}
-                                          className={`p-2 rounded-xl border transition-all active:scale-95 shrink-0 cursor-pointer ${
-                                            isConfirmed
-                                              ? 'bg-emerald-800 hover:bg-emerald-900 text-white border border-emerald-300/50'
-                                              : 'bg-muted/80 hover:bg-muted text-muted-foreground hover:text-foreground border-border/60'
-                                          }`}
+                                          className="p-2 rounded-xl border border-border/60 bg-muted/80 hover:bg-muted text-muted-foreground hover:text-foreground transition-all active:scale-95 shrink-0 cursor-pointer"
                                         >
-                                          <MessageCircle className="h-3.5 w-3.5 text-emerald-500" />
+                                          <MessageCircle className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+                                        </button>
+                                      )}
+                                    </div>
+                                  )}
+
+                                  {/* Status de Conclusão para a coluna EXECUTADA (Concluídas) */}
+                                  {card.status === 'Concluídas' && (
+                                    <div className="w-full flex items-center justify-between gap-1.5">
+                                      <div className="flex-1 flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-lg bg-teal-500/10 border border-teal-500/20 text-teal-700 dark:text-teal-300 text-[11px] font-semibold text-center">
+                                        <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-teal-600 dark:text-teal-400" />
+                                        <span>Consulta Finalizada</span>
+                                      </div>
+                                      {card.telefone && (
+                                        <button
+                                          type="button"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleOpenWhatsAppChat(card);
+                                          }}
+                                          title={`Abrir conversa no WhatsApp com ${card.paciente}`}
+                                          className="p-1.5 rounded-lg border border-border/60 bg-muted/80 hover:bg-muted text-muted-foreground hover:text-foreground transition-all active:scale-95 shrink-0 cursor-pointer"
+                                        >
+                                          <MessageCircle className="h-3.5 w-3.5 text-teal-600 dark:text-teal-400" />
                                         </button>
                                       )}
                                     </div>
