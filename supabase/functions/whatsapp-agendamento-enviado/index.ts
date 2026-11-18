@@ -259,6 +259,7 @@ Deno.serve(async (req: Request) => {
       if (rawBody.medico) upsertPayload.medico = rawBody.medico;
       if (rawBody.especialidade) upsertPayload.especialidade = rawBody.especialidade;
       if (rawBody.horario) upsertPayload.horario = rawBody.horario;
+      if (rawBody.telefone) upsertPayload.telefone = rawBody.telefone;
 
       const { error: dbErr } = await supabaseAdmin
         .from('centro_medico_kanban_cards')
@@ -272,13 +273,107 @@ Deno.serve(async (req: Request) => {
         );
       }
 
+      // Se o paciente confirmou a presença, dispara a notificação de confirmação no WhatsApp imediatamente
+      let whatsappResult: { sent: boolean; message?: string; error?: string } = { sent: false };
+
+      if (isConfirmed) {
+        try {
+          // Busca registro do card para garantir os dados clínicos e o telefone mais atualizado
+          const { data: savedCard } = await supabaseAdmin
+            .from('centro_medico_kanban_cards')
+            .select('*')
+            .eq('card_id', cardId)
+            .maybeSingle();
+
+          const targetPhone = rawBody.telefone || savedCard?.telefone;
+          const cleanDigits = String(targetPhone || '').replace(/\D/g, '');
+
+          if (cleanDigits && cleanDigits.length >= 10) {
+            const recipient = formatPhoneNumber(targetPhone, DEFAULT_RECIPIENT);
+            const pacienteNome = rawBody.paciente || savedCard?.paciente || 'Paciente';
+            const medicoNome = rawBody.medico || savedCard?.medico;
+            const crmInfo = rawBody.crm || savedCard?.crm;
+            const especialidadeNome = rawBody.especialidade || savedCard?.especialidade;
+            const dataConsulta = rawBody.data_consulta || savedCard?.data_consulta;
+            const horarioConsulta = rawBody.horario || savedCard?.horario;
+            const consultorioNome = rawBody.consultorio || savedCard?.consultorio;
+
+            const confirmMessageText = buildAppointmentMessage({
+              cardId,
+              paciente: pacienteNome,
+              medico: medicoNome,
+              crm: crmInfo,
+              especialidade: especialidadeNome,
+              data: dataConsulta,
+              horario: horarioConsulta,
+              consultorio: consultorioNome,
+              status: 'Confirmadas',
+              tipo: 'confirmacao'
+            });
+
+            console.log(`[WhatsApp Agendamento Auto] Disparando confirmação automática para: ${recipient} (${pacienteNome}) via ${SENDER_INSTANCE}`);
+
+            if (EVOLUTION_API_URL && EVOLUTION_API_KEY) {
+              const delivery = await sendWhatsAppMessage(
+                EVOLUTION_API_URL,
+                EVOLUTION_API_KEY,
+                SENDER_INSTANCE,
+                recipient,
+                confirmMessageText
+              );
+
+              whatsappResult = {
+                sent: delivery.success,
+                message: delivery.success ? 'WhatsApp de confirmação disparado com sucesso.' : delivery.error,
+                error: delivery.error
+              };
+
+              // Registro de log na tabela de auditoria
+              await supabaseAdmin.from('whatsapp_agendamento_notification_logs').insert({
+                card_id: cardId,
+                destinatario: recipient,
+                paciente: pacienteNome,
+                medico: medicoNome,
+                horario: horarioConsulta,
+                data_consulta: dataConsulta,
+                status: delivery.success ? 'sucesso' : 'falha',
+                mensagem: confirmMessageText,
+                detalhes: {
+                  origem: 'confirmacao_automatica_paciente',
+                  instance: SENDER_INSTANCE,
+                  deliveryError: delivery.error
+                }
+              }).catch((e) => console.warn('[WhatsApp Agendamento] Erro ao gravar log de auditoria:', e));
+            } else {
+              whatsappResult = {
+                sent: true,
+                message: 'Modo simulado: credenciais da Evolution API ausentes.'
+              };
+            }
+          } else {
+            console.warn(`[WhatsApp Agendamento Auto] Paciente sem telefone válido para confirmação automática (Card ${cardId}).`);
+            whatsappResult = {
+              sent: false,
+              message: 'Paciente sem telefone válido cadastrado para envio automático de confirmação.'
+            };
+          }
+        } catch (autoErr: any) {
+          console.error('[WhatsApp Agendamento Auto] Erro no envio automático:', autoErr);
+          whatsappResult = {
+            sent: false,
+            error: autoErr.message
+          };
+        }
+      }
+
       return new Response(
         JSON.stringify({
           success: true,
           card_id: cardId,
           status: targetStatus,
           confirmado_pelo_paciente: isConfirmed,
-          confirmado_em: isConfirmed ? nowBR : null
+          confirmado_em: isConfirmed ? nowBR : null,
+          whatsapp: whatsappResult
         }),
         { status: 200, headers: corsHeaders }
       );
@@ -419,6 +514,7 @@ Deno.serve(async (req: Request) => {
             horario: agendamentoData.horario,
             consultorio: agendamentoData.consultorio,
             convenio: agendamentoData.convenio,
+            telefone: agendamentoData.telefone || null,
             updated_at: new Date().toISOString()
           }, { onConflict: 'card_id' });
         }

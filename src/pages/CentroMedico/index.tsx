@@ -775,6 +775,7 @@ const persistCardManualStatus = async (
         horario: cardData?.horario || null,
         consultorio: cardData?.consultorio || null,
         convenio: cardData?.convenio || null,
+        telefone: cardData?.telefone || null,
         updated_at: new Date(now).toISOString()
       }, { onConflict: 'card_id' });
     } catch {
@@ -1256,7 +1257,7 @@ export default function CentroMedico() {
       try {
         const { data: kanbanRows } = await supabase
           .from('centro_medico_kanban_cards')
-          .select('card_id, status, paciente, data_consulta, medico, crm, especialidade, horario, consultorio, convenio, confirmado_pelo_paciente, confirmado_em, updated_at');
+          .select('card_id, status, paciente, data_consulta, medico, crm, especialidade, horario, consultorio, convenio, telefone, confirmado_pelo_paciente, confirmado_em, updated_at');
         if (kanbanRows) remoteSavedRows = kanbanRows;
         if (kanbanRows && kanbanRows.length > 0) {
           const cMap = getStoredManualStatusMap();
@@ -1345,8 +1346,10 @@ export default function CentroMedico() {
             // Tipo de agendamento (Consulta, Retorno, Encaixe) da coluna DS_CLASSIFICACAO
             const convenio = String(getVal(['DS_CLASSIFICACAO', 'convenio', 'ds_convenio', 'nm_convenio'], 'Consulta'));
             
-            // Telefone da coluna NR_TELEFONE
-            const telefone = String(getVal(['NR_TELEFONE', 'telefone', 'nr_telefone_celular', 'nr_celular', 'phone', 'celular'], ''));
+            // Telefone da coluna NR_TELEFONE ou snapshot persistido no banco
+            const rawTelefone = String(getVal(['NR_TELEFONE', 'telefone', 'nr_telefone_celular', 'nr_celular', 'phone', 'celular'], ''));
+            const remoteSavedRow = remoteSavedRows.find((r: any) => String(r.card_id) === String(rawId));
+            const telefone = rawTelefone || remoteSavedRow?.telefone || '';
             
             // Status real retornado pelo Tasy:
             // DS_STATUS_AGENDA é a coluna oficial que identifica o status no Tasy:

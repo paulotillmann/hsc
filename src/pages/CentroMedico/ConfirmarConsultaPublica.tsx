@@ -161,7 +161,8 @@ export default function ConfirmarConsultaPublica() {
         data: formatDateToBR(remoteDetails.data_consulta),
         consultorio: remoteDetails.consultorio || 'Centro Médico Santa Casa',
         convenio: remoteDetails.convenio || 'Particular / Convênio',
-        telefone: '(34) 3249-1500',
+        telefone: remoteDetails.telefone || searchParams.get('tel') || searchParams.get('telefone') || '',
+        telefoneHospital: '(34) 3249-1500',
         local: 'Centro Médico Santa Casa',
         endereco: 'Araguari-MG, Praça Dom Almir Marques, n.º 2, Rosário, CEP 38.440-036',
         bairro: 'Rosário'
@@ -184,7 +185,8 @@ export default function ConfirmarConsultaPublica() {
         data: formatDateToBR(rawDate),
         consultorio: searchParams.get('consultorio') || 'Centro Médico Santa Casa',
         convenio: searchParams.get('convenio') || 'Particular / Convênio',
-        telefone: '(34) 3249-1500',
+        telefone: searchParams.get('tel') || searchParams.get('telefone') || '',
+        telefoneHospital: '(34) 3249-1500',
         local: searchParams.get('local') || 'Centro Médico Santa Casa',
         endereco: 'Araguari-MG, Praça Dom Almir Marques, n.º 2, Rosário, CEP 38.440-036',
         bairro: 'Rosário'
@@ -240,7 +242,7 @@ export default function ConfirmarConsultaPublica() {
         localStorage.setItem(KANBAN_ADDED_ORDER_KEY, JSON.stringify(orderMap));
       } catch { }
 
-      // 4. Atualiza no Supabase via Edge Function com Service Role (suporta Confirmadas, Remarcar e Canceladas)
+      // 4. Atualiza no Supabase via Edge Function com Service Role (suporta Confirmadas, Remarcar e Canceladas com disparo automático de WhatsApp)
       try {
         await supabase.functions.invoke('whatsapp-agendamento-enviado', {
           body: {
@@ -250,8 +252,11 @@ export default function ConfirmarConsultaPublica() {
             paciente: patientData.paciente,
             data_consulta: patientData.data,
             medico: patientData.medico,
+            crm: patientData.crm,
             especialidade: patientData.especialidade,
-            horario: patientData.horario
+            horario: patientData.horario,
+            consultorio: patientData.consultorio,
+            telefone: patientData.telefone || ''
           }
         });
       } catch (fnErr) {
@@ -267,7 +272,8 @@ export default function ConfirmarConsultaPublica() {
             p_data_consulta: patientData.data,
             p_medico: patientData.medico,
             p_especialidade: patientData.especialidade,
-            p_horario: patientData.horario
+            p_horario: patientData.horario,
+            p_telefone: patientData.telefone || null
           });
         } catch (rpcErr) {
           console.warn('[ConfirmarConsulta] Falha ao executar RPC de confirmação:', rpcErr);
