@@ -84,6 +84,53 @@ function sanitizeFilename(name: string): string {
     .toUpperCase();
 }
 
+/**
+ * Normaliza o nome da pasta no Storage (ex: "1ª Parcela Décimo 2026" -> "1_PARCELA_DECIMO_2026", "11/2026" -> "11_2026")
+ */
+export function sanitizeStorageFolder(mesAno: string): string {
+  return mesAno
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[ªº\u00aa\u00ba]/g, '')
+    .replace(/[^a-zA-Z0-9_-]/g, '_')
+    .replace(/_+/g, '_')
+    .replace(/^_|_$/g, '')
+    .toUpperCase();
+}
+
+/**
+ * Converte mes_ano ("MM/YYYY", "1ª Parcela Décimo 2026", "2ª Parcela Décimo 2026") para Date para ordenação cronológica precisa
+ */
+export function parseMesAno(mesAno: string): Date {
+  if (!mesAno) return new Date(0);
+
+  // 1ª Parcela Décimo YYYY (cronologicamente em 20 de novembro)
+  const match1a = mesAno.match(/1[ªa\u00aa]\s*Parcela\s*D[ée]cimo\s*(\d{4})/i);
+  if (match1a) {
+    const y = parseInt(match1a[1], 10);
+    return new Date(y, 10, 20);
+  }
+
+  // 2ª Parcela Décimo YYYY (cronologicamente em 20 de dezembro)
+  const match2a = mesAno.match(/2[ªa\u00aa]\s*Parcela\s*D[ée]cimo\s*(\d{4})/i);
+  if (match2a) {
+    const y = parseInt(match2a[1], 10);
+    return new Date(y, 11, 20);
+  }
+
+  // Formato padrão MM/YYYY
+  const parts = mesAno.split('/');
+  if (parts.length === 2) {
+    const m = parseInt(parts[0], 10);
+    const y = parseInt(parts[1], 10);
+    if (!isNaN(m) && !isNaN(y)) {
+      return new Date(y, m - 1, 1);
+    }
+  }
+
+  return new Date(0);
+}
+
 interface ExtractedData {
   cpf: string | null;
   nomeCompleto: string | null;
@@ -105,6 +152,8 @@ function cleanExtractedName(rawName: string): string {
  * Suporta formatos consolidados da Santa Casa de Araguari:
  *   - CPF:          "CPF: 753.734.676-34"
  *   - Mês/Ano:      "09/2026 Mensal" ou "12/2025" (competência principal)
+ *   - 13º Salário:  "11/2026 13o Salário Adiantamento" -> "1ª Parcela Décimo 2026"
+ *                   "12/2026 13o Salário Integral/Quitação" -> "2ª Parcela Décimo 2026"
  *   - Nome:         texto entre o cadastro (1-6 dígitos) e o CBO (6 dígitos) ou âncoras da tabela
  *   - TotalLíquido: valor numérico imediatamente após "Total Líquido"
  *
@@ -123,11 +172,29 @@ function extractDadosHolerite(text: string): ExtractedData {
     }
   }
 
-  // 2. Mês/Ano: prioriza a competência do cabeçalho da folha (ex: "09/2026 Mensal", "Araguari - MG 09/2026")
+  // 2. Mês/Ano e Detecção Especial de Décimo Terceiro Salário
   let mesAno: string | null = null;
-  const mesAnoHeadMatch = text.match(/(?:Araguari\s*[-–]\s*MG\s+)?\b(0[1-9]|1[0-2])\/(20\d{2})\s+(?:Mensal|Adiantamento|Folha|Rescis|13[ºo])/i) ||
-                          text.match(/Araguari\s*[-–]\s*MG\s+\b(0[1-9]|1[0-2])\/(20\d{2})\b/i);
-  if (mesAnoHeadMatch) {
+
+  // Busca competência no cabeçalho (ex: "11/2026 13o Salário Adiantamento", "Araguari - MG 09/2026 Mensal")
+  const mesAnoHeadMatch = text.match(/(?:Araguari\s*[-–]\s*MG\s+)?\b(0[1-9]|1[0-2])\/(20\d{2})\b/i);
+  const fallbackYearMatch = text.match(/\b(20\d{2})\b/);
+  const detectedYear = mesAnoHeadMatch ? mesAnoHeadMatch[2] : (fallbackYearMatch ? fallbackYearMatch[1] : null);
+
+  // Verificação de 13º Salário
+  const is13oAdiantamento = /13[ºo\u00ba]?\s*(?:Sal[aá]rio\s*)?Adiantamento/i.test(text) ||
+                            /13[ºo\u00ba]?\s*Sal\.?\s*Adto/i.test(text) ||
+                            /1[ªa\u00aa]\s*Parcela\s*(?:do\s*)?13[ºo\u00ba]?/i.test(text) ||
+                            /13[ºo\u00ba]?\s*Sal[aá]rio.*1[ªa\u00aa]\s*Parcela/i.test(text);
+
+  const is13oFinal = /13[ºo\u00ba]?\s*(?:Sal[aá]rio\s*)?(?:Integral|Quita[çc][aã]o|Final|2[ªa\u00aa]\s*Parcela)/i.test(text) ||
+                     /2[ªa\u00aa]\s*Parcela\s*(?:do\s*)?13[ºo\u00ba]?/i.test(text) ||
+                     /13[ºo\u00ba]?\s*Sal[aá]rio.*2[ªa\u00aa]\s*Parcela/i.test(text);
+
+  if (detectedYear && is13oAdiantamento) {
+    mesAno = `1ª Parcela Décimo ${detectedYear}`;
+  } else if (detectedYear && is13oFinal) {
+    mesAno = `2ª Parcela Décimo ${detectedYear}`;
+  } else if (mesAnoHeadMatch) {
     mesAno = `${mesAnoHeadMatch[1]}/${mesAnoHeadMatch[2]}`;
   } else {
     // Fallback geral para formato MM/YYYY
@@ -290,7 +357,8 @@ export async function uploadHoleritePDF(
   file: File,
   uploadedBy: string,
   onProgress: (p: HoleriteUploadProgress) => void,
-  abortSignal?: AbortSignal
+  abortSignal?: AbortSignal,
+  forcedMesAno?: string
 ): Promise<HoleriteRecord[]> {
 
   clearBubbleEmailCache();
@@ -330,6 +398,11 @@ export async function uploadHoleritePDF(
     const text = await getPageText(page);
     let { cpf, nomeCompleto, mesAno, totalLiquido } = extractDadosHolerite(text);
 
+    // Se uma competência foi forçada na modal pelo usuário, usamos ela
+    if (forcedMesAno && forcedMesAno !== 'auto') {
+      mesAno = forcedMesAno;
+    }
+
     // Fallback: se os dados obrigatórios estiverem ausentes, tenta OCR
     if (!cpf || !nomeCompleto || !mesAno) {
       console.log(`[Holerite] Página ${pageNum} sem texto selecionável. Tentando OCR como fallback...`);
@@ -345,10 +418,10 @@ export async function uploadHoleritePDF(
         const ocrText = await recognizePageTextWithOcr(page);
         console.log(`[Holerite] OCR concluído para Página ${pageNum}`);
         const ocrData = extractDadosHolerite(ocrText);
-        if (ocrData.cpf && ocrData.nomeCompleto && ocrData.mesAno) {
+        if (ocrData.cpf && ocrData.nomeCompleto) {
           cpf = ocrData.cpf;
           nomeCompleto = ocrData.nomeCompleto;
-          mesAno = ocrData.mesAno;
+          mesAno = (forcedMesAno && forcedMesAno !== 'auto') ? forcedMesAno : ocrData.mesAno;
           totalLiquido = ocrData.totalLiquido;
         }
       } catch (ocrErr: any) {
@@ -393,7 +466,7 @@ export async function uploadHoleritePDF(
     // ── 3. Nomes de arquivo e path no Storage ──
     const safeName    = sanitizeFilename(nomeCompleto);
     const safeCpf     = cpf.replace(/\D/g, '');
-    const safeMesAno  = mesAno.replace('/', '_'); // ex: "12_2025"
+    const safeMesAno  = sanitizeStorageFolder(mesAno);
     const pdfFilename = `HOLERITE_${safeCpf}_${safeName}.pdf`;
     const storagePath = `${safeMesAno}/${pdfFilename}`;
 
@@ -586,7 +659,7 @@ export async function deleteHolerites(ids: string[], holerites: HoleriteRecord[]
   // 1. Excluir arquivos do Storage
   const toRemove = holerites
     .filter(h => ids.includes(h.id))
-    .map(h => `${h.mes_ano.replace('/', '_')}/${h.pdf_filename}`);
+    .map(h => `${sanitizeStorageFolder(h.mes_ano)}/${h.pdf_filename}`);
 
   if (toRemove.length > 0) {
     const { error: storageErr } = await supabase.storage
@@ -605,17 +678,27 @@ export async function deleteHolerites(ids: string[], holerites: HoleriteRecord[]
 }
 
 // ─────────────────────────────────────────────────────────────
-// UTILS — gera lista de meses/anos para o filtro
+// UTILS — gera lista de meses/anos e 13º para o filtro
 // ─────────────────────────────────────────────────────────────
 
 export function generateMesAnoOptions(qty = 24): string[] {
   const options: string[] = [];
   const now = new Date();
-  for (let i = 0; i < qty; i++) {
-    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-    const mm = String(d.getMonth() + 1).padStart(2, '0');
-    const yyyy = d.getFullYear();
-    options.push(`${mm}/${yyyy}`);
+  const currentYear = now.getFullYear();
+
+  // Gera opções cobrindo os anos necessários com parcelas do 13º
+  const yearsBack = Math.max(2, Math.ceil(qty / 12));
+  for (let y = currentYear; y >= currentYear - yearsBack; y--) {
+    for (let m = 12; m >= 1; m--) {
+      const mm = String(m).padStart(2, '0');
+      if (m === 12) {
+        options.push(`12/${y}`);
+        options.push(`2ª Parcela Décimo ${y}`);
+        options.push(`1ª Parcela Décimo ${y}`);
+      } else {
+        options.push(`${mm}/${y}`);
+      }
+    }
   }
   return options;
 }

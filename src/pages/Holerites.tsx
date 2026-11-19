@@ -25,7 +25,9 @@ import { sendDocumentEmail } from '../services/emailService';
 // OPÇÕES DE MÊS/ANO (últimos 24 meses)
 // ─────────────────────────────────────────────────────────────
 const MES_ANO_OPTIONS = generateMesAnoOptions(24);
-const DEFAULT_MES_ANO = MES_ANO_OPTIONS[0]; // mês atual
+const now = new Date();
+const CURRENT_MONTH = `${String(now.getMonth() + 1).padStart(2, '0')}/${now.getFullYear()}`;
+const DEFAULT_MES_ANO = MES_ANO_OPTIONS.includes(CURRENT_MONTH) ? CURRENT_MONTH : MES_ANO_OPTIONS[0];
 
 // Formata valor em R$
 function formatCurrency(value: number | null): string {
@@ -61,6 +63,7 @@ const Holerites: React.FC = () => {
 
   // ── Modais ──
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [importMesAnoOption, setImportMesAnoOption] = useState<string>('auto');
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [isEditEmailModalOpen, setIsEditEmailModalOpen] = useState(false);
   const [editingHoleriteId, setEditingHoleriteId] = useState<string | null>(null);
@@ -224,7 +227,18 @@ const Holerites: React.FC = () => {
       const controller = new AbortController();
       abortControllerRef.current = controller;
 
-      const imported = await uploadHoleritePDF(file, user.id, setUploadProgress, controller.signal);
+      const imported = await uploadHoleritePDF(
+        file,
+        user.id,
+        setUploadProgress,
+        controller.signal,
+        importMesAnoOption === 'auto' ? undefined : importMesAnoOption
+      );
+
+      if (imported.length > 0) {
+        setFilterMesAno(imported[0].mes_ano);
+      }
+
       setData(prev => {
         const withoutUpdated = prev.filter(p => !imported.some(i => i.cpf === p.cpf && i.mes_ano === p.mes_ano));
         return [...withoutUpdated, ...imported].sort((a, b) => a.nome_completo.localeCompare(b.nome_completo));
@@ -281,7 +295,7 @@ const Holerites: React.FC = () => {
 
           {can('can_upload') && (
             <button
-              onClick={() => { setUploadProgress(null); setIsImportModalOpen(true); }}
+              onClick={() => { setUploadProgress(null); setImportMesAnoOption('auto'); setIsImportModalOpen(true); }}
               className="inline-flex items-center gap-2 px-4 py-2 rounded-md bg-primary text-primary-foreground shadow transition-colors hover:opacity-90 font-medium text-sm cursor-pointer"
             >
               <UploadCloud className="h-4 w-4" />
@@ -535,9 +549,49 @@ const Holerites: React.FC = () => {
                 <X className="h-5 w-5" />
               </button>
               <h3 className="text-xl font-bold mb-1">Importar Holerite PDF</h3>
-              <p className="text-sm text-muted-foreground mb-5">
+              <p className="text-sm text-muted-foreground mb-4">
                 Selecione o PDF com os holerites consolidados. Iremos extrair cada colaborador por CPF e Nome.
               </p>
+
+              {/* Seletor de Competência */}
+              {(!uploadProgress || uploadProgress.stage === 'error') && (
+                <div className="mb-4 text-left">
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">
+                    Competência / Tipo de Folha
+                  </label>
+                  <select
+                    value={importMesAnoOption}
+                    onChange={e => setImportMesAnoOption(e.target.value)}
+                    className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm font-medium focus:outline-none focus:ring-2 focus:ring-primary/50 cursor-pointer shadow-sm"
+                  >
+                    <option value="auto">✨ Automático (Detectar do arquivo PDF)</option>
+                    <optgroup label="Décimo Terceiro Salário">
+                      <option value={`1ª Parcela Décimo ${new Date().getFullYear()}`}>
+                        1ª Parcela Décimo {new Date().getFullYear()}
+                      </option>
+                      <option value={`2ª Parcela Décimo ${new Date().getFullYear()}`}>
+                        2ª Parcela Décimo {new Date().getFullYear()}
+                      </option>
+                      <option value={`1ª Parcela Décimo ${new Date().getFullYear() - 1}`}>
+                        1ª Parcela Décimo {new Date().getFullYear() - 1}
+                      </option>
+                      <option value={`2ª Parcela Décimo ${new Date().getFullYear() - 1}`}>
+                        2ª Parcela Décimo {new Date().getFullYear() - 1}
+                      </option>
+                    </optgroup>
+                    <optgroup label="Folhas Mensais Recentes">
+                      {MES_ANO_OPTIONS.filter(m => !m.includes('Décimo')).slice(0, 12).map(m => (
+                        <option key={`import-opt-${m}`} value={m}>{m}</option>
+                      ))}
+                    </optgroup>
+                  </select>
+                  <p className="text-[11px] text-muted-foreground mt-1.5 leading-relaxed">
+                    {importMesAnoOption === 'auto'
+                      ? 'O sistema identifica automaticamente "13o Salário Adiantamento" como 1ª Parcela e quitação como 2ª Parcela.'
+                      : `Atenção: todos os holerites deste arquivo serão importados como "${importMesAnoOption}".`}
+                  </p>
+                </div>
+              )}
 
               {/* Área de Drop */}
               <div className={`border-2 border-dashed rounded-xl p-10 flex flex-col items-center justify-center text-center transition-colors ${
