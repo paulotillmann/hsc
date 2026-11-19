@@ -2,6 +2,7 @@ import React, { useMemo } from 'react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { Download, FileText, Receipt } from 'lucide-react';
 import { DashboardData } from '../../services/dashboardService';
+import { parseMesAno } from '../../services/holeitesService';
 
 interface UserChartsProps {
   data: DashboardData;
@@ -10,11 +11,6 @@ interface UserChartsProps {
 
 const formatCurrency = (value: number) => {
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 }).format(value);
-};
-
-const parseMesAno = (mesAno: string) => {
-  const [m, y] = mesAno.split('/');
-  return new Date(parseInt(y), parseInt(m) - 1, 1);
 };
 
 export const UserCharts: React.FC<UserChartsProps> = ({ data, hideValues }) => {

@@ -1,6 +1,7 @@
 import React, { useMemo } from 'react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend, BarChart, Bar } from 'recharts';
 import { DashboardData } from '../../services/dashboardService';
+import { parseMesAno } from '../../services/holeitesService';
 
 interface AdminChartsProps {
   data: DashboardData;
@@ -8,12 +9,6 @@ interface AdminChartsProps {
 
 const formatCurrency = (value: number) => {
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 }).format(value);
-};
-
-// Helper: converte "MM/YYYY" para Date para ordenação
-const parseMesAno = (mesAno: string) => {
-  const [m, y] = mesAno.split('/');
-  return new Date(parseInt(y), parseInt(m) - 1, 1);
 };
 
 export const AdminCharts: React.FC<AdminChartsProps> = ({ data }) => {
