@@ -275,7 +275,7 @@ const Holerites: React.FC = () => {
             <select
               value={filterMesAno}
               onChange={e => setFilterMesAno(e.target.value)}
-              className="pl-9 pr-4 py-1.5 rounded-md border border-border bg-muted/20 hover:bg-muted/50 text-foreground font-medium text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 appearance-none cursor-pointer transition-all shadow-sm"
+              className="pl-9 pr-8 py-1.5 rounded-md border border-border bg-muted/20 hover:bg-muted/50 text-foreground font-medium text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 appearance-none cursor-pointer transition-all shadow-sm"
             >
               {MES_ANO_OPTIONS.map(m => (
                 <option key={m} value={m} className="bg-card text-foreground font-normal">{m}</option>
@@ -359,7 +359,7 @@ const Holerites: React.FC = () => {
                 </th>
                 <th className="px-6 py-4 font-semibold w-56">E-mail</th>
                 <th className="px-6 py-4 font-semibold w-40">CPF</th>
-                <th className="px-6 py-4 font-semibold w-28 text-center">Mês/Ano</th>
+                <th className="px-6 py-4 font-semibold w-48 text-center whitespace-nowrap">Mês/Ano</th>
                 <th className="px-6 py-4 font-semibold w-36 text-right">
                   <button
                     onClick={() => handleSort('total_liquido')}
@@ -377,14 +377,14 @@ const Holerites: React.FC = () => {
             </thead>
             <tbody className="divide-y divide-border">
               {loading ? (
-                <tr><td colSpan={7} className="px-6 py-12 text-center text-muted-foreground">
+                <tr><td colSpan={8} className="px-6 py-12 text-center text-muted-foreground">
                   <div className="flex flex-col items-center gap-3">
                     <div className="h-8 w-8 rounded-full border-4 border-primary border-t-transparent animate-spin" />
                     Buscando holerites...
                   </div>
                 </td></tr>
               ) : paginatedData.length === 0 ? (
-                <tr><td colSpan={7} className="px-6 py-12 text-center text-muted-foreground">
+                <tr><td colSpan={8} className="px-6 py-12 text-center text-muted-foreground">
                   Nenhum holerite encontrado para {filterMesAno}.
                 </td></tr>
               ) : (
@@ -407,8 +407,8 @@ const Holerites: React.FC = () => {
                       </div>
                     </td>
                     <td className="px-6 py-4 text-sm text-muted-foreground">{colab.cpf}</td>
-                    <td className="px-6 py-4 text-center">
-                      <span className="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium bg-muted text-muted-foreground">
+                    <td className="px-6 py-4 text-center whitespace-nowrap">
+                      <span className="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-medium bg-muted text-muted-foreground whitespace-nowrap">
                         {colab.mes_ano}
                       </span>
                     </td>
