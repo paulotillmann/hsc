@@ -251,7 +251,7 @@ export async function sendPlantaoMedicoEmail(
           const bodyJson = await (error as any).context.json();
           if (bodyJson?.error) errMsg = bodyJson.error;
         }
-      } catch (_) {}
+      } catch (_) { }
       return { success: false, error: errMsg };
     }
 
