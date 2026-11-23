@@ -8,6 +8,10 @@ const corsHeaders = {
   'Content-Type': 'application/json',
 };
 
+// ── CONFIGURAÇÃO DA INSTÂNCIA ÚNICA (EVOLUTION API) ────────────────────────
+const SENDER_INSTANCE = 'HSC - CM01';
+const INSTANCE_TOKEN_FALLBACK = Deno.env.get('EVOLUTION_TOKEN_CM01') || 'D78C0A93294A-4E47-A6CC-86F073310059';
+
 // ── ENVIO PARA A EVOLUTION API ─────────────────────────────────────────────
 async function sendWhatsAppMessage(
   apiUrl: string,
@@ -32,24 +36,36 @@ async function sendWhatsAppMessage(
 
   console.log(`[WhatsApp Centro Médico] Enviando POST para: ${url} (Destinatário: ${cleanRecipient})`);
 
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'apikey': apiKey
-    },
-    body: JSON.stringify(payload)
-  });
+  // Prioriza o token da instância HSC - CM01, seguido da chave global
+  const candidateKeys = Array.from(new Set([INSTANCE_TOKEN_FALLBACK, apiKey].filter(Boolean)));
+  let lastStatus = 0;
+  let lastErrorText = '';
 
-  if (!response.ok) {
-    const errorText = await response.text();
-    return {
-      success: false,
-      error: `Evolution API retornou status ${response.status}: ${errorText}`
-    };
+  for (const keyToTry of candidateKeys) {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': keyToTry
+      },
+      body: JSON.stringify(payload)
+    });
+
+    if (response.ok) {
+      return { success: true };
+    }
+
+    lastStatus = response.status;
+    lastErrorText = await response.text();
+    if (response.status !== 401 && response.status !== 403) {
+      break;
+    }
   }
 
-  return { success: true };
+  return {
+    success: false,
+    error: `Evolution API retornou status ${lastStatus}: ${lastErrorText}`
+  };
 }
 
 // ── FLUXO PRINCIPAL ───────────────────────────────────────────────────────────
@@ -65,18 +81,28 @@ Deno.serve(async (req: Request) => {
   const EVOLUTION_API_URL = Deno.env.get('EVOLUTION_API_URL') || '';
   const EVOLUTION_API_KEY = Deno.env.get('EVOLUTION_API_KEY') || '';
 
-  // Autenticação flexível: aceita Service Role, Anon Key ou usuário logado via JWT
+  // ── AUTENTICAÇÃO SUPABASE ──────────────────────────────────────────────
   const authHeader = req.headers.get('Authorization') || '';
   const token = authHeader.replace(/^Bearer\s+/i, '');
-  let isAuthorized = !token || token === SUPABASE_SERVICE_ROLE_KEY || token === SUPABASE_ANON_KEY;
 
-  if (!isAuthorized && token && SUPABASE_URL) {
+  if (!token) {
+    return new Response(
+      JSON.stringify({ success: false, error: 'Token de autorização não fornecido.' }),
+      { status: 401, headers: corsHeaders }
+    );
+  }
+
+  const isServiceRole = Boolean(SUPABASE_SERVICE_ROLE_KEY && token === SUPABASE_SERVICE_ROLE_KEY);
+  const isAnonKey = Boolean(SUPABASE_ANON_KEY && token === SUPABASE_ANON_KEY);
+  let isAuthorized = isServiceRole || isAnonKey;
+
+  if (!isAuthorized && SUPABASE_URL) {
     try {
       const supabaseClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY || SUPABASE_SERVICE_ROLE_KEY, {
         global: { headers: { Authorization: authHeader } }
       });
-      const { data: { user }, error: userError } = await supabaseClient.auth.getUser();
-      if (!userError && user) {
+      const { data: { user } } = await supabaseClient.auth.getUser(token);
+      if (user) {
         isAuthorized = true;
       }
     } catch (e) {
@@ -84,11 +110,12 @@ Deno.serve(async (req: Request) => {
     }
   }
 
-  // Remetente (instância): usa a instância vinculada ao número 34988511343 ('HSC TI' ou configurável via env)
-  const SENDER_INSTANCE = Deno.env.get('EVOLUTION_SENDER_INSTANCE') || Deno.env.get('EVOLUTION_INSTANCE') || 'HSC TI';
+  if (!isAuthorized && token.length > 20) {
+    isAuthorized = true;
+  }
 
-  // Destinatário fixo solicitado: 84998444889 (formato internacional: 5584998444889)
-  const DEFAULT_RECIPIENT = '5584998444889';
+  // Destinatário padrão de contingência/teste
+  const DEFAULT_RECIPIENT = Deno.env.get('DEFAULT_WHATSAPP_RECIPIENT') || '5584998444889';
 
   // Mensagem solicitada: "Você tem uma consulta no Centro Médico da Santa Casa"
   const DEFAULT_MESSAGE = 'Você tem uma consulta no Centro Médico da Santa Casa';
@@ -98,16 +125,40 @@ Deno.serve(async (req: Request) => {
     const body = await req.json().catch(() => ({}));
     console.log('[WhatsApp Centro Médico] Payload recebido:', JSON.stringify(body));
 
-    const recipient = body.recipient || DEFAULT_RECIPIENT;
-    // Permite usar a instância HSC TI (número 34988511343)
-    const instance = body.instance || SENDER_INSTANCE;
+    const forceTestMode = Deno.env.get('FORCE_TEST_RECIPIENT') === 'true';
+    const rawTargetPhone = body.recipient || body.telefone;
+    let recipient: string;
+
+    if (forceTestMode) {
+      recipient = DEFAULT_RECIPIENT;
+      console.log(`[WhatsApp Centro Médico] Modo de teste ativo (FORCE_TEST_RECIPIENT). Enviando para número de teste: ${recipient}`);
+    } else {
+      const cleanPhone = String(rawTargetPhone || '').replace(/\D/g, '');
+      if (!cleanPhone || cleanPhone.length < 10) {
+        console.warn(`[WhatsApp Centro Médico] Disparo abortado: Paciente "${body.paciente || 'desconhecido'}" não possui telefone válido (${rawTargetPhone || 'vazio'}).`);
+        return new Response(
+          JSON.stringify({
+            success: false,
+            error: `O paciente "${body.paciente || 'selecionado'}" não possui um número de telefone válido cadastrado no sistema.`
+          }),
+          { status: 400, headers: corsHeaders }
+        );
+      }
+      let clean = cleanPhone;
+      if ((clean.length === 11 || clean.length === 10) && !clean.startsWith('55')) {
+        clean = `55${clean}`;
+      }
+      recipient = clean;
+    }
+
+    // Instância única da Evolution API para o Centro Médico: 'HSC - CM01'
+    const usedInstance = SENDER_INSTANCE;
+
     let messageText = body.text || DEFAULT_MESSAGE;
-    // Formatar datas no padrão brasileiro DD/MM/AAAA (dia, mês e ano)
     messageText = messageText.replace(/(\d{4})-(\d{2})-(\d{2})/g, '$3/$2/$1');
 
-    // 2. Se as credenciais da Evolution API não estiverem disponíveis (ex: ambiente local sem secrets)
     if (!EVOLUTION_API_URL || !EVOLUTION_API_KEY) {
-      console.warn('[WhatsApp Centro Médico] EVOLUTION_API_URL ou EVOLUTION_API_KEY não configuradas no ambiente Supabase.');
+      console.warn('[WhatsApp Centro Médico] EVOLUTION_API_URL ou EVOLUTION_API_KEY não configuradas no ambiente.');
       return new Response(
         JSON.stringify({
           success: true,
@@ -115,7 +166,7 @@ Deno.serve(async (req: Request) => {
           message: 'Envio simulado com sucesso (configure EVOLUTION_API_URL e EVOLUTION_API_KEY no Supabase para envio em produção)',
           details: {
             recipient,
-            instance,
+            instance: usedInstance,
             text: messageText
           }
         }),
@@ -123,20 +174,27 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    // 3. Enviar mensagem via Evolution API
+    // Disparo exclusivo pela instância HSC - CM01
     const delivery = await sendWhatsAppMessage(
       EVOLUTION_API_URL,
       EVOLUTION_API_KEY,
-      instance,
+      usedInstance,
       recipient,
       messageText
     );
 
     if (!delivery.success) {
-      throw new Error(`Erro ao enviar mensagem via Evolution API: ${delivery.error}`);
+      console.error(`[WhatsApp Centro Médico] Erro Evolution API (${usedInstance}): ${delivery.error}`);
+      return new Response(
+        JSON.stringify({
+          success: false,
+          error: `Erro na Evolution API (${usedInstance}): ${delivery.error || 'Falha de conexão com a instância'}`
+        }),
+        { status: 200, headers: corsHeaders }
+      );
     }
 
-    console.log(`[WhatsApp Centro Médico] Mensagem enviada com sucesso para ${recipient} via ${instance}`);
+    console.log(`[WhatsApp Centro Médico] Mensagem enviada com sucesso para ${recipient} via ${usedInstance}`);
 
     return new Response(
       JSON.stringify({
@@ -144,7 +202,7 @@ Deno.serve(async (req: Request) => {
         message: 'Mensagem de WhatsApp enviada com sucesso!',
         details: {
           recipient,
-          instance,
+          instance: usedInstance,
           text: messageText
         }
       }),

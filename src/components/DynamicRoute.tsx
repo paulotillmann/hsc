@@ -7,6 +7,7 @@ import { ShieldOff, PackageSearch } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { usePermissions } from '../hooks/usePermissions';
 import { pageRegistry } from '../registry/pageRegistry';
+import { ErrorBoundary } from './ErrorBoundary';
 
 // ── Loading enquanto o componente carrega (code splitting) ────────────────────
 const PageLoading: React.FC = () => (
@@ -64,7 +65,6 @@ const DynamicRoute: React.FC = () => {
     return <Navigate to="/" replace />;
   }
 
-
   // Verifica permissão de acesso ao módulo pelo slug (Admins sempre podem acessar as configurações)
   const hasAccess = canAccess(moduleSlug) || (moduleSlug === 'configuracoes' && isAdmin);
   if (!hasAccess) {
@@ -78,9 +78,11 @@ const DynamicRoute: React.FC = () => {
   }
 
   return (
-    <Suspense fallback={<PageLoading />}>
-      <PageComponent />
-    </Suspense>
+    <ErrorBoundary fallbackMessage={`Erro ao renderizar o módulo /${moduleSlug}.`}>
+      <Suspense fallback={<PageLoading />}>
+        <PageComponent />
+      </Suspense>
+    </ErrorBoundary>
   );
 };
 

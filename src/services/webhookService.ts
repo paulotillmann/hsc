@@ -172,16 +172,24 @@ export const webhookService = {
     }
     const queryString = queryParams.toString();
 
+    // Configuração de cabeçalhos seguros
+    const webhookSecret = import.meta.env.VITE_N8N_WEBHOOK_SECRET;
+    const requestHeaders: Record<string, string> = {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json, text/plain, */*'
+    };
+    if (webhookSecret) {
+      requestHeaders['X-Webhook-Secret'] = webhookSecret;
+      requestHeaders['Authorization'] = `Bearer ${webhookSecret}`;
+    }
+
     for (const targetUrl of urlsToTry) {
       // 1. Tentar POST primeiro
       try {
-        console.log(`[n8n Webhook] Tentando POST em: ${targetUrl}`);
+        console.log(`[n8n Webhook] Consultando agenda Centro Médico em: ${targetUrl}`);
         const response = await fetch(targetUrl, {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Accept': 'application/json, text/plain, */*'
-          },
+          headers: requestHeaders,
           body: JSON.stringify(payload)
         });
 
@@ -198,10 +206,10 @@ export const webhookService = {
           if (trimmed) {
             try {
               const parsed = JSON.parse(trimmed);
-              console.log(`[n8n Webhook] Sucesso via POST em ${targetUrl}:`, parsed);
+              const count = Array.isArray(parsed) ? parsed.length : (parsed?.data?.length ?? 'OK');
+              console.log(`[n8n Webhook] Sucesso via POST em ${targetUrl} (${count} registros recebidos)`);
               return { success: true, url: targetUrl, method: 'POST', data: parsed };
             } catch {
-              console.log(`[n8n Webhook] Resposta em texto bruto de ${targetUrl}:`, trimmed);
               return { success: true, url: targetUrl, method: 'POST', data: trimmed };
             }
           }
@@ -214,7 +222,7 @@ export const webhookService = {
           const urlWithParams = queryString ? `${targetUrl}?${queryString}` : targetUrl;
           const getRes = await fetch(urlWithParams, {
             method: 'GET',
-            headers: { 'Accept': 'application/json, text/plain, */*' }
+            headers: requestHeaders
           });
 
           if (getRes.ok) {
@@ -229,7 +237,8 @@ export const webhookService = {
             if (trimmed) {
               try {
                 const parsed = JSON.parse(trimmed);
-                console.log(`[n8n Webhook] Sucesso via GET em ${urlWithParams}:`, parsed);
+                const count = Array.isArray(parsed) ? parsed.length : (parsed?.data?.length ?? 'OK');
+                console.log(`[n8n Webhook] Sucesso via GET em ${urlWithParams} (${count} registros recebidos)`);
                 return { success: true, url: urlWithParams, method: 'GET', data: parsed };
               } catch {
                 return { success: true, url: urlWithParams, method: 'GET', data: trimmed };

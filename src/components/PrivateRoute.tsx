@@ -23,14 +23,22 @@ const PrivateRoute: React.FC = () => {
   }
 
   if (session && profileLoaded) {
-    if ((session.user?.email === 'pa@email.com' || profile?.email === 'pa@email.com') && location.pathname !== '/pronto-atendimento') {
+    const userEmail = (session.user?.email || profile?.email || '').toLowerCase();
+    const roleSlug = profile?.roles?.slug?.toLowerCase() || '';
+
+    // Terminal de atendimento PA
+    if ((roleSlug === 'enfermagem_pa' || userEmail === 'pa@email.com') && location.pathname !== '/pronto-atendimento') {
       return <Navigate to="/pronto-atendimento" replace />;
     }
-    if ((session.user?.email === 'tvpa@email.com' || profile?.email === 'tvpa@email.com') && 
+
+    // Painel TV do Pronto Atendimento
+    if ((roleSlug === 'tv_pa' || userEmail === 'tvpa@email.com') && 
         location.pathname !== '/pronto-atendimento/tv' && 
         location.pathname !== '/painel-pa') {
       return <Navigate to="/pronto-atendimento/tv" replace />;
     }
+
+    // Terminais de Posto de Enfermagem (setor de internação)
     if (profile?.setor_usuarios && location.pathname !== '/pacientes-internados') {
       return <Navigate to="/pacientes-internados" replace />;
     }

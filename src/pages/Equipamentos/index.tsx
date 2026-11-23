@@ -28,7 +28,35 @@ import autoTable from 'jspdf-autotable';
 import { webhookService } from '../../services/webhookService';
 import { VisaoGeralCard } from '../../components/recepcao/VisaoGeralCard';
 
-const months = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+const parseEquipamentoDate = (dateStr: string | null): Date | null => {
+  if (!dateStr) return null;
+  const trimmed = dateStr.trim();
+  const isoMatch = trimmed.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (isoMatch) {
+    return new Date(parseInt(isoMatch[1], 10), parseInt(isoMatch[2], 10) - 1, parseInt(isoMatch[3], 10));
+  }
+  const brMatch = trimmed.match(/^(\d{2})\/(\d{2})\/(\d{4})/);
+  if (brMatch) {
+    return new Date(parseInt(brMatch[3], 10), parseInt(brMatch[2], 10) - 1, parseInt(brMatch[1], 10));
+  }
+  const d = new Date(trimmed);
+  if (isNaN(d.getTime())) return null;
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+};
+
+const toIsoDateString = (d: Date): string => {
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+const formatShortDate = (isoDate: string): string => {
+  if (!isoDate) return '';
+  const parts = isoDate.split('-');
+  if (parts.length !== 3) return isoDate;
+  return `${parts[2]}/${parts[1]}/${parts[0]}`;
+};
 
 interface Equipamento {
   NR_SEQUENCIA: number;
@@ -65,9 +93,17 @@ export default function Equipamentos() {
   const [isCategoriaDropdownOpen, setIsCategoriaDropdownOpen] = useState(false);
   const [isLocalizacaoDropdownOpen, setIsLocalizacaoDropdownOpen] = useState(false);
   const [isFornecedorDropdownOpen, setIsFornecedorDropdownOpen] = useState(false);
-  const [selectedMonth, setSelectedMonth] = useState<number | null>(null);
-  const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
+  const [startDate, setStartDate] = useState<string>('');
+  const [endDate, setEndDate] = useState<string>('');
   const [isDatePickerOpen, setIsDatePickerOpen] = useState(false);
+  const [onlyExpired, setOnlyExpired] = useState<boolean>(false);
+
+  const getDateFilterLabel = () => {
+    if (!startDate && !endDate) return 'Período';
+    if (startDate && endDate) return `${formatShortDate(startDate)} - ${formatShortDate(endDate)}`;
+    if (startDate) return `De ${formatShortDate(startDate)}`;
+    return `Até ${formatShortDate(endDate)}`;
+  };
   
   // Paginação e Ordenação
   const [currentPage, setCurrentPage] = useState(1);
@@ -130,8 +166,9 @@ export default function Equipamentos() {
     setSelectedLocalizacoes([]);
     setSelectedCategorias([]);
     setSelectedFornecedores([]);
-    setSelectedMonth(null);
-    setSelectedYear(new Date().getFullYear());
+    setStartDate('');
+    setEndDate('');
+    setOnlyExpired(false);
     setCurrentPage(1);
   };
 
@@ -173,6 +210,9 @@ export default function Equipamentos() {
 
   // Filtragem e Ordenação
   const filteredAndSortedEquipamentos = useMemo(() => {
+    const today = new Date();
+    const todayMidnight = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+
     return equipamentos
       .filter(e => {
         // Busca textual
@@ -204,31 +244,36 @@ export default function Equipamentos() {
             return !!forn && selectedFornecedores.includes(forn.trim());
           })();
 
-        // Filtro de Mês/Ano de Fim de Contrato
+        // Filtro de Máquina Vencida (acumulativo com todos os demais filtros)
+        let matchesExpired = true;
+        if (onlyExpired) {
+          const eqDate = parseEquipamentoDate(e.FIM_CONTRATO);
+          matchesExpired = !!eqDate && eqDate < todayMidnight;
+        }
+
+        // Filtro de Período de Fim de Contrato (acumulativo)
         let matchesGarantia = true;
-        if (selectedMonth !== null) {
-          if (e.FIM_CONTRATO) {
-            const dateParts = e.FIM_CONTRATO.split('-');
-            if (dateParts.length >= 2) {
-              const year = parseInt(dateParts[0], 10);
-              const month = parseInt(dateParts[1], 10) - 1; // 0-indexed
-              if (year !== selectedYear || month !== selectedMonth) {
-                matchesGarantia = false;
-              }
-            } else {
-              const date = new Date(e.FIM_CONTRATO);
-              const year = date.getFullYear();
-              const month = date.getMonth();
-              if (year !== selectedYear || month !== selectedMonth) {
+        if (startDate || endDate) {
+          const eqDate = parseEquipamentoDate(e.FIM_CONTRATO);
+          if (!eqDate) {
+            matchesGarantia = false;
+          } else {
+            if (startDate) {
+              const sDate = parseEquipamentoDate(startDate);
+              if (sDate && eqDate < sDate) {
                 matchesGarantia = false;
               }
             }
-          } else {
-            matchesGarantia = false;
+            if (endDate && matchesGarantia) {
+              const eDate = parseEquipamentoDate(endDate);
+              if (eDate && eqDate > eDate) {
+                matchesGarantia = false;
+              }
+            }
           }
         }
 
-        return matchesSearch && matchesPropriedade && matchesLocalizacao && matchesCategoria && matchesFornecedor && matchesGarantia;
+        return matchesSearch && matchesPropriedade && matchesLocalizacao && matchesCategoria && matchesFornecedor && matchesExpired && matchesGarantia;
       })
       .sort((a, b) => {
         let valA = a[sortField];
@@ -250,7 +295,7 @@ export default function Equipamentos() {
 
         return 0;
       });
-  }, [equipamentos, searchTerm, selectedPropriedade, selectedLocalizacoes, selectedCategorias, selectedFornecedores, selectedMonth, selectedYear, sortField, sortDirection]);
+  }, [equipamentos, onlyExpired, searchTerm, selectedPropriedade, selectedLocalizacoes, selectedCategorias, selectedFornecedores, startDate, endDate, sortField, sortDirection]);
 
   // Estatísticas / KPIs calculadas dinamicamente com base nos dados filtrados
   const stats = useMemo(() => {
@@ -300,7 +345,8 @@ export default function Equipamentos() {
     if (selectedCategorias.length > 0) filtrosAplicados.push(`Categorias: ${selectedCategorias.join(', ')}`);
     if (selectedFornecedores.length > 0) filtrosAplicados.push(`Fornecedores: ${selectedFornecedores.join(', ')}`);
     if (selectedLocalizacoes.length > 0) filtrosAplicados.push(`Setores: ${selectedLocalizacoes.join(', ')}`);
-    if (selectedMonth !== null) filtrosAplicados.push(`Período: ${months[selectedMonth]} / ${selectedYear}`);
+    if (startDate || endDate) filtrosAplicados.push(`Período Fim Contrato: ${getDateFilterLabel()}`);
+    if (onlyExpired) filtrosAplicados.push('Status: Apenas Máquinas Vencidas');
 
     const dataEmissao = new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short' }).format(new Date());
 
@@ -422,7 +468,8 @@ export default function Equipamentos() {
       if (selectedCategorias.length > 0) filtrosAplicados.push(`Categorias: ${selectedCategorias.join(', ')}`);
       if (selectedFornecedores.length > 0) filtrosAplicados.push(`Fornecedores: ${selectedFornecedores.join(', ')}`);
       if (selectedLocalizacoes.length > 0) filtrosAplicados.push(`Setores: ${selectedLocalizacoes.join(', ')}`);
-      if (selectedMonth !== null) filtrosAplicados.push(`Período: ${months[selectedMonth]} / ${selectedYear}`);
+      if (startDate || endDate) filtrosAplicados.push(`Período Fim Contrato: ${getDateFilterLabel()}`);
+      if (onlyExpired) filtrosAplicados.push('Status: Apenas Máquinas Vencidas');
 
       let startY = 37;
       if (filtrosAplicados.length > 0) {
@@ -700,86 +747,100 @@ export default function Equipamentos() {
             )}
           </div>
 
-          {/* 6. Filtro de Mês/Ano do Contrato */}
+          {/* 6. Filtro de Período Personalizado (Fim do Contrato) */}
           <div className="relative w-full sm:w-48 datepicker-dropdown-container">
             <button
               type="button"
               onClick={() => setIsDatePickerOpen(!isDatePickerOpen)}
-              className="w-full bg-background border border-border rounded-lg px-2.5 py-1.5 text-xs text-foreground text-left flex justify-between items-center focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary transition-all font-medium h-[34px]"
+              className={`w-full bg-background border rounded-lg px-2.5 py-1.5 text-xs text-left flex justify-between items-center focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary transition-all font-medium h-[34px] ${
+                startDate || endDate
+                  ? 'border-primary/60 text-primary bg-primary/5'
+                  : 'border-border text-foreground'
+              }`}
             >
               <span className="flex items-center gap-1.5 truncate">
-                <Calendar className="h-3.5 w-3.5 text-muted-foreground" />
-                {selectedMonth !== null
-                  ? `${months[selectedMonth]} ${selectedYear}`
-                  : 'Todos os Períodos'}
+                <Calendar className={`h-3.5 w-3.5 shrink-0 ${startDate || endDate ? 'text-primary' : 'text-muted-foreground'}`} />
+                <span className="truncate">{getDateFilterLabel()}</span>
               </span>
-              <ChevronRight className={`h-3 w-3 transform transition-transform text-muted-foreground ${isDatePickerOpen ? 'rotate-90' : ''}`} />
+              <ChevronRight className={`h-3 w-3 shrink-0 transform transition-transform text-muted-foreground ${isDatePickerOpen ? 'rotate-90' : ''}`} />
             </button>
 
             {isDatePickerOpen && (
-              <div className="absolute top-[100%] right-0 z-20 mt-1 bg-card border border-border rounded-lg shadow-lg p-3 w-64 animate-in fade-in slide-in-from-top-1 duration-150">
-                {/* Cabeçalho do Ano */}
-                <div className="flex items-center justify-between mb-3 px-1">
-                  <button
-                    type="button"
-                    onClick={() => setSelectedYear(prev => prev - 1)}
-                    className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
-                  >
-                    <ChevronLeft className="h-4 w-4" />
-                  </button>
-                  <span className="text-xs font-bold text-foreground">{selectedYear}</span>
-                  <button
-                    type="button"
-                    onClick={() => setSelectedYear(prev => prev + 1)}
-                    className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
-                  >
-                    <ChevronRight className="h-4 w-4" />
-                  </button>
+              <div className="absolute top-[100%] right-0 z-20 mt-1 bg-card border border-border rounded-xl shadow-xl p-3 w-64 animate-in fade-in slide-in-from-top-1 duration-150 space-y-2.5">
+                <div className="flex items-center justify-between border-b border-border/50 pb-1.5">
+                  <span className="text-xs font-bold text-foreground">
+                    Período (Fim do Contrato)
+                  </span>
+                  {(startDate || endDate) && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setStartDate('');
+                        setEndDate('');
+                        setCurrentPage(1);
+                      }}
+                      className="text-2xs font-semibold text-red-600 dark:text-red-400 hover:underline"
+                    >
+                      Limpar
+                    </button>
+                  )}
                 </div>
 
-                {/* Grade de Meses */}
-                <div className="grid grid-cols-3 gap-1.5 mb-3">
-                  {months.map((m, idx) => {
-                    const isSelected = selectedMonth === idx;
-                    return (
-                      <button
-                        key={m}
-                        type="button"
-                        onClick={() => {
-                          setSelectedMonth(idx);
-                          setIsDatePickerOpen(false);
-                          setCurrentPage(1);
-                        }}
-                        className={`py-1.5 text-2xs font-semibold rounded-md transition-all ${
-                          isSelected
-                            ? 'bg-primary text-primary-foreground shadow-sm shadow-primary/20'
-                            : 'hover:bg-muted text-foreground'
-                        }`}
-                      >
-                        {m}
-                      </button>
-                    );
-                  })}
+                <div className="space-y-2">
+                  <div className="space-y-1">
+                    <label className="text-2xs font-medium text-muted-foreground block">Data Inicial</label>
+                    <input
+                      type="date"
+                      value={startDate}
+                      onChange={(e) => {
+                        setStartDate(e.target.value);
+                        setCurrentPage(1);
+                      }}
+                      className="w-full bg-background border border-border rounded-md px-2.5 py-1.5 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-2xs font-medium text-muted-foreground block">Data Final</label>
+                    <input
+                      type="date"
+                      value={endDate}
+                      min={startDate || undefined}
+                      onChange={(e) => {
+                        setEndDate(e.target.value);
+                        setCurrentPage(1);
+                      }}
+                      className="w-full bg-background border border-border rounded-md px-2.5 py-1.5 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                    />
+                  </div>
                 </div>
-
-                {/* Botão Todos os Períodos */}
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSelectedMonth(null);
-                    setIsDatePickerOpen(false);
-                    setCurrentPage(1);
-                  }}
-                  className="w-full py-1.5 text-2xs font-bold text-center border border-border rounded-md hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
-                >
-                  Todos os Períodos
-                </button>
               </div>
             )}
           </div>
 
+          {/* 7. Checkbox Máquina Vencida */}
+          <label
+            title="Filtra apenas máquinas com contrato vencido (combinado com os demais filtros)"
+            className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border text-xs font-semibold cursor-pointer select-none transition-all h-[34px] ${
+              onlyExpired
+                ? 'bg-amber-500/15 border-amber-500/50 text-amber-700 dark:text-amber-400 shadow-sm'
+                : 'bg-background border-border text-foreground hover:bg-muted/50'
+            }`}
+          >
+            <input
+              type="checkbox"
+              checked={onlyExpired}
+              onChange={(e) => {
+                setOnlyExpired(e.target.checked);
+                setCurrentPage(1);
+              }}
+              className="h-3.5 w-3.5 rounded border-border text-amber-600 focus:ring-amber-500 cursor-pointer"
+            />
+            <AlertTriangle className={`h-3.5 w-3.5 shrink-0 ${onlyExpired ? 'text-amber-600 dark:text-amber-400' : 'text-muted-foreground'}`} />
+            <span className="whitespace-nowrap">Máquina Vencida</span>
+          </label>
+
           {/* Botão de Limpar Filtros */}
-          {(searchTerm || selectedPropriedade || selectedLocalizacoes.length > 0 || selectedCategorias.length > 0 || selectedFornecedores.length > 0 || selectedMonth !== null) && (
+          {(onlyExpired || searchTerm || selectedPropriedade || selectedLocalizacoes.length > 0 || selectedCategorias.length > 0 || selectedFornecedores.length > 0 || startDate || endDate) && (
             <button
               onClick={handleResetFilters}
               title="Limpar Filtros"

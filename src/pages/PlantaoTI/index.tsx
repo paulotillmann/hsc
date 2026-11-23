@@ -240,8 +240,7 @@ export default function PlantaoTI() {
 
     const reducedGroupEmails = [
       'talysson.resende@santacasaaraguari.org.br',
-      'bruno.lima@santacasaaraguari.org.br',
-      'jessica.araujo@santacasaaraguari.org.br'
+      'bruno.lima@santacasaaraguari.org.br'
     ];
 
     return colaboradores.map(colab => {

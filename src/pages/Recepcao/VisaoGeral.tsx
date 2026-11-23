@@ -14,7 +14,7 @@ import {
   FileText
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
-import { buscarPacientes } from '../../services/pacienteService';
+import { buscarPacientes, limparCachePacientes } from '../../services/pacienteService';
 import { VisaoGeralCard } from '../../components/recepcao/VisaoGeralCard';
 import RelatorioVisitasModal from '../../components/recepcao/RelatorioVisitasModal';
 import {
@@ -260,6 +260,7 @@ export default function VisaoGeral() {
   }, [selectedMonth]);
 
   const handleRefresh = () => {
+    limparCachePacientes();
     loadKpis();
     loadChartsData();
   };
