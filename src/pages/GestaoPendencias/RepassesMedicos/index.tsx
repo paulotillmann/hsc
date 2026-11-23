@@ -5,7 +5,7 @@ import {
   FileSpreadsheet, RefreshCw, Calendar, Edit3, Trash2, Building2,
   ChevronRight, ArrowUpRight, Check, AlertCircle, Sparkles,
   Download, FileCheck, Layers, Eye, Wrench, Construction, ArrowLeft, ShieldAlert, Clock,
-  Send, CheckCircle2
+  Send, CheckCircle2, Upload
 } from 'lucide-react';
 import { 
   repasseService, 
@@ -715,11 +715,21 @@ const RepassesMedicos: React.FC = () => {
           {/* Botões de Ação */}
           <button
             type="button"
+            onClick={() => setImportarModalOpen(true)}
+            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-bold rounded-xl bg-emerald-600 text-white hover:bg-emerald-700 shadow-2xs transition-colors cursor-pointer"
+            title="Importar arquivo PDF (UNIMED, IPSEMG, CEMIG, GNDI) ou Planilha Excel/CSV"
+          >
+            <Upload className="w-3.5 h-3.5" />
+            <span>Importar PDF / Excel</span>
+          </button>
+
+          <button
+            type="button"
             onClick={() => {
               setItemParaEdicao(null);
               setNovoItemModalOpen(true);
             }}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-xl bg-card border border-border text-foreground hover:bg-muted shadow-xs transition-colors"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-xl bg-card border border-border text-foreground hover:bg-muted shadow-xs transition-colors cursor-pointer"
             title="Formulário completo com mais detalhes"
           >
             <Plus className="w-3.5 h-3.5 text-primary" />
@@ -1283,15 +1293,19 @@ const RepassesMedicos: React.FC = () => {
         }}
       />
 
-      {/* 2. Modal de Importação em Lote do Excel */}
+      {/* 2. Modal de Importação Inteligente (PDF & Excel) */}
       {competenciaAtual && (
         <ImportarExcelModal
           isOpen={importarModalOpen}
           onClose={() => setImportarModalOpen(false)}
           competenciaId={competenciaAtual.id}
+          convenioAtual={convenio}
+          competenciaStrAtual={competenciaStr}
           setoresDisponiveis={setoresDisponiveis}
           medicosDisponiveis={medicosDisponiveis}
-          onImportado={carregarDadosCompetencia}
+          onImportado={() => {
+            carregarDadosCompetencia();
+          }}
         />
       )}
 
