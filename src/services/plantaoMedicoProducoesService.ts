@@ -292,6 +292,122 @@ export const plantaoMedicoProducoesService = {
   },
 
   /**
+   * Unifica todos os registros de um período de origem para o período de destino,
+   * preservando integralmente produções, valor pago, status e histórico de envio de e-mail.
+   */
+  async unificarPeriodo(params: {
+    origem_de: string;
+    origem_ate: string;
+    destino_de: string;
+    destino_ate: string;
+  }): Promise<{ movidos: number; mesclados: number }> {
+    const { origem_de, origem_ate, destino_de, destino_ate } = params;
+    if (origem_de === destino_de && origem_ate === destino_ate) {
+      return { movidos: 0, mesclados: 0 };
+    }
+
+    const [origemRows, destinoRows] = await Promise.all([
+      this.listarPorPeriodo(origem_de, origem_ate),
+      this.listarPorPeriodo(destino_de, destino_ate)
+    ]);
+
+    if (origemRows.length === 0) {
+      return { movidos: 0, mesclados: 0 };
+    }
+
+    const buildKey = (r: PlantaoMedicoProducaoDB) =>
+      `${(r.medico || '').trim()}|||${(r.especialidade || '').trim()}|||${(r.tipo_plantao || '').trim()}`;
+
+    const destinoMap = new Map<string, PlantaoMedicoProducaoDB>();
+    destinoRows.forEach(row => destinoMap.set(buildKey(row), row));
+
+    const nowIso = new Date().toISOString();
+    let movidos = 0;
+    let mesclados = 0;
+
+    for (const src of origemRows) {
+      if (!src.id) continue;
+      const tgt = destinoMap.get(buildKey(src));
+
+      if (tgt && tgt.id) {
+        const tgtProds = Array.isArray(tgt.producoes) ? tgt.producoes : [];
+        const srcProds = Array.isArray(src.producoes) ? src.producoes : [];
+        const mergedProducoes = tgtProds.length > 0 ? tgtProds : srcProds;
+
+        const tgtPago = Number(tgt.valor_pago || 0);
+        const srcPago = Number(src.valor_pago || 0);
+        const mergedValorPago = tgtPago > 0 ? tgtPago : srcPago;
+
+        const mergedStatus =
+          tgt.status && tgt.status !== 'Pendente'
+            ? tgt.status
+            : (src.status || 'Pendente');
+
+        const mergedEmailEnviado = Boolean(tgt.email_enviado || src.email_enviado);
+        const latestEmailEm =
+          tgt.email_enviado_em && src.email_enviado_em
+            ? (tgt.email_enviado_em >= src.email_enviado_em ? tgt.email_enviado_em : src.email_enviado_em)
+            : (tgt.email_enviado_em || src.email_enviado_em || null);
+
+        const mergedEmailPara = Array.from(
+          new Set([
+            ...(Array.isArray(tgt.email_enviado_para) ? tgt.email_enviado_para : []),
+            ...(Array.isArray(src.email_enviado_para) ? src.email_enviado_para : [])
+          ])
+        );
+
+        const { error: updateErr } = await supabase
+          .from('plantao_medico_producoes')
+          .update({
+            producoes: mergedProducoes,
+            valor_pago: mergedValorPago,
+            status: mergedStatus,
+            email_enviado: mergedEmailEnviado,
+            email_enviado_em: latestEmailEm,
+            email_enviado_para: mergedEmailPara,
+            updated_at: nowIso
+          })
+          .eq('id', tgt.id);
+
+        if (updateErr) {
+          console.error('Erro ao mesclar registro durante unificação de período:', updateErr);
+          throw updateErr;
+        }
+
+        const { error: deleteErr } = await supabase
+          .from('plantao_medico_producoes')
+          .delete()
+          .eq('id', src.id);
+
+        if (deleteErr) {
+          console.error('Erro ao remover registro duplicado após mesclagem:', deleteErr);
+          throw deleteErr;
+        }
+
+        mesclados += 1;
+      } else {
+        const { error: moveErr } = await supabase
+          .from('plantao_medico_producoes')
+          .update({
+            periodo_de: destino_de,
+            periodo_ate: destino_ate,
+            updated_at: nowIso
+          })
+          .eq('id', src.id);
+
+        if (moveErr) {
+          console.error('Erro ao mover registro durante unificação de período:', moveErr);
+          throw moveErr;
+        }
+
+        movidos += 1;
+      }
+    }
+
+    return { movidos, mesclados };
+  },
+
+  /**
    * Exclui um registro de produção médica caso necessário
    */
   async excluirProducao(id: string): Promise<void> {

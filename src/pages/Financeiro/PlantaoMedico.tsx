@@ -6,7 +6,7 @@ import {
   TrendingUp, Info, Check, ChevronDown, UserCheck, DollarSign, 
   FileSpreadsheet, Award, Activity, X, Layers, Edit3, Save, Baby,
   ClipboardList, CheckCircle2, Plus, Trash2, GraduationCap, Briefcase, Clock, Mail, MailCheck, Send, Loader2,
-  AlertTriangle, ArrowRight
+  AlertTriangle, ArrowRight, GitMerge
 } from 'lucide-react';
 import { webhookService } from '../../services/webhookService';
 import { MedicoEmailsModal } from './MedicoEmailsModal';
@@ -373,6 +373,7 @@ const PlantaoMedico: React.FC = () => {
   const [dbProducoesMap, setDbProducoesMap] = useState<Record<string, PlantaoMedicoProducaoDB>>({});
   const [periodosRelacionados, setPeriodosRelacionados] = useState<PeriodoSalvoResumo[]>([]);
   const [dismissedPeriodAlertKey, setDismissedPeriodAlertKey] = useState<string>('');
+  const [unificandoPeriodoKey, setUnificandoPeriodoKey] = useState<string | null>(null);
   const [loadingProducoes, setLoadingProducoes] = useState<boolean>(false);
   const [isSavingProducao, setIsSavingProducao] = useState<boolean>(false);
 
@@ -1941,15 +1942,40 @@ const PlantaoMedico: React.FC = () => {
             <div className="flex flex-wrap gap-2 pl-0 sm:pl-9">
               {periodosRelacionados.map((p) => {
                 const formatBr = (iso: string) => iso.split('-').reverse().join('/');
+                const pKey = `${p.periodo_de}_${p.periodo_ate}`;
+                const isUnificando = unificandoPeriodoKey === pKey;
+
+                const handleUnificar = async () => {
+                  const msg =
+                    `Deseja unificar os ${p.total} registros de ${formatBr(p.periodo_de)} a ${formatBr(p.periodo_ate)} ` +
+                    `para o período atual (${formatBr(periodFrom)} a ${formatBr(periodTo)})?\n\n` +
+                    `Todas as produções (${p.com_producoes}), valores pagos e status de envio de e-mail (${p.emails_enviados}) serão preservados.`;
+                  if (!confirm(msg)) return;
+
+                  try {
+                    setUnificandoPeriodoKey(pKey);
+                    const res = await plantaoMedicoProducoesService.unificarPeriodo({
+                      origem_de: p.periodo_de,
+                      origem_ate: p.periodo_ate,
+                      destino_de: periodFrom,
+                      destino_ate: periodTo
+                    });
+                    await carregarProducoesSupabase(periodFrom, periodTo);
+                    alert(
+                      `Unificação concluída! ${res.movidos} registro(s) movido(s) e ${res.mesclados} registro(s) mesclado(s) para ${formatBr(periodFrom)} a ${formatBr(periodTo)}.`
+                    );
+                  } catch (err: any) {
+                    console.error('Erro ao unificar períodos:', err);
+                    alert(`Erro ao unificar períodos: ${err?.message || 'Tente novamente.'}`);
+                  } finally {
+                    setUnificandoPeriodoKey(null);
+                  }
+                };
+
                 return (
-                  <button
-                    key={`${p.periodo_de}_${p.periodo_ate}`}
-                    type="button"
-                    onClick={() => {
-                      setPeriodFrom(p.periodo_de);
-                      setPeriodTo(p.periodo_ate);
-                    }}
-                    className="group inline-flex flex-wrap items-center gap-2 px-3 py-1.5 rounded-lg bg-background hover:bg-amber-100/70 dark:hover:bg-amber-900/40 border border-amber-300 dark:border-amber-700/70 text-xs transition-all shadow-xs cursor-pointer"
+                  <div
+                    key={pKey}
+                    className="inline-flex flex-wrap items-center gap-2 px-3 py-1.5 rounded-lg bg-background border border-amber-300 dark:border-amber-700/70 text-xs shadow-xs"
                   >
                     <span className="font-bold text-foreground font-mono">
                       {formatBr(p.periodo_de)} a {formatBr(p.periodo_ate)}
@@ -1957,11 +1983,41 @@ const PlantaoMedico: React.FC = () => {
                     <span className="text-[11px] text-muted-foreground">
                       • {p.com_producoes} com produção • {p.emails_enviados} e-mails ({p.total} reg.)
                     </span>
-                    <span className="inline-flex items-center gap-1 text-[11px] font-bold text-[#8a1515] dark:text-[#f43f5e] group-hover:translate-x-0.5 transition-transform">
-                      Carregar
-                      <ArrowRight className="h-3 w-3" />
-                    </span>
-                  </button>
+                    <div className="flex items-center gap-1.5 ml-1">
+                      <button
+                        type="button"
+                        disabled={!!unificandoPeriodoKey}
+                        onClick={() => {
+                          setPeriodFrom(p.periodo_de);
+                          setPeriodTo(p.periodo_ate);
+                        }}
+                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-muted hover:bg-amber-100 dark:hover:bg-amber-900/40 text-[11px] font-bold text-foreground transition-colors cursor-pointer disabled:opacity-50"
+                        title="Apenas alternar o filtro da tela para visualizar este recorte"
+                      >
+                        Carregar
+                        <ArrowRight className="h-3 w-3" />
+                      </button>
+                      <button
+                        type="button"
+                        disabled={!!unificandoPeriodoKey}
+                        onClick={handleUnificar}
+                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-[#8a1515] hover:bg-[#6b1010] text-white text-[11px] font-bold transition-colors cursor-pointer disabled:opacity-50"
+                        title={`Mover e mesclar estes registros para o período atual (${formatBr(periodFrom)} a ${formatBr(periodTo)})`}
+                      >
+                        {isUnificando ? (
+                          <>
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                            Unificando...
+                          </>
+                        ) : (
+                          <>
+                            <GitMerge className="h-3 w-3" />
+                            Unificar aqui
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  </div>
                 );
               })}
             </div>
