@@ -1,6 +1,6 @@
 import React from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
-import Sidebar from './Sidebar';
+import Topbar from './Topbar';
 
 const Layout: React.FC = () => {
   const location = useLocation();
@@ -28,10 +28,10 @@ const Layout: React.FC = () => {
     location.pathname.startsWith('/nps-dashboard');
 
   return (
-    <div className="flex h-screen w-full bg-background text-foreground transition-colors overflow-hidden">
-      <Sidebar />
+    <div className="flex flex-col h-screen w-full bg-background text-foreground transition-colors overflow-hidden">
+      <Topbar />
       <main className="flex-1 overflow-y-auto overflow-x-hidden w-full min-w-0">
-        <div className={`${isWidePage ? 'w-full max-w-none px-3 sm:px-5 lg:px-6 py-4 sm:py-6' : 'max-w-6xl mx-auto p-8'} transition-all duration-300 w-full min-w-0 overflow-x-hidden`}>
+        <div className={`${isWidePage ? 'w-full max-w-none px-3 sm:px-5 lg:px-6 py-4 sm:py-6' : 'max-w-6xl mx-auto p-6 sm:p-8'} transition-all duration-300 w-full min-w-0 overflow-x-hidden`}>
           <Outlet />
         </div>
       </main>

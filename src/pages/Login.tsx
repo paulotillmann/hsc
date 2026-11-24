@@ -7,7 +7,7 @@ import { supabase } from '../lib/supabase';
 
 const Login: React.FC = () => {
   const navigate = useNavigate();
-  const { signIn, signUp, resetPassword, session, loading, profileLoaded, defaultModuleSlug, profile } = useAuth();
+  const { signIn, signUp, resetPassword, session, loading, profileLoaded, profile } = useAuth();
 
   const [isRegistering, setIsRegistering] = useState(false);
   const [isRecovering, setIsRecovering] = useState(false);
@@ -49,10 +49,9 @@ const Login: React.FC = () => {
         navigate('/pacientes-internados', { replace: true });
         return;
       }
-      const target = defaultModuleSlug ? `/${defaultModuleSlug}` : '/dashboard';
-      navigate(target, { replace: true });
+      navigate('/home', { replace: true });
     }
-  }, [session, loading, profileLoaded, defaultModuleSlug, profile, navigate]);
+  }, [session, loading, profileLoaded, profile, navigate]);
 
   useEffect(() => {
     setIsDark(document.documentElement.classList.contains('dark'));

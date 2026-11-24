@@ -21,6 +21,7 @@ import PainelTVPA from './pages/ProntoAtendimento/PainelTVPA';
 import EscutaLanding from './pages/EscutaSantaCasa/EscutaLanding';
 import NovaDenuncia from './pages/EscutaSantaCasa/NovaDenuncia';
 import ConfirmarConsultaPublica from './pages/CentroMedico/ConfirmarConsultaPublica';
+import HomeHub from './pages/HomeHub';
 
 const App: React.FC = () => {
   // Configuração Global de Tema
@@ -50,6 +51,9 @@ const App: React.FC = () => {
 
           {/* Rotas protegidas — exigem sessão ativa */}
           <Route element={<PrivateRoute />}>
+
+            {/* Hub Inicial Centralizado (Estilo Tasy) */}
+            <Route path="/home" element={<HomeHub />} />
 
             {/* Rota de Impressão (Sem Layout da aplicação) */}
             <Route path="/imprimir/etiqueta/:id" element={<EtiquetaVisita />} />
