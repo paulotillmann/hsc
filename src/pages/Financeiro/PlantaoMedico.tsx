@@ -5,14 +5,15 @@ import {
   ChevronLeft, ChevronRight, BarChart3, PieChart, ArrowUpRight, 
   TrendingUp, Info, Check, ChevronDown, UserCheck, DollarSign, 
   FileSpreadsheet, Award, Activity, X, Layers, Edit3, Save, Baby,
-  ClipboardList, CheckCircle2, Plus, Trash2, GraduationCap, Briefcase, Clock, Mail, MailCheck, Send, Loader2
+  ClipboardList, CheckCircle2, Plus, Trash2, GraduationCap, Briefcase, Clock, Mail, MailCheck, Send, Loader2,
+  AlertTriangle, ArrowRight, GitMerge
 } from 'lucide-react';
 import { webhookService } from '../../services/webhookService';
 import { MedicoEmailsModal } from './MedicoEmailsModal';
 import { DisparoEmailLoteModal } from './DisparoEmailLoteModal';
 import { PlantaoMedicoTiposModal, getTipoColorClass } from './PlantaoMedicoTiposModal';
 import { plantaoMedicoContatosService, MedicoContato } from '../../services/plantaoMedicoContatosService';
-import { plantaoMedicoProducoesService, PlantaoMedicoProducaoDB } from '../../services/plantaoMedicoProducoesService';
+import { plantaoMedicoProducoesService, PlantaoMedicoProducaoDB, PeriodoSalvoResumo } from '../../services/plantaoMedicoProducoesService';
 import { plantaoMedicoTiposProducaoService, PlantaoMedicoTipoProducao, DEFAULT_TIPOS_PRODUCAO } from '../../services/plantaoMedicoTiposProducaoService';
 import { sendPlantaoMedicoEmail } from '../../services/plantaoEmailService';
 import jsPDF from 'jspdf';
@@ -223,36 +224,103 @@ const setStorageItem = (key: string, value: string) => {
   }
 };
 
+const filterItemsByDateRange = (
+  items: PlantaoMedicoItem[],
+  from: string,
+  to: string
+): PlantaoMedicoItem[] => {
+  if (!Array.isArray(items) || items.length === 0) return [];
+  const fromDate = from ? parseTasyDate(from) : null;
+  const toDate = to ? parseTasyDate(to) : null;
+  const endOfDay = toDate ? new Date(toDate) : null;
+  if (endOfDay) endOfDay.setHours(23, 59, 59, 999);
+
+  return items.filter(item => {
+    if (!item?.DT_CHAMADO) return false;
+    const itemDate = parseTasyDate(item.DT_CHAMADO);
+    if (!itemDate || isNaN(itemDate.getTime())) return false;
+    if (fromDate && itemDate < fromDate) return false;
+    if (endOfDay && itemDate > endOfDay) return false;
+    return true;
+  });
+};
+
+const getValidCachedPlantaos = (
+  from: string,
+  to: string
+): { list: PlantaoMedicoItem[]; time: string | null; status: 'idle' | 'success' | 'error' } | null => {
+  try {
+    const keyed = getStorageItem(`hsc_plantao_medico_cache_${from}_${to}`);
+    if (keyed) {
+      const parsed = JSON.parse(keyed);
+      const rawList = Array.isArray(parsed?.list) ? parsed.list : (Array.isArray(parsed) ? parsed : []);
+      const validList = filterItemsByDateRange(rawList, from, to);
+      if (validList.length > 0) {
+        return {
+          list: validList,
+          time: parsed?.time || getStorageItem('hsc_plantao_medico_cache_time'),
+          status: (parsed?.status as any) || 'success'
+        };
+      }
+    }
+
+    const cachedFrom = getStorageItem('hsc_plantao_medico_cache_from');
+    const cachedTo = getStorageItem('hsc_plantao_medico_cache_to');
+    const cachedData = getStorageItem('hsc_plantao_medico_cache_data');
+    if (cachedData && cachedFrom === from && cachedTo === to) {
+      const rawList = JSON.parse(cachedData);
+      const validList = filterItemsByDateRange(rawList, from, to);
+      if (validList.length > 0) {
+        return {
+          list: validList,
+          time: getStorageItem('hsc_plantao_medico_cache_time'),
+          status: (getStorageItem('hsc_plantao_medico_cache_status') as any) || 'success'
+        };
+      }
+    }
+  } catch (e) {}
+  return null;
+};
+
 const PlantaoMedico: React.FC = () => {
-  // Filtros de Data Inicializados do Cache se existirem
+  // Filtros de Data Inicializados do último período selecionado (ou mês anterior padrão)
   const [periodFrom, setPeriodFrom] = useState<string>(() => {
-    return getStorageItem('hsc_plantao_medico_cache_from') || getDefaultDates().from;
+    return (
+      getStorageItem('hsc_plantao_medico_selected_from') ||
+      getStorageItem('hsc_plantao_medico_cache_from') ||
+      getDefaultDates().from
+    );
   });
   const [periodTo, setPeriodTo] = useState<string>(() => {
-    return getStorageItem('hsc_plantao_medico_cache_to') || getDefaultDates().to;
+    return (
+      getStorageItem('hsc_plantao_medico_selected_to') ||
+      getStorageItem('hsc_plantao_medico_cache_to') ||
+      getDefaultDates().to
+    );
   });
 
   const [plantaos, setPlantaos] = useState<PlantaoMedicoItem[]>(() => {
-    try {
-      const from = getStorageItem('hsc_plantao_medico_cache_from') || getDefaultDates().from;
-      const to = getStorageItem('hsc_plantao_medico_cache_to') || getDefaultDates().to;
-      const keyed = getStorageItem(`hsc_plantao_medico_cache_${from}_${to}`);
-      if (keyed) {
-        const parsed = JSON.parse(keyed);
-        return parsed.list || parsed;
-      }
-      const cached = getStorageItem('hsc_plantao_medico_cache_data');
-      if (cached) return JSON.parse(cached);
-    } catch (e) {}
-    return [];
+    const from =
+      getStorageItem('hsc_plantao_medico_selected_from') ||
+      getStorageItem('hsc_plantao_medico_cache_from') ||
+      getDefaultDates().from;
+    const to =
+      getStorageItem('hsc_plantao_medico_selected_to') ||
+      getStorageItem('hsc_plantao_medico_cache_to') ||
+      getDefaultDates().to;
+    return getValidCachedPlantaos(from, to)?.list || [];
   });
 
   const [loading, setLoading] = useState<boolean>(() => {
-    const from = getStorageItem('hsc_plantao_medico_cache_from') || getDefaultDates().from;
-    const to = getStorageItem('hsc_plantao_medico_cache_to') || getDefaultDates().to;
-    const keyed = getStorageItem(`hsc_plantao_medico_cache_${from}_${to}`);
-    const cached = getStorageItem('hsc_plantao_medico_cache_data');
-    return !keyed && !cached;
+    const from =
+      getStorageItem('hsc_plantao_medico_selected_from') ||
+      getStorageItem('hsc_plantao_medico_cache_from') ||
+      getDefaultDates().from;
+    const to =
+      getStorageItem('hsc_plantao_medico_selected_to') ||
+      getStorageItem('hsc_plantao_medico_cache_to') ||
+      getDefaultDates().to;
+    return !getValidCachedPlantaos(from, to);
   });
 
   const [syncStatus, setSyncStatus] = useState<'idle' | 'success' | 'error'>(() => {
@@ -303,6 +371,9 @@ const PlantaoMedico: React.FC = () => {
   const [sortAscSintetico, setSortAscSintetico] = useState<boolean>(false);
   // Armazenamento de edições de produção e valor pago para a visão Sintética
   const [dbProducoesMap, setDbProducoesMap] = useState<Record<string, PlantaoMedicoProducaoDB>>({});
+  const [periodosRelacionados, setPeriodosRelacionados] = useState<PeriodoSalvoResumo[]>([]);
+  const [dismissedPeriodAlertKey, setDismissedPeriodAlertKey] = useState<string>('');
+  const [unificandoPeriodoKey, setUnificandoPeriodoKey] = useState<string | null>(null);
   const [loadingProducoes, setLoadingProducoes] = useState<boolean>(false);
   const [isSavingProducao, setIsSavingProducao] = useState<boolean>(false);
 
@@ -318,20 +389,27 @@ const PlantaoMedico: React.FC = () => {
     return {};
   });
 
-  // Carregar produções salvas do Supabase para o período ativo
+  // Carregar produções salvas do Supabase para o período ativo + detectar outros recortes salvos no mesmo mês
   const carregarProducoesSupabase = useCallback(async (from: string, to: string) => {
     if (!from || !to) return;
     try {
       setLoadingProducoes(true);
       // Limpa dados do período anterior imediatamente para evitar estado residual enquanto busca
       setDbProducoesMap({});
-      const lista = await plantaoMedicoProducoesService.listarPorPeriodo(from, to);
+      setPeriodosRelacionados([]);
+
+      const [lista, relacionados] = await Promise.all([
+        plantaoMedicoProducoesService.listarPorPeriodo(from, to),
+        plantaoMedicoProducoesService.listarPeriodosRelacionados(from, to)
+      ]);
+
       const map: Record<string, PlantaoMedicoProducaoDB> = {};
       lista.forEach(item => {
         const k = getSyntheticKey(item.medico, item.especialidade, item.tipo_plantao);
         map[k] = item;
       });
       setDbProducoesMap(map);
+      setPeriodosRelacionados(relacionados);
     } catch (err) {
       console.error('Erro ao carregar produções do Supabase:', err);
     } finally {
@@ -342,6 +420,34 @@ const PlantaoMedico: React.FC = () => {
   useEffect(() => {
     carregarProducoesSupabase(periodFrom, periodTo);
   }, [carregarProducoesSupabase, periodFrom, periodTo]);
+
+  // Persistir período selecionado em chaves dedicadas (sem interferir nas chaves de controle de cache de dados)
+  useEffect(() => {
+    if (periodFrom && periodTo) {
+      setStorageItem('hsc_plantao_medico_selected_from', periodFrom);
+      setStorageItem('hsc_plantao_medico_selected_to', periodTo);
+    }
+  }, [periodFrom, periodTo]);
+
+  // Valor de competência mensal (YYYY-MM) quando o período corresponde exatamente a um mês fechado
+  const activeMonthCompetencia = useMemo(() => {
+    const mFrom = /^(\d{4})-(\d{2})-(\d{2})$/.exec(periodFrom);
+    const mTo = /^(\d{4})-(\d{2})-(\d{2})$/.exec(periodTo);
+    if (!mFrom || !mTo) return '';
+    if (mFrom[1] !== mTo[1] || mFrom[2] !== mTo[2] || mFrom[3] !== '01') return '';
+    const lastDay = String(new Date(parseInt(mTo[1], 10), parseInt(mTo[2], 10), 0).getDate()).padStart(2, '0');
+    return mTo[3] === lastDay ? `${mFrom[1]}-${mFrom[2]}` : '';
+  }, [periodFrom, periodTo]);
+
+  const handleSelectCompetenciaMensal = (monthValue: string) => {
+    const match = /^(\d{4})-(\d{2})$/.exec(monthValue);
+    if (!match) return;
+    const year = parseInt(match[1], 10);
+    const month = parseInt(match[2], 10);
+    const lastDay = String(new Date(year, month, 0).getDate()).padStart(2, '0');
+    setPeriodFrom(`${match[1]}-${match[2]}-01`);
+    setPeriodTo(`${match[1]}-${match[2]}-${lastDay}`);
+  };
 
   // Sincronizar cache local de rascunhos sintéticos estritamente com o período ativo
   useEffect(() => {
@@ -576,6 +682,9 @@ const PlantaoMedico: React.FC = () => {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  // Cache em memória da resposta completa do webhook na sessão atual para trocas instantâneas de período
+  const allWebhookPlantaosRef = useRef<{ list: PlantaoMedicoItem[]; time: string | null } | null>(null);
+
   const saveToCache = (
     list: PlantaoMedicoItem[],
     time: string | null,
@@ -584,7 +693,11 @@ const PlantaoMedico: React.FC = () => {
     to: string
   ) => {
     try {
-      const dataStr = JSON.stringify(list);
+      // Salva no storage apenas o recorte do período para evitar estourar a cota de 5MB do localStorage
+      const periodSlice = filterItemsByDateRange(list, from, to);
+      if (periodSlice.length === 0) return;
+
+      const dataStr = JSON.stringify(periodSlice);
       setStorageItem('hsc_plantao_medico_cache_data', dataStr);
       if (time) setStorageItem('hsc_plantao_medico_cache_time', time);
       setStorageItem('hsc_plantao_medico_cache_status', status);
@@ -592,7 +705,7 @@ const PlantaoMedico: React.FC = () => {
       setStorageItem('hsc_plantao_medico_cache_to', to);
 
       // Cache chaveado por período
-      const keyedPayload = JSON.stringify({ list, time, status });
+      const keyedPayload = JSON.stringify({ list: periodSlice, time, status });
       setStorageItem(`hsc_plantao_medico_cache_${from}_${to}`, keyedPayload);
     } catch (e) {
       console.error('Erro ao salvar cache de plantão médico:', e);
@@ -602,33 +715,27 @@ const PlantaoMedico: React.FC = () => {
   // Busca dados do webhook n8n/plantao com suporte a cache local
   const fetchPlantaos = useCallback(async (showLoading = true, forceRefresh = false) => {
     if (!forceRefresh) {
-      try {
-        const keyed = getStorageItem(`hsc_plantao_medico_cache_${periodFrom}_${periodTo}`);
-        if (keyed) {
-          const parsed = JSON.parse(keyed);
-          setPlantaos(parsed.list || parsed);
-          if (parsed.time) setSyncTime(parsed.time);
-          setSyncStatus(parsed.status || 'success');
+      // 1. Se já temos o dataset completo em memória na sessão, filtra instantaneamente
+      if (allWebhookPlantaosRef.current && allWebhookPlantaosRef.current.list.length > 0) {
+        const sliced = filterItemsByDateRange(allWebhookPlantaosRef.current.list, periodFrom, periodTo);
+        if (sliced.length > 0) {
+          setPlantaos(sliced);
+          if (allWebhookPlantaosRef.current.time) setSyncTime(allWebhookPlantaosRef.current.time);
+          setSyncStatus('success');
           setLoading(false);
+          saveToCache(sliced, allWebhookPlantaosRef.current.time, 'success', periodFrom, periodTo);
           return;
         }
+      }
 
-        const cachedData = getStorageItem('hsc_plantao_medico_cache_data');
-        const cachedTime = getStorageItem('hsc_plantao_medico_cache_time');
-        const cachedStatus = getStorageItem('hsc_plantao_medico_cache_status');
-        const cachedFrom = getStorageItem('hsc_plantao_medico_cache_from');
-        const cachedTo = getStorageItem('hsc_plantao_medico_cache_to');
-
-        if (cachedData && cachedFrom === periodFrom && cachedTo === periodTo) {
-          const parsed = JSON.parse(cachedData);
-          setPlantaos(parsed);
-          setSyncTime(cachedTime);
-          setSyncStatus((cachedStatus as any) || 'success');
-          setLoading(false);
-          return;
-        }
-      } catch (e) {
-        console.error('Erro ao ler cache de plantão médico:', e);
+      // 2. Tenta cache persistido válido (não vazio e pertencente ao período)
+      const validCache = getValidCachedPlantaos(periodFrom, periodTo);
+      if (validCache) {
+        setPlantaos(validCache.list);
+        if (validCache.time) setSyncTime(validCache.time);
+        setSyncStatus(validCache.status);
+        setLoading(false);
+        return;
       }
     }
 
@@ -638,19 +745,9 @@ const PlantaoMedico: React.FC = () => {
     // Mapear edições existentes para preservar (apenas se for do mesmo período)
     const existingEditsMap = new Map<string, { tipoProducao?: string; valorProducao?: number }>();
     try {
-      const currentKeyed = getStorageItem(`hsc_plantao_medico_cache_${periodFrom}_${periodTo}`);
-      const cachedFrom = getStorageItem('hsc_plantao_medico_cache_from');
-      const cachedTo = getStorageItem('hsc_plantao_medico_cache_to');
-      let currentCachedList: PlantaoMedicoItem[] | null = null;
-      if (currentKeyed) {
-        const parsed = JSON.parse(currentKeyed);
-        currentCachedList = parsed.list || parsed;
-      } else if (cachedFrom === periodFrom && cachedTo === periodTo) {
-        const cachedData = getStorageItem('hsc_plantao_medico_cache_data');
-        if (cachedData) currentCachedList = JSON.parse(cachedData);
-      }
-      if (currentCachedList && Array.isArray(currentCachedList)) {
-        currentCachedList.forEach(p => {
+      const currentCache = getValidCachedPlantaos(periodFrom, periodTo);
+      if (currentCache && Array.isArray(currentCache.list)) {
+        currentCache.list.forEach(p => {
           if (p.id && (p.tipoProducao || p.valorProducao !== undefined)) {
             existingEditsMap.set(p.id, {
               tipoProducao: p.tipoProducao,
@@ -696,7 +793,9 @@ const PlantaoMedico: React.FC = () => {
             };
           });
 
-        setPlantaos(mappedList);
+        allWebhookPlantaosRef.current = { list: mappedList, time: nowTime };
+        const periodSlice = filterItemsByDateRange(mappedList, periodFrom, periodTo);
+        setPlantaos(periodSlice.length > 0 ? periodSlice : mappedList);
         setSyncTime(nowTime);
         setSyncStatus('success');
         saveToCache(mappedList, nowTime, 'success', periodFrom, periodTo);
@@ -716,35 +815,29 @@ const PlantaoMedico: React.FC = () => {
   // Efeito inteligente de busca/recuperação de cache baseado nos parâmetros selecionados
   useEffect(() => {
     const paramKey = `${periodFrom}_${periodTo}`;
-    
-    // Tenta carregar do cache para as datas selecionadas
-    const keyed = getStorageItem(`hsc_plantao_medico_cache_${periodFrom}_${periodTo}`);
-    const cachedFrom = getStorageItem('hsc_plantao_medico_cache_from');
-    const cachedTo = getStorageItem('hsc_plantao_medico_cache_to');
-    const cachedData = getStorageItem('hsc_plantao_medico_cache_data');
 
-    if (keyed) {
-      try {
-        const parsed = JSON.parse(keyed);
-        setPlantaos(parsed.list || parsed);
-        if (parsed.time) setSyncTime(parsed.time);
-        setSyncStatus(parsed.status || 'success');
+    // 1. Se já temos o dataset completo em memória, alterna período instantaneamente
+    if (allWebhookPlantaosRef.current && allWebhookPlantaosRef.current.list.length > 0) {
+      const sliced = filterItemsByDateRange(allWebhookPlantaosRef.current.list, periodFrom, periodTo);
+      if (sliced.length > 0) {
+        setPlantaos(sliced);
+        if (allWebhookPlantaosRef.current.time) setSyncTime(allWebhookPlantaosRef.current.time);
+        setSyncStatus('success');
         setLoading(false);
         activeParamsRef.current = paramKey;
         return;
-      } catch (e) {}
+      }
     }
 
-    if (cachedData && cachedFrom === periodFrom && cachedTo === periodTo) {
-      try {
-        const parsed = JSON.parse(cachedData);
-        setPlantaos(parsed);
-        setSyncTime(getStorageItem('hsc_plantao_medico_cache_time'));
-        setSyncStatus((getStorageItem('hsc_plantao_medico_cache_status') as any) || 'success');
-        setLoading(false);
-        activeParamsRef.current = paramKey;
-        return;
-      } catch (e) {}
+    // 2. Tenta carregar do cache persistido válido para as datas selecionadas
+    const validCache = getValidCachedPlantaos(periodFrom, periodTo);
+    if (validCache) {
+      setPlantaos(validCache.list);
+      if (validCache.time) setSyncTime(validCache.time);
+      setSyncStatus(validCache.status);
+      setLoading(false);
+      activeParamsRef.current = paramKey;
+      return;
     }
 
     // Se já buscamos este exato parâmetro na execução atual da API, evita requisição duplicada
@@ -1398,10 +1491,13 @@ const PlantaoMedico: React.FC = () => {
           </button>
 
           <button
-            onClick={() => fetchPlantaos(true, true)}
+            onClick={() => {
+              fetchPlantaos(true, true);
+              carregarProducoesSupabase(periodFrom, periodTo);
+            }}
             disabled={loading}
             className="flex items-center justify-center rounded-md text-sm font-semibold bg-card border border-border text-foreground hover:bg-muted h-10 w-10 transition-all shadow-sm cursor-pointer"
-            title="Recarregar do n8n"
+            title="Recarregar do n8n e Supabase"
           >
             <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
           </button>
@@ -1412,30 +1508,52 @@ const PlantaoMedico: React.FC = () => {
 
       {/* ── FILTROS ── */}
       <div className="bg-card dark:bg-slate-950 border border-border/80 rounded-xl p-5 shadow-sm space-y-4">
-        <div className="flex items-center justify-between border-b border-border/40 pb-3">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/40 pb-3">
           <div className="flex items-center gap-2 text-foreground font-semibold text-sm">
             <Filter className="h-4 w-4 text-[#8a1515] dark:text-[#f43f5e]" />
             <span className="font-sans">Filtros de Pesquisa</span>
           </div>
-          {(searchTerm || selectedEspecialidades.length > 0 || selectedMedicos.length > 0 || selectedTipos.length > 0 || statusFilter !== 'todos' || emailStatusFilter !== 'todos' || periodFrom !== getDefaultDates().from || periodTo !== getDefaultDates().to) && (
-            <button
-              onClick={() => {
-                setSearchTerm('');
-                setSelectedEspecialidades([]);
-                setSelectedMedicos([]);
-                setSelectedTipos([]);
-                setStatusFilter('todos');
-                setEmailStatusFilter('todos');
-                const defaults = getDefaultDates();
-                setPeriodFrom(defaults.from);
-                setPeriodTo(defaults.to);
-              }}
-              className="text-xs text-[#8a1515] dark:text-[#f43f5e] hover:underline flex items-center gap-1 font-medium font-sans"
-            >
-              <X className="h-3 w-3" />
-              Limpar Filtros
-            </button>
-          )}
+
+          <div className="flex flex-wrap items-center gap-3">
+            {/* Atalho de Competência (Mês Fechado) para evitar divergência de 1 dia no fim do mês */}
+            <div className="flex items-center gap-2 bg-muted/40 border border-border rounded-lg px-2.5 py-1">
+              <label
+                htmlFor="plantao-competencia-mes"
+                className="text-[11px] font-semibold text-muted-foreground flex items-center gap-1 whitespace-nowrap font-sans"
+                title="Preenche automaticamente do dia 01 até o último dia exato do mês (28/29/30/31)"
+              >
+                <Calendar className="h-3.5 w-3.5 text-[#8a1515] dark:text-[#f43f5e]" />
+                Competência (Mês Fechado):
+              </label>
+              <input
+                id="plantao-competencia-mes"
+                type="month"
+                value={activeMonthCompetencia}
+                onChange={(e) => handleSelectCompetenciaMensal(e.target.value)}
+                className="bg-background border border-border focus:border-[#8a1515] rounded-md px-2 py-0.5 text-xs font-semibold text-foreground outline-none transition-colors cursor-pointer"
+              />
+            </div>
+
+            {(searchTerm || selectedEspecialidades.length > 0 || selectedMedicos.length > 0 || selectedTipos.length > 0 || statusFilter !== 'todos' || emailStatusFilter !== 'todos' || periodFrom !== getDefaultDates().from || periodTo !== getDefaultDates().to) && (
+              <button
+                onClick={() => {
+                  setSearchTerm('');
+                  setSelectedEspecialidades([]);
+                  setSelectedMedicos([]);
+                  setSelectedTipos([]);
+                  setStatusFilter('todos');
+                  setEmailStatusFilter('todos');
+                  const defaults = getDefaultDates();
+                  setPeriodFrom(defaults.from);
+                  setPeriodTo(defaults.to);
+                }}
+                className="text-xs text-[#8a1515] dark:text-[#f43f5e] hover:underline flex items-center gap-1 font-medium font-sans cursor-pointer"
+              >
+                <X className="h-3 w-3" />
+                Limpar Filtros
+              </button>
+            )}
+          </div>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 xl:grid-cols-7 gap-4">
@@ -1794,7 +1912,117 @@ const PlantaoMedico: React.FC = () => {
           </div>
         </div>
 
+        {/* Alerta contextual quando há produções/e-mails salvos em outro recorte de datas do mesmo mês */}
+        {periodosRelacionados.length > 0 && dismissedPeriodAlertKey !== `${periodFrom}_${periodTo}` && (
+          <div className="mt-2 p-3.5 rounded-xl border border-amber-300/80 dark:border-amber-800/70 bg-amber-50/90 dark:bg-amber-950/30 flex flex-col gap-2.5 animate-in fade-in duration-200">
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex items-start gap-2.5">
+                <div className="p-1.5 rounded-lg bg-amber-500/15 text-amber-700 dark:text-amber-400 border border-amber-500/20 mt-0.5 shrink-0">
+                  <AlertTriangle className="h-4 w-4" />
+                </div>
+                <div className="space-y-0.5 font-sans">
+                  <p className="text-xs font-bold text-amber-900 dark:text-amber-200">
+                    Existem produções ou e-mails salvos em outro recorte de datas neste mesmo mês
+                  </p>
+                  <p className="text-[11px] text-amber-800/90 dark:text-amber-300/85">
+                    As produções ficam vinculadas exatamente à Data Início e Data Fim usadas no lançamento. Clique no período abaixo para visualizar os registros salvos:
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setDismissedPeriodAlertKey(`${periodFrom}_${periodTo}`)}
+                className="p-1 rounded-md text-amber-700/70 hover:text-amber-900 dark:text-amber-400/70 dark:hover:text-amber-200 hover:bg-amber-500/10 transition-colors cursor-pointer shrink-0"
+                title="Dispensar aviso"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
 
+            <div className="flex flex-wrap gap-2 pl-0 sm:pl-9">
+              {periodosRelacionados.map((p) => {
+                const formatBr = (iso: string) => iso.split('-').reverse().join('/');
+                const pKey = `${p.periodo_de}_${p.periodo_ate}`;
+                const isUnificando = unificandoPeriodoKey === pKey;
+
+                const handleUnificar = async () => {
+                  const msg =
+                    `Deseja unificar os ${p.total} registros de ${formatBr(p.periodo_de)} a ${formatBr(p.periodo_ate)} ` +
+                    `para o período atual (${formatBr(periodFrom)} a ${formatBr(periodTo)})?\n\n` +
+                    `Todas as produções (${p.com_producoes}), valores pagos e status de envio de e-mail (${p.emails_enviados}) serão preservados.`;
+                  if (!confirm(msg)) return;
+
+                  try {
+                    setUnificandoPeriodoKey(pKey);
+                    const res = await plantaoMedicoProducoesService.unificarPeriodo({
+                      origem_de: p.periodo_de,
+                      origem_ate: p.periodo_ate,
+                      destino_de: periodFrom,
+                      destino_ate: periodTo
+                    });
+                    await carregarProducoesSupabase(periodFrom, periodTo);
+                    alert(
+                      `Unificação concluída! ${res.movidos} registro(s) movido(s) e ${res.mesclados} registro(s) mesclado(s) para ${formatBr(periodFrom)} a ${formatBr(periodTo)}.`
+                    );
+                  } catch (err: any) {
+                    console.error('Erro ao unificar períodos:', err);
+                    alert(`Erro ao unificar períodos: ${err?.message || 'Tente novamente.'}`);
+                  } finally {
+                    setUnificandoPeriodoKey(null);
+                  }
+                };
+
+                return (
+                  <div
+                    key={pKey}
+                    className="inline-flex flex-wrap items-center gap-2 px-3 py-1.5 rounded-lg bg-background border border-amber-300 dark:border-amber-700/70 text-xs shadow-xs"
+                  >
+                    <span className="font-bold text-foreground font-mono">
+                      {formatBr(p.periodo_de)} a {formatBr(p.periodo_ate)}
+                    </span>
+                    <span className="text-[11px] text-muted-foreground">
+                      • {p.com_producoes} com produção • {p.emails_enviados} e-mails ({p.total} reg.)
+                    </span>
+                    <div className="flex items-center gap-1.5 ml-1">
+                      <button
+                        type="button"
+                        disabled={!!unificandoPeriodoKey}
+                        onClick={() => {
+                          setPeriodFrom(p.periodo_de);
+                          setPeriodTo(p.periodo_ate);
+                        }}
+                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-muted hover:bg-amber-100 dark:hover:bg-amber-900/40 text-[11px] font-bold text-foreground transition-colors cursor-pointer disabled:opacity-50"
+                        title="Apenas alternar o filtro da tela para visualizar este recorte"
+                      >
+                        Carregar
+                        <ArrowRight className="h-3 w-3" />
+                      </button>
+                      <button
+                        type="button"
+                        disabled={!!unificandoPeriodoKey}
+                        onClick={handleUnificar}
+                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-[#8a1515] hover:bg-[#6b1010] text-white text-[11px] font-bold transition-colors cursor-pointer disabled:opacity-50"
+                        title={`Mover e mesclar estes registros para o período atual (${formatBr(periodFrom)} a ${formatBr(periodTo)})`}
+                      >
+                        {isUnificando ? (
+                          <>
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                            Unificando...
+                          </>
+                        ) : (
+                          <>
+                            <GitMerge className="h-3 w-3" />
+                            Unificar aqui
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* ── KPI CARDS ── */}

@@ -292,6 +292,117 @@ export const repasseService = {
     }
   },
 
+  /**
+   * Importa um lote de itens (Médicos ou Setores) já acompanhados de seus respectivos
+   * detalhes de produção (Pacientes/Procedimentos). Se o destinatário já existir na
+   * competência, soma ou atualiza seus valores e mescla os detalhes.
+   */
+  async importarLoteComDetalhes(
+    competencia_id: string,
+    lote: Array<{
+      tipo: 'profissional' | 'setor';
+      descricao: string;
+      medico_id?: string | null;
+      setor_id?: string | null;
+      valor_bruto: number;
+      desconto_percentual: number;
+      detalhes: Array<{
+        paciente: string;
+        procedimento: string;
+        data_procedimento: string;
+        quantidade: number;
+        valor_total: number;
+      }>;
+    }>
+  ): Promise<void> {
+    const itensAtuais = await this.listarItens(competencia_id);
+    const mapaExistentes = new Map<string, RepasseItem>();
+    itensAtuais.forEach(it => mapaExistentes.set(it.descricao.toUpperCase().trim(), it));
+
+    let ordemCursor = itensAtuais.length;
+
+    for (const entrada of lote) {
+      const chave = entrada.descricao.toUpperCase().trim();
+      if (!chave) continue;
+
+      const existente = mapaExistentes.get(chave);
+      const temDetalhesNovos = entrada.detalhes && entrada.detalhes.length > 0;
+
+      if (existente) {
+        if (temDetalhesNovos) {
+          const detAtuais = await this.listarDetalhes(existente.id);
+          const mesclados = [
+            ...detAtuais.map(d => ({
+              paciente: d.paciente,
+              procedimento: d.procedimento,
+              data_procedimento: d.data_procedimento,
+              quantidade: d.quantidade,
+              valor_total: d.valor_total,
+              ordem: d.ordem
+            })),
+            ...entrada.detalhes.map((d, i) => ({
+              paciente: d.paciente,
+              procedimento: d.procedimento,
+              data_procedimento: d.data_procedimento,
+              quantidade: d.quantidade,
+              valor_total: d.valor_total,
+              ordem: detAtuais.length + i
+            }))
+          ];
+          await this.salvarDetalhesLote(existente, mesclados, entrada.desconto_percentual);
+        } else {
+          const novoBruto = Number((existente.valor_bruto + entrada.valor_bruto).toFixed(2));
+          const perc = entrada.desconto_percentual ?? existente.desconto_percentual;
+          const descVal = Number((novoBruto * (perc / 100)).toFixed(2));
+          const liq = Number((novoBruto - descVal).toFixed(2));
+          await this.salvarItem({
+            ...existente,
+            valor_bruto: novoBruto,
+            desconto_percentual: perc,
+            desconto_valor: descVal,
+            valor_liquido: liq
+          });
+        }
+      } else {
+        ordemCursor += 1;
+        const bruto = Number(entrada.valor_bruto.toFixed(2));
+        const perc = Number(entrada.desconto_percentual || 0);
+        const descVal = Number((bruto * (perc / 100)).toFixed(2));
+        const liq = Number((bruto - descVal).toFixed(2));
+
+        const itemCriado = await this.salvarItem({
+          competencia_id,
+          tipo: entrada.tipo,
+          descricao: chave,
+          medico_id: entrada.medico_id || null,
+          setor_id: entrada.setor_id || null,
+          valor_bruto: bruto,
+          desconto_percentual: perc,
+          desconto_valor: descVal,
+          valor_liquido: liq,
+          possui_detalhes: temDetalhesNovos,
+          ordem: ordemCursor
+        });
+
+        if (temDetalhesNovos) {
+          await this.salvarDetalhesLote(
+            itemCriado,
+            entrada.detalhes.map((d, i) => ({
+              paciente: d.paciente,
+              procedimento: d.procedimento,
+              data_procedimento: d.data_procedimento,
+              quantidade: d.quantidade,
+              valor_total: d.valor_total,
+              ordem: i
+            })),
+            perc
+          );
+        }
+        mapaExistentes.set(chave, itemCriado);
+      }
+    }
+  },
+
   async excluirItem(id: string, competencia_id: string): Promise<void> {
     try {
       const { error } = await supabase.from('repasse_itens').delete().eq('id', id);

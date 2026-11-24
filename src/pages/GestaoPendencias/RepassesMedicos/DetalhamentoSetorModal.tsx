@@ -59,12 +59,18 @@ export const DetalhamentoSetorModal: React.FC<DetalhamentoSetorModalProps> = ({
   const [pastedText, setPastedText] = useState<string>('');
   const [feedbackMsg, setFeedbackMsg] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
 
-  // Carregar dados ao abrir
-  useEffect(() => {
-    if (!isOpen || !item) return;
+    // Carregar dados ao abrir
+    useEffect(() => {
+      if (!isOpen || !item) return;
 
-    setDescontoPerc(item.desconto_percentual > 0 ? item.desconto_percentual : 10);
-    setLoading(true);
+      setDescontoPerc(
+        item.desconto_percentual !== undefined && item.desconto_percentual !== null
+          ? item.desconto_percentual
+          : item.tipo === 'setor'
+          ? 10
+          : 0
+      );
+      setLoading(true);
     setFeedbackMsg(null);
     setShowPasteArea(false);
 
